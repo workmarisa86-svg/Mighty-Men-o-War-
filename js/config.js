@@ -1,5 +1,5 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.6.0';
+export const GAME_VERSION = '0.6.1';
 export const SAVE_FORMAT = 2;
 export const STORE_PREFIX = 'blocks-';
 

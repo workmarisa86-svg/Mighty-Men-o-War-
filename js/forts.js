@@ -126,6 +126,12 @@ export function stampFort(world, f, rnd) {
   f.doorOut = P(-0.5, H + 2.5); f.doorIn = P(-0.5, H - 2.5);
   f.doorCells = [];
   for (const lx of [-1, 0]) for (let y = b; y <= b + 2; y++) { const [ox, oz] = rot(f.side, lx, H); f.doorCells.push([f.cx + ox, y, f.cz + oz]); }
+  // the two ladders up to the rampart: where to step on (bottom, in the
+  // courtyard) and off (top, on the walkway)
+  f.ladders = [-(H - 2), H - 2].map((lx) => {
+    const t = P(lx, -(H - 2)), bt = P(lx - Math.sign(lx), -(H - 3));
+    return { top: { x: t.x, y: b + 4, z: t.z }, bottom: { x: bt.x, y: b, z: bt.z } };
+  });
   f.posts = [];      // garrison positions: rampart and courtyard
   for (const [lx, lz, up] of [[-3, -(H - 1), 1], [3, -(H - 1), 1], [-(H - 1), 1, 1], [H - 1, -1, 1], [-3, H - 1, 1], [3, H - 1, 1],
     [-2, 0, 0], [2, 2, 0], [0, -3, 0], [-3, 3, 0]]) {
