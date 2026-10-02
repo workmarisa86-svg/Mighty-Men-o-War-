@@ -9,6 +9,9 @@ export class World {
     this.data = new Uint8Array(this.W * this.D * this.H);
     // 1 = built-in structure block that can never be destroyed (forts, cabin)
     this.locked = new Uint8Array(this.W * this.D * this.H);
+    // warm light (0..255) in air cells inside built-in forts, so their insides glow
+    this.glow = new Uint8Array(this.W * this.D * this.H);
+    this.forts = [];
     this.edits = new Map();
     this.cx = Math.ceil(this.W / CHUNK);
     this.cz = Math.ceil(this.D / CHUNK);

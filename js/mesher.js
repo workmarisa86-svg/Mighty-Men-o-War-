@@ -17,7 +17,7 @@ const UVC = [[0, 0], [1, 0], [1, 1], [0, 1]];
 const AO_CURVE = [0.45, 0.64, 0.82, 1.0];
 
 class Buf {
-  constructor() { this.pos = []; this.nor = []; this.uv = []; this.col = []; this.idx = []; this.n = 0; }
+  constructor() { this.pos = []; this.nor = []; this.uv = []; this.col = []; this.glow = []; this.idx = []; this.n = 0; }
   toGeometry() {
     if (this.n === 0) return null;
     const g = new THREE.BufferGeometry();
@@ -25,6 +25,7 @@ class Buf {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.setAttribute('glow', new THREE.Float32BufferAttribute(this.glow, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return g;
@@ -44,6 +45,7 @@ function crossQuads(buf, x, y, z, tile, light) {
         buf.nor.push(nx / nl, 0, nz / nl);
         buf.uv.push(UVC[k][0] ? tile[2] : tile[0], UVC[k][1] ? tile[3] : tile[1]);
         buf.col.push(light, light, light);
+        buf.glow.push(0);
       }
       if (flip) buf.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
       else buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -53,7 +55,7 @@ function crossQuads(buf, x, y, z, tile, light) {
 }
 
 export function buildChunk(world, cx, cz, uvs, useAO) {
-  const W = world.W, D = world.D, H = world.H, data = world.data;
+  const W = world.W, D = world.D, H = world.H, data = world.data, glowMap = world.glow;
   const x0 = cx * CHUNK, z0 = cz * CHUNK;
   const x1 = Math.min(W, x0 + CHUNK), z1 = Math.min(D, z0 + CHUNK);
   const get = (x, y, z) => {
@@ -100,6 +102,9 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
       else if (def.render === 'leaves') { if (OPAQUE[nb] || nb === B.LEAVES) continue; }
       else if (OPAQUE[nb]) continue;
       const tile = uvs[def.tiles[F.t]];
+      // self-lit blocks (fort lamps) and faces looking into a lit fort interior
+      let glow = def.glow;
+      if (!isWater && nx >= 0 && nz >= 0 && nx < W && nz < D && ny >= 0 && ny < H) glow = Math.max(glow, glowMap[nx + W * (nz + D * ny)] / 255);
       const sl = skyLight(nx, ny, nz);
       const shade = F.n[1] === 1 ? 1 : F.n[1] === -1 ? 0.6 : (F.n[0] !== 0 ? 0.85 : 0.75);
       const base = buf.n;
@@ -128,6 +133,7 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
         aos[k] = ao;
         const l = AO_CURVE[ao] * shade * sl;
         buf.col.push(l, l, l);
+        buf.glow.push(glow);
       }
       if (aos[0] + aos[2] < aos[1] + aos[3]) buf.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       else buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);

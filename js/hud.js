@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { itemIcon, ITEMS } from './items.js';
 import { WEAPONS } from './weapons.js';
+import { Minimap } from './minimap.js';
+import { sfx } from './audio.js';
 import { t } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -27,6 +29,8 @@ export class HUD {
     this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
     this.scope = $('#scope'); this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
     this.defuseProgress = 0; this.markerEls = [];
+    this.minimap = new Minimap(game);
+    this.radioEl = $('#radio'); this.alertEl = $('#alertbar');
     this.dirtyHotbar = true;
     this.digProgress = 0;
     this.statusTimer = 0;
@@ -109,6 +113,7 @@ export class HUD {
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.binoc.classList.toggle('on', g.zoom && !g.combat.scoped);
     this.updateMarkers();
+    this.minimap.update(dt);
     this.underwater.classList.toggle('on', p.headInWater);
 
     if (this.dirtyHotbar) this.renderHotbar();
@@ -156,6 +161,22 @@ export class HUD {
     this.hitEl.classList.toggle('head', !!head);
     this.hitEl.classList.remove('on'); void this.hitEl.offsetWidth; this.hitEl.classList.add('on');
   }
+  // allied radio callouts (blue) and warnings (red), newest at the bottom
+  radio(name, text, kind = 'ally') {
+    const el = document.createElement('div');
+    el.className = 'rline ' + kind;
+    const b = document.createElement('b'); b.textContent = name + ': ';
+    el.appendChild(b); el.appendChild(document.createTextNode(text));
+    this.radioEl.appendChild(el);
+    while (this.radioEl.children.length > 4) this.radioEl.firstChild.remove();
+    setTimeout(() => el.classList.add('out'), 4500);
+    setTimeout(() => el.remove(), 5200);
+    sfx.radio();
+  }
+  alert(text) {
+    this.alertEl.textContent = text;
+    this.alertEl.classList.remove('on'); void this.alertEl.offsetWidth; this.alertEl.classList.add('on');
+  }
   killNote() { this.toast(t('hud.enemyDown'), 'kill'); }
   // red arc at the screen edge pointing to where damage came from
   damageFrom(angle) {
@@ -190,5 +211,6 @@ export class HUD {
   dispose() {
     this.root.hidden = true;
     this.toasts.innerHTML = '';
+    this.radioEl.innerHTML = '';
   }
 }

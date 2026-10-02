@@ -89,7 +89,7 @@ export class Explosives {
     w.set(x, y, z, wet ? B.WATER : B.AIR);
   }
 
-  explode(cx, cy, cz, { radius, power, destroy = true, owner = 'player', destroyRadius = radius }) {
+  explode(cx, cy, cz, { radius, power, destroy = true, owner = 'player', destroyRadius = radius, door = 0 }) {
     const g = this.game, w = g.world;
     if (destroy) {
       const R = Math.ceil(destroyRadius);
@@ -116,6 +116,7 @@ export class Explosives {
       g.player.vel.add(push); g.player.vel.y += 4 * (1 - dp / reach);
     }
     g.enemies.blast(center, reach, falloff, owner);
+    if (g.forts) g.forts.blast(center, door);   // fort doors: 3 TNT or 12 grenades
     for (const a of g.animals.list) {
       const d = a.pos.distanceTo(center);
       if (d < reach) g.animals.hurt(a, falloff(d), false);
@@ -161,7 +162,7 @@ export class Explosives {
         const pl = g.player.pos;
         const hitBody = (Math.hypot(pl.x - p.pos.x, pl.z - p.pos.z) < 0.6 && p.pos.y > pl.y && p.pos.y < pl.y + 1.9) || g.enemies.bodyAt(p.pos, 'enemy');
         if (this.solidAt(p.pos) || hitBody || p.pos.y < 0) {
-          this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: SHELL.radius, power: SHELL.power, destroyRadius: 1.6, owner: 'enemy' });
+          this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: SHELL.radius, power: SHELL.power, destroyRadius: 1.6, owner: 'enemy', door: 0.34 });
           return false;
         }
       }
@@ -189,7 +190,7 @@ export class Explosives {
     p.t -= dt;
     if (p.t > 0) return true;
     if (p.kind === 'smoke') this.makeSmoke(p.pos);
-    else this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: GRENADE.radius, power: GRENADE.power, destroy: false, owner: p.owner });
+    else this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: GRENADE.radius, power: GRENADE.power, destroy: false, owner: p.owner, door: 0.25 });
     g.enemies.grenadeAt(p.pos, p.owner);
     return false;
   }
@@ -235,7 +236,7 @@ export class Explosives {
       if (l.t <= 0) {
         this.unlight(k);
         g.world.set(l.x, l.y, l.z, B.AIR);
-        this.explode(l.x + 0.5, l.y + 0.5, l.z + 0.5, { radius: TNT_RADIUS, power: TNT_POWER, owner: l.owner });
+        this.explode(l.x + 0.5, l.y + 0.5, l.z + 0.5, { radius: TNT_RADIUS, power: TNT_POWER, owner: l.owner, door: 1 });
       }
     }
     this.projectiles = this.projectiles.filter((p) => {

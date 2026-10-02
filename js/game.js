@@ -18,6 +18,8 @@ import { ViewModel } from './viewmodel.js';
 import { Combat, WEAPONS } from './weapons.js';
 import { Explosives } from './explosives.js';
 import { Enemies } from './soldiers.js';
+import { Flashlight } from './flashlight.js';
+import { Forts } from './forts.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
@@ -33,6 +35,7 @@ export class Game {
     this.cfg = save.cfg;
     this.peace = this.cfg.mode === 'peace';
     document.body.classList.toggle('peace', this.peace);
+    document.body.classList.toggle('allies', this.cfg.sub === 'allies' && !this.peace);
     this.settings = app.settings;
     this.quality = QUALITY[this.settings.quality] || QUALITY.medium;
 
@@ -58,6 +61,19 @@ export class Game {
     this.tex = tex;
     this.matSolid = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, alphaTest: 0.5 });
     this.matWater = new THREE.MeshLambertMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    // warm self-light for fort lamps and fort interiors (always on, strongest at night)
+    this.glowUniform = { value: 1 };
+    for (const m of [this.matSolid, this.matWater]) {
+      m.onBeforeCompile = (sh) => {
+        sh.uniforms.uGlow = this.glowUniform;
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vGlow;\nuniform float uGlow;')
+          .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * uGlow * diffuseColor.rgb * vec3(1.0, 0.78, 0.52);');
+      };
+    }
     this.chunks = new Map();
     this.buildQueue = [];
     this.queueTimer = 0;
@@ -66,11 +82,8 @@ export class Game {
     this.particles = new Particles(this.scene);
     this.particles.density = this.quality.particles;
 
-    // flashlight (standard gear)
-    this.flashlight = new THREE.SpotLight(0xfff0cf, 0, 34, 0.42, 0.55, 1);
-    this.flashlight.position.set(0.25, -0.2, 0);
-    this.flashlight.target.position.set(0, 0, -1);
-    this.camera.add(this.flashlight, this.flashlight.target);
+    // flashlight (standard gear, always available)
+    this.flashlight = new Flashlight(this.camera);
     this.lightOn = false;
 
     // target highlight + cracks
@@ -119,7 +132,9 @@ export class Game {
     this.vm = new ViewModel();
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
-    this.enemies = new Enemies(this);
+    this.forts = new Forts(this, save.forts);
+    this.enemies = new Enemies(this, { followers: save.followers });
+    this.supplyT = 0;
     this.shake = 0;
     this.tntWarnT = 0;
     this.use = { item: null, t: 0 };
@@ -251,7 +266,8 @@ export class Game {
     this.particles.update(dt);
     if (!this.paused) {
       this.animals.update(dt); this.pickups.update(dt);
-      this.enemies.update(dt); this.explosives.update(dt);
+      this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
+      this.supplyT -= dt;
       this.updateDefuse(dt);
     }
     this.campfires.update(dt);
@@ -275,7 +291,9 @@ export class Game {
     this.camera.far = (this.settings.renderDist + 1.5) * CHUNK + 40;
 
     this.sky.update(dt, this.time % 1, this.peace ? 0 : this.weather.rain, this.camera.position, this.peace);
-    this.flashlight.intensity = this.lightOn ? 14 : 0;
+    this.glowUniform.value = 0.2 + 0.65 * (1 - this.sky.daylight);
+    this.flashlight.on = this.lightOn;
+    this.flashlight.update(1 - this.sky.daylight, this.peace ? 0 : this.weather.rain);
 
     this.updateChunks(dt);
     this.vm.set(scoped ? null : this.selected());
@@ -345,7 +363,14 @@ export class Game {
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
-    if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
+    if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
+    else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
+    if ((input.hit('KeyQ') || input.thit('squad')) && this.cfg.sub === 'allies' && !this.peace) {
+      const { eye, dir } = this.aim();
+      const block = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 40, false, 'bullet');
+      const hit = this.enemies.raycast(eye, dir, block ? block.dist : 40, 'ally');
+      this.app.openPanel('orders', { soldier: hit ? hit.soldier : null });
+    }
   }
 
   // ------------------------------------------------------------ dig & place
@@ -515,6 +540,7 @@ export class Game {
     if (!this.world.inside(x, y, z) || y >= WORLD_H - 1) return;
     if (cur !== B.AIR && cur !== B.WATER && cur !== B.LEAVES) return;
     if (this.blockOverlapsBodies(x, y, z)) return;
+    if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     this.world.set(x, y, z, def.block);
     this.take(item);
     sfx.place();
@@ -533,6 +559,7 @@ export class Game {
     if (!hit || hit.ny !== 1) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
     const x = hit.x, y = hit.y + 1, z = hit.z;
     if (this.world.get(x, y, z) !== B.AIR || hit.id === B.WATER || hit.id === B.WIRE) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
+    if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     if (!this.has('wood', 3)) { this.hud.toast(t('hud.fireWood')); sfx.error(); return; }
     this.take('wood', 3);
     this.world.set(x, y, z, B.CAMPFIRE);
@@ -548,6 +575,7 @@ export class Game {
     if (!hit || hit.ny !== 1 || hit.id === B.WATER) { this.hud.toast(t('hud.towerWhere')); sfx.error(); return; }
     if (!this.has('watchtower')) { this.hud.toast(t('hud.cantPlace', { item: t('item.watchtower') })); sfx.error(); return; }
     const w = this.world, cx = hit.x, by = hit.y + 1, cz = hit.z;
+    if (this.forts.protectedCell(cx, by, cz) || this.forts.protectedCell(cx + 1, by, cz + 1) || this.forts.protectedCell(cx - 1, by, cz - 1)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     for (let y = by; y <= by + 6; y++) for (let z = cz - 1; z <= cz + 1; z++) for (let x = cx - 1; x <= cx + 1; x++) {
       const b = w.get(x, y, z);
       if (!w.inside(x, y, z) || (b !== B.AIR && b !== B.LEAVES) || this.blockOverlapsBodies(x, y, z)) { this.hud.toast(t('hud.towerSpace')); sfx.error(); return; }
@@ -603,6 +631,43 @@ export class Game {
     } else if (p.hunger > 50 && p.health < 100) {
       p.health = Math.min(100, p.health + 0.35 * dt); // slow recovery when fed
     }
+  }
+
+  // Where the player comes back: an allied fort; with allies but no forts,
+  // a random spot with 4-5 allies; alone, the cabin (spawn point).
+  respawn() {
+    const p = this.player;
+    p.vel.set(0, 0, 0);
+    if (this.cfg.sub === 'allies') {
+      const own = this.forts.list.filter((f) => f.owner === 'ally');
+      if (own.length) {
+        const f = own[Math.floor(Math.random() * own.length)];
+        p.pos.set(f.cx + 0.5, f.base, f.cz + 0.5);
+        return;
+      }
+      const at = this.enemies.farSpot(50, 'ally') || this.world.spawn;
+      p.pos.set(at.x, at.y, at.z);
+      this.enemies.rallyAround(p.pos, 4 + Math.floor(Math.random() * 2));
+      this.hud.toast(t('hud.regroup'), 'warn');
+      return;
+    }
+    const s = this.world.spawn;
+    p.pos.set(s.x, s.y, s.z);
+  }
+
+  // Ration crates in the player's own forts: unlimited food.
+  useSupply() {
+    const { eye, dir } = this.aim();
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+    if (!hit || hit.id !== B.SUPPLY) return false;
+    const f = this.forts.fortAt(new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5));
+    if (!f || f.owner !== 'ally') { this.hud.toast(t('fort.notYours')); sfx.error(); return true; }
+    if (this.supplyT > 0) { this.hud.toast(t('fort.rationsWait')); return true; }
+    this.supplyT = 30;
+    this.give('meat_cooked', 2);
+    this.player.hunger = 100;
+    sfx.done();
+    return true;
   }
 
   // Solid things the player collides with besides blocks.
@@ -701,8 +766,7 @@ export class Game {
       for (const w of carried) this.inv.counts[w] = 0;
       lost = carried;
     }
-    const s = this.world.spawn;
-    this.player.pos.set(s.x, s.y, s.z); this.player.vel.set(0, 0, 0);
+    this.respawn();
     this.player.health = 100; this.breath = 15;
     this.combat.scoped = false;
     this.enemies.playerDied();
@@ -720,6 +784,7 @@ export class Game {
       cfg: this.cfg, time: this.time, weather: this.weather,
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger, flying: p.flying },
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
+      forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
       edits: this.world.serializeEdits(),
     };
@@ -734,7 +799,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
-    this.explosives.dispose(); this.enemies.dispose();
+    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose();
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

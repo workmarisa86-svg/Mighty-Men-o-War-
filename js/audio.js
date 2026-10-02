@@ -105,6 +105,19 @@ export const sfx = {
   cannon(vol = 1) { noise(0.9, { freq: 600, gain: 0.8 * vol, freqEnd: 40 }); tone(45, 0.8, { type: 'sine', gain: 0.6 * vol, freqEnd: 25 }); },
   engine(vol = 1) { tone(38 + Math.random() * 6, 0.5, { type: 'sawtooth', gain: 0.05 * vol, attack: 0.1 }); },
   thump() { tone(90, 0.12, { type: 'sine', gain: 0.25, freqEnd: 50 }); },
+  // air-raid style siren: rising and falling wail
+  siren() {
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1400;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.09, t0 + 0.4);
+    g.gain.setValueAtTime(0.09, t0 + 3.4); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 4.2);
+    o.frequency.setValueAtTime(260, t0);
+    for (let i = 0; i < 2; i++) { o.frequency.linearRampToValueAtTime(620, t0 + 1 + i * 2); o.frequency.linearRampToValueAtTime(300, t0 + 2 + i * 2); }
+    o.connect(f); f.connect(g); g.connect(master); o.start(t0); o.stop(t0 + 4.3);
+  },
+  radio() { noise(0.08, { type: 'bandpass', freq: 2200, gain: 0.08, q: 3 }); tone(1100, 0.05, { type: 'square', gain: 0.03, delay: 0.06 }); },
   thunder() { noise(2.5, { freq: 300, gain: 0.5, freqEnd: 60, attack: 0.2 }); },
 };
 

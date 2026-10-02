@@ -3,6 +3,7 @@ export const B = {
   AIR: 0, DIRT: 1, MUD: 2, RUBBLE: 3, LOG: 4, WOOD: 5, LEAVES: 6,
   STONE: 7, IRON: 8, TNT: 9, WATER: 10, BEDROCK: 11,
   SANDBAG: 12, WIRE: 13, CAMPFIRE: 14,
+  FORT_WALL: 15, FORT_DOOR: 16, FORT_LAMP: 17, SUPPLY: 18,
 };
 
 export const BLOCKS = [];
@@ -10,7 +11,7 @@ export const BLOCKS = [];
 function def(id, o) {
   BLOCKS[id] = Object.assign({
     id, solid: true, opaque: true, render: 'cube', hard: 1, drop: null,
-    climb: false, tiles: null, fort: false, color: [0.4, 0.33, 0.25],
+    climb: false, tiles: null, fort: false, glow: 0, color: [0.4, 0.33, 0.25],
   }, o);
 }
 
@@ -30,6 +31,11 @@ def(B.SANDBAG, { name: 'sandbag', tiles: { top: 'sandbag_top', side: 'sandbag', 
 def(B.WIRE, { name: 'wire', solid: false, opaque: false, render: 'cross', tiles: { top: 'wire', side: 'wire', bottom: 'wire' }, hard: 0.5, drop: 'wire', color: [0.3, 0.3, 0.3] });
 // campfire: drawn as its own animated model, not as a cube
 def(B.CAMPFIRE, { name: 'campfire', solid: false, opaque: false, render: 'none', hard: 0.3, drop: null, color: [0.3, 0.22, 0.15] });
+// built-in fort blocks: indestructible (also locked in the world)
+def(B.FORT_WALL, { name: 'fortwall', tiles: { top: 'fort_top', side: 'fort_wall', bottom: 'fort_top' }, hard: Infinity, fort: true, color: [0.45, 0.44, 0.41] });
+def(B.FORT_DOOR, { name: 'fortdoor', tiles: { top: 'fort_top', side: 'fort_door', bottom: 'fort_top' }, hard: Infinity, fort: true, color: [0.3, 0.32, 0.26] });
+def(B.FORT_LAMP, { name: 'fortlamp', tiles: { top: 'fort_lamp', side: 'fort_lamp', bottom: 'fort_lamp' }, hard: Infinity, fort: true, glow: 1.3, color: [0.9, 0.7, 0.4] });
+def(B.SUPPLY, { name: 'supply', tiles: { top: 'supply_top', side: 'supply', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.45, 0.4, 0.28] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 
 // Quick lookup tables for hot loops (mesher, physics).

@@ -3,6 +3,7 @@
 import { SEA } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
+import { chooseFortSites, flattenForSite, stampFort, assignOwners, fortCount, FORT_NAMES } from './forts.js';
 
 
 export function generate(world) {
@@ -96,6 +97,11 @@ export function generate(world) {
   }
   for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 12, tops[k]));
 
+  // --- fort sites: flatten the ground where built-in forts will stand ---------
+  const frnd = mulberry32(seed + 404);
+  const forts = fortCount(world.cfg) ? chooseFortSites(world, tops, water, distLand, frnd, fortCount(world.cfg), alone ? { x: cxW, z: czW } : null) : [];
+  for (const f of forts) flattenForSite(tops, water, W, D, f);
+
   // --- columns -------------------------------------------------------------
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     const k = x + z * W;
@@ -144,6 +150,16 @@ export function generate(world) {
     }
   }
 
+  // --- forts ---------------------------------------------------------------
+  const names = FORT_NAMES.slice();
+  for (let i = names.length - 1; i > 0; i--) { const j = Math.floor(frnd() * (i + 1)); [names[i], names[j]] = [names[j], names[i]]; }
+  forts.forEach((f, i) => { f.name = names[i % names.length]; stampFort(world, f, frnd); });
+  const startFort = sub === 'allies' && forts.length
+    ? forts.slice().sort((a, b) => Math.hypot(a.cx - cxW, a.cz - czW) - Math.hypot(b.cx - cxW, b.cz - czW))[0] : null;
+  assignOwners(forts, mode, sub, frnd, startFort);
+  world.forts = forts;
+  const nearFort = (x, z, r) => forts.some((f) => Math.abs(f.cx - x) <= r && Math.abs(f.cz - z) <= r);
+
   // --- trees ---------------------------------------------------------------
   for (let z = 3; z < D - 3; z++) for (let x = 3; x < W - 3; x++) {
     if (hash2(x, z, seed + 31) > 0.0065) continue;
@@ -151,6 +167,7 @@ export function generate(world) {
     if (top <= SEA) continue;
     if (crater[x + z * W] === 1) continue;
     if (alone && Math.hypot(x - cxW, z - czW) < 8) continue;
+    if (nearFort(x, z, 12)) continue;    // nothing to climb over the walls with
     let flat = true;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (Math.abs(tops[x + dx + (z + dz) * W] - top) > 1) flat = false;
     if (!flat) continue;
@@ -159,7 +176,7 @@ export function generate(world) {
 
   // --- spawn ---------------------------------------------------------------
   world.tops = tops;
-  world.spawn = findLand(world, cxW, czW);
+  world.spawn = startFort ? { x: startFort.cx + 0.5, y: startFort.base, z: startFort.cz + 0.5 } : findLand(world, cxW, czW);
   if (alone) world.sites.push({ type: 'cabin', x: Math.floor(cxW), z: Math.floor(czW), y: tops[Math.floor(cxW) + Math.floor(czW) * W] + 1 });
 }
 

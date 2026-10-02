@@ -158,7 +158,9 @@ export class UI {
       <div class="field"><span>${t('set.volume')} <b id="volv">${Math.round(s.volume * 100)}%</b></span><input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-range="volume"></div>
       <div class="field"><span>${t('set.sens')} <b id="sensv">${s.sensitivity.toFixed(2)}</b></span><input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-range="sensitivity"></div>
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
-      <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>`;
+      <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
+      <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
+      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => from === 'pause' ? this.show('pause') : this.show('main') });
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;
@@ -267,6 +269,35 @@ export class UI {
       const r = RECIPES.find((x) => x.id === b.dataset.r);
       if (g.startCraft(r)) this.app.closePanel();
     });
+  }
+
+  // Orders for one allied soldier (aimed at), or for the whole squad.
+  r_orders({ soldier }) {
+    const g = this.app.game, E = g.enemies;
+    const n = E.followers().length;
+    let body, acts;
+    if (soldier && soldier.alive) {
+      const role = t('role.' + soldier.role);
+      body = `<div class="who"><b>${esc(soldier.name)}</b><span class="muted small">${t('type.' + soldier.type)} · ${role} · ${t('order.weapon')}: ${soldier.weapon ? t('item.' + soldier.weapon) : '—'}</span></div>`;
+      acts = [['follow', 'order.follow'], ['hold', 'order.hold'], ['defend', 'order.defend'], ['iron', 'order.iron'],
+        ['knife', 'order.knife'], ['rifle', 'order.rifle'], ['grenade', 'order.grenades']];
+    } else {
+      body = `<p class="muted">${t('order.squadInfo', { n })}</p>`;
+      acts = [['all-follow', 'order.allFollow'], ['all-hold', 'order.allHold'], ['all-defend', 'order.allDefend']];
+    }
+    body += `<div class="menu">${acts.map(([a, k], i) => `<button class="btn" data-a="${a}"><kbd>${i + 1}</kbd>${t(k)}</button>`).join('')}</div>
+      <p class="muted small">${t('order.hint')}</p>`;
+    const panel = this.panel(t(soldier ? 'order.title' : 'order.squad'), body, { onBack: () => this.app.closePanel() });
+    this.root.classList.add('orders');
+    const run = (a) => {
+      if (a === 'follow' || a === 'hold' || a === 'defend') E.order(soldier, a);
+      else if (a === 'iron') E.askIron(soldier);
+      else if (['knife', 'rifle', 'grenade'].includes(a)) E.askItem(soldier, a);
+      else { const k = E.orderAll(a.slice(4)); if (!k) g.hud.toast(t('order.nobody')); }
+      this.app.closePanel();
+    };
+    panel.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => run(b.dataset.a));
+    this.orderKeys = (code) => { const m = /^Digit(\d)$/.exec(code); if (m && acts[+m[1] - 1]) run(acts[+m[1] - 1][0]); };
   }
 
   r_gameover({ days }) {
