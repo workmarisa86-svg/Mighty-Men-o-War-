@@ -202,12 +202,13 @@ window.app = new App();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   addEventListener('load', async () => {
     try {
+      let wantReload = false;
       const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
       const notify = (w) => {
         if (!w || document.getElementById('update')) return;
         const el = document.createElement('div'); el.id = 'update';
         el.innerHTML = `<span>${t('app.update')}</span><button class="btn small primary">${t('app.reload')}</button>`;
-        el.querySelector('button').onclick = () => { w.postMessage('skipWaiting'); };
+        el.querySelector('button').onclick = () => { wantReload = true; w.postMessage('skipWaiting'); };
         document.body.appendChild(el);
       };
       if (reg.waiting && navigator.serviceWorker.controller) notify(reg.waiting);
@@ -215,9 +216,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
         const w = reg.installing;
         w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) notify(w); });
       });
-      let reloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloaded) return; reloaded = true;
+        if (!wantReload) return; wantReload = false;   // only when the player asked for it
         if (window.app && window.app.game) window.app.saveGame(true);
         location.reload();
       });
