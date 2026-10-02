@@ -158,9 +158,10 @@ export class Game {
     this.use = { item: null, t: 0 };
     this.hungerStage = this.player.hunger <= 0 ? 2 : this.player.hunger < 20 ? 1 : 0;
 
-    this.mission = this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
+    if (this.stats.aloneSince == null) this.stats.aloneSince = this.time;
     this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
+    this.mission = this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
 
