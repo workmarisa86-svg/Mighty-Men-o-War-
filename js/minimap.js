@@ -3,6 +3,7 @@
 // flashing TNT warnings. Limited range, so distant units never show.
 export const RADAR_RANGE = 60;
 const SIZES = { s: 118, m: 156, l: 204 };
+import { ORDER_COLORS } from './soldiers.js';
 export const OWNER_COLORS = { ally: '#5aa8ff', enemy: '#e0503c', none: '#b8b49c' };
 
 export class Minimap {
@@ -88,9 +89,20 @@ export class Minimap {
     const dot = units.length > 18 ? 2 : units.length > 9 ? 2.5 : 3;
     for (const s of units) {
       const [x, y] = toRadar(s.pos.x, s.pos.z);
-      c.fillStyle = s.faction === 'ally' ? (s.follow ? '#9ad0ff' : OWNER_COLORS.ally) : OWNER_COLORS.enemy;
-      c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;
-      c.beginPath(); c.arc(x, y, dot, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = s.faction === 'ally' ? (s.inSquad ? ORDER_COLORS[s.role] : OWNER_COLORS.ally) : OWNER_COLORS.enemy;
+      c.strokeStyle = s.selected ? '#ffe040' : 'rgba(0,0,0,0.75)'; c.lineWidth = s.selected ? 2 : 1;
+      c.beginPath(); c.arc(x, y, s.inSquad ? dot + 0.5 : dot, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    // order targets: advance points, holds, forts to attack or defend
+    for (const m of (g.enemies && g.cfg.sub === 'allies' ? g.enemies.orderMarks() : [])) {
+      let [x, y, d] = toRadar(m.x, m.z);
+      if (d > RADAR_RANGE) { x = R + (x - R) * RADAR_RANGE / d; y = R + (y - R) * RADAR_RANGE / d; }   // pinned to the rim
+      c.strokeStyle = ORDER_COLORS[m.kind]; c.fillStyle = ORDER_COLORS[m.kind]; c.lineWidth = 2;
+      c.beginPath();
+      if (m.kind === 'attack') { c.arc(x, y, 7, 0, Math.PI * 2); c.moveTo(x - 10, y); c.lineTo(x + 10, y); c.moveTo(x, y - 10); c.lineTo(x, y + 10); c.stroke(); }
+      else if (m.kind === 'defend') { c.arc(x, y, 9, 0, Math.PI * 2); c.stroke(); }
+      else if (m.kind === 'hold') { c.strokeRect(x - 4, y - 4, 8, 8); }
+      else { c.moveTo(x, y + 6); c.lineTo(x, y - 8); c.stroke(); c.beginPath(); c.moveTo(x, y - 8); c.lineTo(x + 7, y - 5); c.lineTo(x, y - 2); c.closePath(); c.fill(); }
     }
     const tank = g.enemies && g.enemies.tank;
     if (tank && tank.alive) {

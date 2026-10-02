@@ -1,5 +1,5 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.1.0';
+export const GAME_VERSION = '0.5.0';
 export const SAVE_FORMAT = 1;
 export const STORE_PREFIX = 'blocks-';
 
@@ -22,11 +22,13 @@ export const PEACE_SIZE = 256;
 export const DAY_SECONDS = 20 * 60;   // real seconds per in-game day (War mode)
 
 export const QUALITY = {
-  low:    { pixelRatio: 0.7, rain: 500,  particles: 0.4, ao: false },
-  medium: { pixelRatio: 1.0, rain: 1100, particles: 0.7, ao: true },
-  high:   { pixelRatio: 2.0, rain: 1800, particles: 1.0, ao: true },
+  low:    { pixelRatio: 0.7, rain: 500,  particles: 0.4, ao: false, animated: 8, detail: 18 },
+  medium: { pixelRatio: 1.0, rain: 1100, particles: 0.7, ao: true, animated: 16, detail: 30 },
+  high:   { pixelRatio: 2.0, rain: 1800, particles: 1.0, ao: true, animated: 32, detail: 45 },
 };
 
+// animated: how many of the nearest soldiers get full every-frame animation;
+// detail: distance (blocks) within which soldiers show their kit and faces.
 // Player body and movement, measured in blocks. Blocks are ~12% smaller than
 // the original 1 block = 1 metre scale, so the body is ~13% larger in block
 // units and speeds/jump/reach are scaled to match (still fits 2-block gaps).

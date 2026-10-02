@@ -1,5 +1,5 @@
 // Weapons: knife (silent melee), pistol, rifle (with bayonet), sniper rifle
-// (with a scope you can turn on or off), submachine gun, grenades and smoke
+// (scope view with right-click or Z), submachine gun, grenades and smoke
 // grenades. Ammo is unlimited while you own the weapon.
 import * as THREE from 'three';
 import { B, BLOCKS } from './blocks.js';
@@ -21,8 +21,6 @@ export class Combat {
     this.game = game;
     this.cool = 0;
     this.swimWarn = 0;
-    this.scoped = false;
-    this.lastItem = null;
     this.tracers = [];
     const mat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.8 });
     for (let i = 0; i < 12; i++) {
@@ -40,13 +38,11 @@ export class Combat {
     this.cool -= dt; this.swimWarn -= dt;
     for (const tr of this.tracers) if (tr.t > 0) { tr.t -= dt; tr.l.material.opacity = Math.max(0, tr.t / 0.07) * 0.8; if (tr.t <= 0) tr.l.visible = false; }
     const id = g.selected();
-    if (id !== this.lastItem) { this.lastItem = id; this.scoped = false; }
-    if (g.player.swimming) this.scoped = false;
     if (!playing) return;
     const W = WEAPONS[id];
     if (!W) return;
     // sniper scope on/off with right-click (or the ZOOM button on phones)
-    if (W.scope && (input.mouse.rightPressed || input.thit('place'))) { this.scoped = !this.scoped; sfx.scope(); }
+    if (W.scope && (input.mouse.rightPressed || input.thit('place'))) g.scopeView.toggle('sniper');
     const firing = W.auto ? (input.mouse.left || input.tdown('dig'))
       : (input.mouse.leftPressed || input.thit('dig') || ((input.mouse.left || input.tdown('dig')) && W.melee));
     if (firing && this.cool <= 0) {
@@ -110,7 +106,7 @@ export class Combat {
     if (Math.hypot(p.vel.x, p.vel.z) > 0.5) spread *= 2;
     if (!p.onGround && !p.swimming) spread *= 3;
     if (p.crouch) spread *= 0.6;
-    if (this.scoped) spread *= 0.3;
+    if (g.scopeView.sniper) spread *= 0.3;
     dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2;
     dir.normalize();
     const block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, W.range, true, 'bullet');
@@ -129,14 +125,14 @@ export class Combat {
       }
     }
     const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-    const start = eye.clone().addScaledVector(right, this.scoped ? 0 : 0.18).addScaledVector(dir, 0.6); start.y -= this.scoped ? 0.05 : 0.12;
+    const start = eye.clone().addScaledVector(right, g.scopeView.sniper ? 0 : 0.18).addScaledVector(dir, 0.6); start.y -= g.scopeView.sniper ? 0.05 : 0.12;
     const tr = this.tracers[this.tracerI++ % this.tracers.length];
     const pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, start.x, start.y, start.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true;
     tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
     g.vm.doRecoil(W.kick);
-    p.pitch = Math.min(1.55, p.pitch + W.kick * (this.scoped ? 0.025 : 0.012));
+    p.pitch = Math.min(1.55, p.pitch + W.kick * (g.scopeView.sniper ? 0.025 : 0.012));
     sfx.shot(W.sound);
     g.animals.noise(p.pos, W.loud);
     g.enemies.hear(p.pos, W.loud * 1.5);

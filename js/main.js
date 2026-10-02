@@ -51,7 +51,7 @@ class App {
     const q = QUALITY[this.settings.quality] || QUALITY.medium;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     applyI18n();
-    if (this.game) { this.game.settings = this.settings; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
+    if (this.game) { this.game.settings = this.settings; this.game.quality = q; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
   }
 
   resize() {
@@ -59,12 +59,12 @@ class App {
     if (this.game) this.game.resize();
   }
 
-  newGame({ mode, sub, difficulty, name }) {
+  newGame({ mode, sub, difficulty, timeMode = 'cycle', name }) {
     const size = mode === 'peace' ? PEACE_SIZE : DIFF[difficulty].size;
     const now = Date.now();
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty },
+      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode: mode === 'peace' ? 'day' : timeMode },
     });
   }
   loadGame(id) {

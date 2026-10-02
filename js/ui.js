@@ -5,6 +5,7 @@ import { DIFFICULTIES } from './config.js';
 import { listSaves, deleteSave } from './storage.js';
 import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
+import { MANUAL, MANUAL_CATS } from './manual.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -59,7 +60,7 @@ export class UI {
         <button class="btn" data-go="newgame">${t('menu.new')}</button>
         <button class="btn" data-go="load" ${hasSaves ? '' : 'disabled'}>${t('menu.load')}</button>
         <button class="btn" data-go="settings">${t('menu.settings')}</button>
-        <button class="btn" data-go="soon" data-what="menu.manual">${t('menu.manual')}</button>
+        <button class="btn" data-go="manual">${t('menu.manual')}</button>
         <button class="btn" data-go="soon" data-what="menu.stats">${t('menu.stats')}</button>
       </div>
       ${this.langSwitch()}
@@ -69,13 +70,59 @@ export class UI {
     this.bindLang(this.root);
   }
 
+  // Manual: search, sort A-Z / Z-A, filter by category, open/close entries.
+  r_manual({ from, q = '', sort = 'cat', cat = 'all', open = [] }) {
+    const L = getLang();
+    const cats = Object.keys(MANUAL_CATS);
+    const body = `<div class="man-tools">
+        <input id="mq" type="search" placeholder="${t('man.search')}" value="${esc(q)}">
+        <div class="seg" id="msort">${[['cat', t('man.byCat')], ['az', 'A–Z'], ['za', 'Z–A']].map(([v, l]) => `<button data-v="${v}" class="${sort === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      </div>
+      <div class="man-cats">${[['all', t('man.all')], ...cats.map((c) => [c, MANUAL_CATS[c][L] || MANUAL_CATS[c].en])].map(([v, l]) => `<button data-c="${v}" class="${cat === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+      <div class="man-list" id="mlist"></div>
+      <div class="row"><button class="btn ghost small" id="mexp">${t('man.expand')}</button><button class="btn ghost small" id="mcol">${t('man.collapse')}</button></div>`;
+    const panel = this.panel(t('menu.manual'), body, { wide: true, onBack: () => this.show(from === 'pause' ? 'pause' : 'main') });
+    panel.classList.add('manual');
+    const state = { q, sort, cat, open: new Set(open) };
+    const list = panel.querySelector('#mlist');
+    const norm = (x) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const draw = () => {
+      const words = norm(state.q).split(/\s+/).filter(Boolean);
+      let items = MANUAL.filter((m) => state.cat === 'all' || m.cat === state.cat).map((m) => ({ m, x: m[L] || m.en }))
+        .filter(({ x }) => words.every((w) => norm(x.title + ' ' + x.text).includes(w)));
+      if (state.sort === 'cat') items.sort((a, b) => cats.indexOf(a.m.cat) - cats.indexOf(b.m.cat));
+      else items.sort((a, b) => a.x.title.localeCompare(b.x.title, L) * (state.sort === 'za' ? -1 : 1));
+      let html = '', lastCat = null;
+      for (const { m, x } of items) {
+        if (state.sort === 'cat' && m.cat !== lastCat) { lastCat = m.cat; html += `<h4>${esc(MANUAL_CATS[m.cat][L] || MANUAL_CATS[m.cat].en)}</h4>`; }
+        const on = state.open.has(m.id) || words.length > 0;
+        html += `<div class="man-item${on ? ' open' : ''}" data-id="${m.id}"><button class="man-h"><span>${esc(x.title)}</span><i>${on ? '−' : '+'}</i></button>` +
+          `<p>${esc(x.text)}</p></div>`;
+      }
+      list.innerHTML = html || `<p class="muted">${t('man.none')}</p>`;
+      list.querySelectorAll('.man-h').forEach((b) => b.onclick = () => {
+        const id = b.parentElement.dataset.id;
+        if (state.open.has(id)) state.open.delete(id); else state.open.add(id);
+        b.parentElement.classList.toggle('open'); b.querySelector('i').textContent = b.parentElement.classList.contains('open') ? '−' : '+';
+      });
+    };
+    panel.querySelector('#mq').oninput = (e) => { state.q = e.target.value; draw(); };
+    panel.querySelectorAll('#msort button').forEach((b) => b.onclick = () => { state.sort = b.dataset.v; panel.querySelectorAll('#msort button').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
+    panel.querySelectorAll('.man-cats button').forEach((b) => b.onclick = () => { state.cat = b.dataset.c; panel.querySelectorAll('.man-cats button').forEach((x) => x.classList.toggle('on', x === b)); draw(); });
+    panel.querySelector('#mexp').onclick = () => { MANUAL.forEach((m) => state.open.add(m.id)); draw(); };
+    panel.querySelector('#mcol').onclick = () => { state.open.clear(); draw(); };
+    // remember the view if the language changes
+    this.current.params = { from, get q() { return state.q; }, get sort() { return state.sort; }, get cat() { return state.cat; }, get open() { return [...state.open]; } };
+    draw();
+  }
+
   r_soon({ what, from }) {
     this.panel(t(what), `<p class="muted">${t('menu.soon')}</p>`, { onBack: () => this.show(from || 'main') });
   }
 
   // -------------------------------------------------------------- new game
   r_newgame(p) {
-    const st = Object.assign({ step: 'mode', mode: null, sub: null, difficulty: 'medium' }, p);
+    const st = Object.assign({ step: 'mode', mode: null, sub: null, difficulty: 'medium', timeMode: 'cycle' }, p);
     const go = (patch) => this.show('newgame', Object.assign({}, st, patch));
     let body = '';
     if (st.step === 'mode') {
@@ -90,7 +137,9 @@ export class UI {
       const n = listSaves().length + 1;
       body = (st.mode === 'war' ? `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
         <div class="choice small ${st.difficulty === d ? 'on' : ''}" data-d="${d}">
-          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>` : '') +
+          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>
+        <p class="label">${t('new.time')}</p><div class="choices">${['cycle', 'day'].map((m) => `
+        <div class="choice small ${st.timeMode === m ? 'on' : ''}" data-tm="${m}"><h3>${t('new.time.' + m)}</h3><p>${t('new.time.' + m + 'Desc')}</p></div>`).join('')}</div>` : '') +
         `<p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
@@ -105,6 +154,10 @@ export class UI {
       if (st.step === 'mode') go(v === 'war' ? { step: 'sub', mode: 'war' } : { step: 'final', mode: 'peace', sub: null });
       else go({ step: 'final', sub: v });
     });
+    panel.querySelectorAll('.choice[data-tm]').forEach((c) => c.onclick = () => {
+      st.timeMode = c.dataset.tm;
+      panel.querySelectorAll('.choice[data-tm]').forEach((x) => x.classList.toggle('on', x === c));
+    });
     panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => {
       st.difficulty = c.dataset.d;
       panel.querySelectorAll('.choice[data-d]').forEach((x) => x.classList.toggle('on', x === c));
@@ -112,14 +165,14 @@ export class UI {
     const sb = panel.querySelector('#startbtn');
     if (sb) sb.onclick = () => {
       const name = panel.querySelector('#wname').value.trim() || t('new.defaultName', { n: 1 });
-      this.app.newGame({ mode: st.mode, sub: st.mode === 'war' ? st.sub : null, difficulty: st.mode === 'war' ? st.difficulty : null, name });
+      this.app.newGame({ mode: st.mode, sub: st.mode === 'war' ? st.sub : null, difficulty: st.mode === 'war' ? st.difficulty : null, timeMode: st.mode === 'war' ? st.timeMode : 'day', name });
     };
   }
 
   // ------------------------------------------------------------------ load
   r_load() {
     const saves = listSaves();
-    const modeLabel = (m) => m.mode === 'peace' ? t('mode.peace') : `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)}`;
+    const modeLabel = (m) => m.mode === 'peace' ? t('mode.peace') : `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)} · ${t('new.time.' + (m.timeMode || 'cycle'))}`;
     const body = saves.length ? `<div class="saves">${saves.map((m) => `
       <div class="save">
         <div><h3>${esc(m.name)}</h3><p>${modeLabel(m)} · ${t('load.day', { n: m.day })}</p>
@@ -160,7 +213,8 @@ export class UI {
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
-      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>`;
+      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
+      <div class="field"><span>${t('set.formation')}</span>${seg('formation', [['loose', t('form.loose')], ['line', t('form.line')], ['column', t('form.column')]])}</div>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => from === 'pause' ? this.show('pause') : this.show('main') });
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;
@@ -194,7 +248,7 @@ export class UI {
     $('#presume').onclick = () => this.app.resume();
     $('#psave').onclick = () => this.app.saveGame(false);
     $('#pset').onclick = () => this.show('settings', { from: 'pause' });
-    $('#pman').onclick = () => this.show('soon', { what: 'menu.manual', from: 'pause' });
+    $('#pman').onclick = () => this.show('manual', { from: 'pause' });
     $('#pquit').onclick = () => this.app.quitToMenu();
   }
 

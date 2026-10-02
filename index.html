@@ -10,9 +10,49 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=0.5.0">
   <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "./js/animals.js": "./js/animals.js?v=0.5.0",
+        "./js/audio.js": "./js/audio.js?v=0.5.0",
+        "./js/blocks.js": "./js/blocks.js?v=0.5.0",
+        "./js/campfire.js": "./js/campfire.js?v=0.5.0",
+        "./js/characters.js": "./js/characters.js?v=0.5.0",
+        "./js/config.js": "./js/config.js?v=0.5.0",
+        "./js/explosives.js": "./js/explosives.js?v=0.5.0",
+        "./js/flashlight.js": "./js/flashlight.js?v=0.5.0",
+        "./js/forts.js": "./js/forts.js?v=0.5.0",
+        "./js/game.js": "./js/game.js?v=0.5.0",
+        "./js/gunmodels.js": "./js/gunmodels.js?v=0.5.0",
+        "./js/hud.js": "./js/hud.js?v=0.5.0",
+        "./js/i18n.js": "./js/i18n.js?v=0.5.0",
+        "./js/input.js": "./js/input.js?v=0.5.0",
+        "./js/items.js": "./js/items.js?v=0.5.0",
+        "./js/main.js": "./js/main.js?v=0.5.0",
+        "./js/manual.js": "./js/manual.js?v=0.5.0",
+        "./js/merge.js": "./js/merge.js?v=0.5.0",
+        "./js/mesher.js": "./js/mesher.js?v=0.5.0",
+        "./js/minimap.js": "./js/minimap.js?v=0.5.0",
+        "./js/noise.js": "./js/noise.js?v=0.5.0",
+        "./js/orders.js": "./js/orders.js?v=0.5.0",
+        "./js/particles.js": "./js/particles.js?v=0.5.0",
+        "./js/pickups.js": "./js/pickups.js?v=0.5.0",
+        "./js/player.js": "./js/player.js?v=0.5.0",
+        "./js/raft.js": "./js/raft.js?v=0.5.0",
+        "./js/scope.js": "./js/scope.js?v=0.5.0",
+        "./js/sky.js": "./js/sky.js?v=0.5.0",
+        "./js/soldiers.js": "./js/soldiers.js?v=0.5.0",
+        "./js/storage.js": "./js/storage.js?v=0.5.0",
+        "./js/textures.js": "./js/textures.js?v=0.5.0",
+        "./js/ui.js": "./js/ui.js?v=0.5.0",
+        "./js/viewmodel.js": "./js/viewmodel.js?v=0.5.0",
+        "./js/weapons.js": "./js/weapons.js?v=0.5.0",
+        "./js/world.js": "./js/world.js?v=0.5.0",
+        "./js/worldgen.js": "./js/worldgen.js?v=0.5.0"
+      }
+    }
   </script>
 </head>
 <body>
@@ -26,9 +66,33 @@
     <div id="hitmark"></div>
     <div id="hint"></div>
     <div id="bigmsg"></div>
-    <div id="scope"><i></i></div>
+    <div id="scopeview">
+      <div class="mask"></div>
+      <div class="lens"><i class="glint"></i></div>
+      <svg class="reticle sniper" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
+        <g stroke="#0c0c0a" fill="none">
+          <path d="M-100 0H-28M28 0H100M0 -100V-28M0 28V100" stroke-width="2.4"/>
+          <path d="M-28 0H-1.5M1.5 0H28M0 -28V-1.5M0 1.5V28" stroke-width="0.5"/>
+          <g fill="#0c0c0a" stroke="none">
+            <circle cx="-20" cy="0" r="0.9"/><circle cx="-10" cy="0" r="0.9"/><circle cx="10" cy="0" r="0.9"/><circle cx="20" cy="0" r="0.9"/>
+            <circle cx="0" cy="-20" r="0.9"/><circle cx="0" cy="-10" r="0.9"/><circle cx="0" cy="10" r="0.9"/><circle cx="0" cy="20" r="0.9"/>
+          </g>
+          <path d="M-4 14H4M-6 20H6M-3 6H3" stroke-width="0.4"/>
+          <circle r="0.6" fill="#a8261c" stroke="none"/>
+        </g>
+      </svg>
+      <svg class="reticle binoc" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid meet">
+        <g stroke="#10100c" fill="none" stroke-width="0.5">
+          <path d="M-40 0H40M0 -4V4"/>
+          <path d="M-40 -2V2M-30 -1.5V1.5M-20 -2V2M-10 -1.5V1.5M10 -1.5V1.5M20 -2V2M30 -1.5V1.5M40 -2V2"/>
+          <path d="M0 10V40M-2 20H2M-2 30H2"/>
+        </g>
+      </svg>
+    </div>
     <div id="dmgdir"></div>
     <div id="markers"></div>
+    <div id="squadlist" hidden></div>
+    <div id="orderwheel" hidden></div>
     <div id="radio"></div>
     <div id="alertbar"></div>
     <svg id="digring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15.9" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
@@ -45,7 +109,6 @@
       <div id="hotbar" class="hotbar"></div>
     </div>
     <div id="keyhint"></div>
-    <div id="binoc"></div>
     <div id="underwater"></div>
     <div id="flash"></div>
   </div>
@@ -77,6 +140,6 @@
   <div id="screen" class="screen" hidden></div>
 
   <noscript>This game needs JavaScript.</noscript>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=0.5.0"></script>
 </body>
 </html>

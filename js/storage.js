@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS = {
   invertY: false,
   minimap: true,
   minimapSize: 'm',
+  formation: 'loose',
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
 export function saveSettings(s) { save('settings', s); }
@@ -41,7 +42,7 @@ export function writeSave(data) {
   const idx = load('saves', []).filter((m) => m.id !== data.id);
   const meta = {
     id: data.id, name: data.name, mode: data.cfg.mode, sub: data.cfg.sub,
-    difficulty: data.cfg.difficulty, day: Math.floor(data.time) + 1,
+    difficulty: data.cfg.difficulty, timeMode: data.cfg.timeMode || 'cycle', day: Math.floor(data.time) + 1,
     created: data.created, updated: data.updated,
   };
   const ok = save('save-' + data.id, data);

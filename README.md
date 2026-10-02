@@ -42,6 +42,8 @@ Then open `http://localhost:8080/`.
 | `js/sky.js` | Day/night cycle and rain |
 | `js/animals.js` | Herds and flocks, stealth detection, fleeing, respawning |
 | `js/weapons.js`, `js/viewmodel.js` | Knife, guns, grenades, sniper scope, the item held in hand |
+| `js/characters.js`, `js/gunmodels.js`, `js/merge.js` | 3D soldier bodies (skeleton, poses, LOD) and wood/steel/brass weapon models |
+| `js/orders.js`, `js/manual.js`, `js/scope.js` | Squad order wheel, in-game manual, scope/binocular view |
 | `js/soldiers.js` | Enemy and allied soldiers (squads, garrisons, orders, callouts, looting, crafting) and the tank boss |
 | `js/forts.js` | Built-in forts: generation, lighting, doors, capture and surrender, flags, alarms |
 | `js/minimap.js`, `js/flashlight.js` | Corner radar; flashlight beam and visible cone |
@@ -52,3 +54,7 @@ Then open `http://localhost:8080/`.
 | `js/hud.js`, `js/ui.js` | HUD and menus |
 | `js/i18n.js` | English / Spanish text |
 | `js/storage.js` | Save slots and settings (all keys prefixed `blocks-`) |
+
+## Updating
+
+After changing files, bump `GAME_VERSION` in `js/config.js` and run `node tools/stamp-version.mjs` so browsers load the new files instead of cached ones.

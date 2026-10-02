@@ -5,6 +5,8 @@ import { WEAPONS } from './weapons.js';
 import { Minimap } from './minimap.js';
 import { sfx } from './audio.js';
 import { t } from './i18n.js';
+import { ORDER_COLORS } from './soldiers.js';
+import { esc } from './ui.js';
 
 const $ = (s) => document.querySelector(s);
 const PX_PER_DEG = 3;
@@ -23,13 +25,14 @@ export class HUD {
     this.ring = $('#digring circle');
     this.toasts = $('#toasts');
     this.craftbar = $('#craftbar'); this.craftLabel = $('#craftbar .label'); this.craftFill = $('#craftbar .fill');
-    this.binoc = $('#binoc'); this.underwater = $('#underwater'); this.flashEl = $('#flash');
+    this.underwater = $('#underwater'); this.flashEl = $('#flash');
     this.keyhint = $('#keyhint');
     this.cross = $('#crosshair'); this.hitEl = $('#hitmark'); this.hint = $('#hint');
     this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
-    this.scope = $('#scope'); this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
+    this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
     this.defuseProgress = 0; this.markerEls = [];
     this.minimap = new Minimap(game);
+    this.squadEl = $('#squadlist'); this.squadT = 0;
     this.radioEl = $('#radio'); this.alertEl = $('#alertbar');
     this.dirtyHotbar = true;
     this.digProgress = 0;
@@ -74,10 +77,10 @@ export class HUD {
     if (this.statusTimer <= 0) {
       this.statusTimer = 0.5;
       const day = Math.floor(g.time) + 1;
-      const tod = g.peace ? 0.45 : g.time % 1;
+      const tod = g.dayOnly ? 0.45 : g.time % 1;
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : clock];
+      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : g.dayOnly ? t('hud.daylight') : clock];
       if (!g.peace && g.weather.rain > 0.15) parts.push(t('hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
@@ -95,12 +98,12 @@ export class HUD {
 
     // reticle: crosshair for guns, a dot for the knife, small dot otherwise
     const W = WEAPONS[g.selected()];
-    const ret = g.combat.scoped ? 'none' : W ? (W.reticle === 'arc' ? 'tool' : W.reticle) : 'tool';
-    this.scope.classList.toggle('on', g.combat.scoped);
+    const scoped = g.scopeView.ease() > 0.5;
+    const ret = scoped ? 'none' : W ? (W.reticle === 'arc' ? 'tool' : W.reticle) : 'tool';
     if (ret !== this.ret) { this.ret = ret; this.cross.className = ret; }
     // context hint
     let hint = '';
-    if (!g.overlay && !g.paused && !g.combat.scoped) {
+    if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
       else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
       else if (W && W.scope) hint = t('hint.scope');
@@ -111,8 +114,8 @@ export class HUD {
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
     const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
-    this.binoc.classList.toggle('on', g.zoom && !g.combat.scoped);
     this.updateMarkers();
+    this.updateSquadList(dt);
     this.minimap.update(dt);
     this.underwater.classList.toggle('on', p.headInWater);
 
@@ -212,5 +215,27 @@ export class HUD {
     this.root.hidden = true;
     this.toasts.innerHTML = '';
     this.radioEl.innerHTML = '';
+  }
+
+  // small list of the player's squad: who, what order, how healthy
+  updateSquadList(dt) {
+    const g = this.game, E = g.enemies;
+    this.squadT -= dt;
+    if (this.squadT > 0) return;
+    this.squadT = 0.3;
+    const members = g.cfg.sub === 'allies' && !g.peace && E ? E.squadMembers() : [];
+    if (!members.length) { this.squadEl.hidden = true; return; }
+    this.squadEl.hidden = false;
+    const MAX = 8;
+    members.sort((a, b) => (b.selected - a.selected) || a.idx - b.idx);
+    const form = t('form.' + (E.formMode || g.settings.formation || 'loose'));
+    let html = `<div class="sq-head">${t('squad.title', { n: members.length })} <span>${form}${E.contactT < 10 ? ' · ' + t('squad.underFire') : ''}</span></div>`;
+    for (const s of members.slice(0, MAX)) {
+      const hp = Math.max(0, s.hp / s.T.hp);
+      html += `<div class="sq-row${s.selected ? ' sel' : ''}"><i style="background:${ORDER_COLORS[s.role]}"></i><b>${esc(s.name)}</b>` +
+        `<span>${t('role.' + s.role)}</span><em><u style="width:${(hp * 100).toFixed(0)}%"></u></em></div>`;
+    }
+    if (members.length > MAX) html += `<div class="sq-more">${t('squad.more', { n: members.length - MAX })}</div>`;
+    if (html !== this.squadHtml) { this.squadHtml = html; this.squadEl.innerHTML = html; }
   }
 }

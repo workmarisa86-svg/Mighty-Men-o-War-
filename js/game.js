@@ -4,7 +4,7 @@ import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
-import { buildChunk } from './mesher.js';
+import { buildChunk, skyAt } from './mesher.js';
 import { buildAtlas, buildCracks } from './textures.js';
 import { Player } from './player.js';
 import { Sky } from './sky.js';
@@ -20,6 +20,9 @@ import { Explosives } from './explosives.js';
 import { Enemies } from './soldiers.js';
 import { Flashlight } from './flashlight.js';
 import { Forts } from './forts.js';
+import { ScopeView } from './scope.js';
+import { OrderWheel } from './orders.js';
+import { setCharacterQuality } from './characters.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
@@ -34,10 +37,13 @@ export class Game {
     this.save = save;
     this.cfg = save.cfg;
     this.peace = this.cfg.mode === 'peace';
+    // Time of day: full day/night cycle, or always daytime (Peace is always day)
+    this.dayOnly = this.peace || this.cfg.timeMode === 'day';
     document.body.classList.toggle('peace', this.peace);
     document.body.classList.toggle('allies', this.cfg.sub === 'allies' && !this.peace);
     this.settings = app.settings;
     this.quality = QUALITY[this.settings.quality] || QUALITY.medium;
+    setCharacterQuality(this.settings.quality);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 400);
@@ -67,10 +73,17 @@ export class Game {
       m.onBeforeCompile = (sh) => {
         sh.uniforms.uGlow = this.glowUniform;
         sh.vertexShader = sh.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+          .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;\nattribute float sky;\nvarying float vSky;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;\nvSky = sky;');
+        // sky light only dims sun, moon and sky (directional + ambient/hemisphere),
+        // never the flashlight, campfires or fort lamps
+        const begin = THREE.ShaderChunk.lights_fragment_begin.replace(
+          'getDirectionalLightInfo( directionalLight, directLight );',
+          'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= vSky;');
         sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying float vGlow;\nuniform float uGlow;')
+          .replace('#include <common>', '#include <common>\nvarying float vGlow;\nuniform float uGlow;\nvarying float vSky;')
+          .replace('#include <lights_fragment_begin>', begin)
+          .replace('#include <lights_fragment_end>', '#if defined( RE_IndirectDiffuse )\n\tirradiance *= vSky;\n#endif\n#include <lights_fragment_end>')
           .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * uGlow * diffuseColor.rgb * vec3(1.0, 0.78, 0.52);');
       };
     }
@@ -123,7 +136,8 @@ export class Game {
     this.overlay = null;   // 'inventory' | 'craft' while a game panel is open
     this.paused = true;
     this.autosave = 60;
-    this.zoom = false;
+    this.scopeView = new ScopeView(this);
+    this.orders = new OrderWheel(this);
 
     this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
     this.campfires = new Campfires(this);
@@ -241,6 +255,7 @@ export class Game {
     this.time += dt / DAY_SECONDS;
     this.updateWeather(dt);
 
+    if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -276,21 +291,25 @@ export class Game {
     const eye = p.eye(this.tmpV);
     this.camera.position.copy(eye);
     if (p.raft instanceof Raft) this.camera.position.y += Math.sin(p.raft.t * 1.3) * 0.03;
-    this.camera.rotation.set(p.pitch, p.yaw, 0);
     if (this.shake > 0) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.3;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.3;
       this.shake = Math.max(0, this.shake - dt * 2);
     }
-    const scoped = this.combat.scoped;
-    const targetFov = scoped ? 12 : this.zoom ? 16 : (p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
+    this.scopeView.update(dt, input, playing);
+    this.camera.rotation.set(p.pitch + this.scopeView.pitch, p.yaw + this.scopeView.yaw, 0);
+    const scoped = this.scopeView.ease() > 0.5;
+    const targetFov = this.scopeView.fov(p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
     }
     this.camera.far = (this.settings.renderDist + 1.5) * CHUNK + 40;
 
-    this.sky.update(dt, this.time % 1, this.peace ? 0 : this.weather.rain, this.camera.position, this.peace);
+    this.sky.update(dt, this.time % 1, this.peace ? 0 : this.weather.rain, this.camera.position, this.dayOnly);
+    // how much daylight reaches the player's eyes (dark in tunnels)
+    this.eyeSkyT = (this.eyeSkyT || 0) - dt;
+    if (this.eyeSkyT <= 0) { this.eyeSkyT = 0.3; this.eyeSky = skyAt(this.world, eye.x, eye.y, eye.z); }
     this.glowUniform.value = 0.2 + 0.65 * (1 - this.sky.daylight);
     this.flashlight.on = this.lightOn;
     this.flashlight.update(1 - this.sky.daylight, this.peace ? 0 : this.weather.rain);
@@ -299,7 +318,7 @@ export class Game {
     this.vm.set(scoped ? null : this.selected());
     this.vm.update(dt, {
       moving: p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5, sprint: p.running,
-      light: Math.min(1, this.sky.daylight + (this.lightOn ? 0.35 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
+      light: Math.min(1, this.sky.daylight * (this.eyeSky ?? 1) + (this.lightOn ? 0.45 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
     });
     this.hud.update(dt);
 
@@ -323,7 +342,7 @@ export class Game {
   }
 
   handleLook(input) {
-    const s = this.settings.sensitivity * (this.zoom || this.combat.scoped ? 0.22 : 1) * 0.0022;
+    const s = this.settings.sensitivity * this.scopeView.sensitivity() * 0.0022;
     const p = this.player;
     p.yaw -= input.mouse.dx * s;
     p.pitch -= input.mouse.dy * s * (this.settings.invertY ? -1 : 1);
@@ -351,13 +370,12 @@ export class Game {
 
   handleKeys(input) {
     const inv = this.inv;
-    for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
+    if (!this.orders.eatKeys) for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
     if (input.mouse.wheel) { inv.sel = (inv.sel + (input.mouse.wheel > 0 ? 1 : 8)) % 9; this.hud.dirtyHotbar = true; }
     if (input.hit('KeyF') || input.thit('light')) {
       this.lightOn = !this.lightOn; sfx.toggle();
       this.hud.toast(t(this.lightOn ? 'hud.lightOn' : 'hud.lightOff'));
     }
-    this.zoom = input.down('KeyZ') || input.tdown('zoom');
     if (this.peace && (input.doubleSpace || input.thit('fly'))) {
       this.player.flying = !this.player.flying; this.player.vel.y = 0;
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
@@ -365,18 +383,15 @@ export class Game {
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
-    if ((input.hit('KeyQ') || input.thit('squad')) && this.cfg.sub === 'allies' && !this.peace) {
-      const { eye, dir } = this.aim();
-      const block = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 40, false, 'bullet');
-      const hit = this.enemies.raycast(eye, dir, block ? block.dist : 40, 'ally');
-      this.app.openPanel('orders', { soldier: hit ? hit.soldier : null });
-    }
   }
 
   // ------------------------------------------------------------ dig & place
   aim() {
     const eye = this.player.eye(this.tmpV.clone());
-    const dir = this.player.lookDir(this.tmpD);
+    const p = this.player, sv = this.scopeView;
+    // the scope's breathing sway moves the point of aim too
+    const yaw = p.yaw + sv.yaw, pitch = p.pitch + sv.pitch, cp = Math.cos(pitch);
+    const dir = this.tmpD.set(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
     return { eye, dir };
   }
   targetRaft(eye, dir, max) {
@@ -768,7 +783,7 @@ export class Game {
     }
     this.respawn();
     this.player.health = 100; this.breath = 15;
-    this.combat.scoped = false;
+    this.scopeView.close();
     this.enemies.playerDied();
     this.craft = null;
     this.hud.dirtyHotbar = true;
