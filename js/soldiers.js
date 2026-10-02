@@ -31,6 +31,9 @@ const TANK_CHANCE = { beginner: 0.04, easy: 0.07, medium: 0.1, hard: 0.15, impos
 const DISPATCH = { beginner: 270, easy: 200, medium: 150, hard: 110, impossible: 80 };
 const SQUAD_SIZE = { beginner: [4, 4], easy: [4, 5], medium: [5, 6], hard: [5, 6], impossible: [6, 7] };
 const MAX_SQUADS = { beginner: 1, easy: 1, medium: 2, hard: 2, impossible: 3 };
+// patrols kept outside at all times (per side), and their size
+const PATROLS = { beginner: 1, easy: 2, medium: 2, hard: 3, impossible: 3 };
+const PATROL_SIZE = { beginner: [3, 4], easy: [4, 4], medium: [4, 5], hard: [5, 6], impossible: [5, 6] };
 const GUARDS = { beginner: 2, easy: 2, medium: 2, hard: 3, impossible: 3 };   // never leave their fort
 // roles that belong to the player's own squad
 export const PSQ = new Set(['follow', 'hold', 'defend', 'cover', 'advance', 'attack']);
@@ -125,7 +128,8 @@ export class Enemies {
     this.enabled = !game.peace;
     this.diff = game.cfg.difficulty || 'medium';
     this.allies = game.cfg.sub === 'allies';
-    this.dispatchT = { enemy: 60 + Math.random() * 40, ally: 90 + Math.random() * 60 };
+    this.dispatchT = { enemy: 40 + Math.random() * 30, ally: 60 + Math.random() * 40 };
+    this.patrolT = { enemy: 4 + Math.random() * 6, ally: 8 + Math.random() * 8 };
     this.lodT = 0; this.slotT = 0; this.contactT = 99; this.contactPos = null;
     this.trail = [];         // player's recent path, for column formation
     this.formYaw = 0;
@@ -493,18 +497,76 @@ export class Enemies {
     if (!F) return null;
     return F.list.find((f) => Math.abs(x - (f.cx + 0.5)) <= 5.6 && Math.abs(z - (f.cz + 0.5)) <= 5.6) || null;
   }
-  route(s, gx, gz) {
+  // Fort-aware routing. A fort is entered and left only through its door:
+  //  - on the rampart and heading elsewhere: walk to a ladder and climb down;
+  //  - heading up to a rampart post: climb a ladder from the courtyard;
+  //  - inside, going out: door (inside) -> door (outside);
+  //  - outside, going in: walk around the walls to the door, queue if the
+  //    doorway is busy, then go through.
+  route(s, gx, gz, gy) {
     const inS = this.fortXZ(s.pos.x, s.pos.z), inG = this.fortXZ(gx, gz);
+    if (inS && s.pos.y > inS.base + 1.5) {
+      const up = inG === inS && gy != null && gy > inS.base + 1.5;
+      if (up) return { x: gx, z: gz };
+      const L = this.nearestLadder(inS, s.pos, 'top');
+      if (Math.hypot(s.pos.x - L.top.x, s.pos.z - L.top.z) < 0.9) { this.climbTo(s, L.bottom); return L.bottom; }
+      return L.top;
+    }
+    if (inS && inS === inG) {
+      if (gy != null && gy > inS.base + 1.5) {             // up to a rampart post
+        const L = this.nearestLadder(inS, { x: gx, z: gz }, 'top');
+        if (Math.hypot(s.pos.x - L.bottom.x, s.pos.z - L.bottom.z) < 0.9) { this.climbTo(s, L.top); return { x: gx, z: gz }; }
+        return L.bottom;
+      }
+      s.routing = null; return { x: gx, z: gz };
+    }
     if (inS === inG) { s.routing = null; return { x: gx, z: gz }; }
     if (inS) {
       if (s.routing !== 'out' && Math.hypot(s.pos.x - inS.doorIn.x, s.pos.z - inS.doorIn.z) < 1.3) s.routing = 'out';
       return s.routing === 'out' ? inS.doorOut : inS.doorIn;
     }
     if (s.routing !== 'in' && Math.hypot(s.pos.x - inG.doorOut.x, s.pos.z - inG.doorOut.z) < 1.3) s.routing = 'in';
-    return s.routing === 'in' ? inG.doorIn : inG.doorOut;
+    if (s.routing === 'in') return inG.doorIn;
+    // around the walls to the door, then wait your turn if the doorway is busy
+    const w = this.aroundFort(s, inG);
+    if (w === inG.doorOut && Math.hypot(s.pos.x - w.x, s.pos.z - w.z) < 4 && this.doorBusy(inG, s)) {
+      const u = this.fortAxes(inG), k = (s.idx % 3) - 1;
+      s.queued = true;
+      return { x: inG.doorOut.x + u.ux * 2.2 + u.vx * k * 1.6, z: inG.doorOut.z + u.uz * 2.2 + u.vz * k * 1.6 };
+    }
+    s.queued = false;
+    return w;
   }
-  goTo(s, gx, gz, speed, dt) {
-    let r = this.route(s, gx, gz);
+  fortAxes(f) {
+    if (f.axes) return f.axes;
+    const ux = f.doorOut.x - (f.cx + 0.5), uz = f.doorOut.z - (f.cz + 0.5), L = Math.hypot(ux, uz);
+    f.axes = { ux: ux / L, uz: uz / L, vx: -uz / L, vz: ux / L };
+    return f.axes;
+  }
+  // next waypoint around a fort's walls toward its door (cached axes, no search)
+  aroundFort(s, f) {
+    const A = this.fortAxes(f), cx = f.cx + 0.5, cz = f.cz + 0.5;
+    const dx = s.pos.x - cx, dz = s.pos.z - cz;
+    const pu = dx * A.ux + dz * A.uz, pv = dx * A.vx + dz * A.vz;
+    if (pu >= 6.9) return f.doorOut;                             // already on the door side
+    if (s.navFort !== f || Math.abs(pv) > 2) { s.navFort = f; s.navSide = pv >= 0 ? 1 : -1; }   // pick a side, keep it
+    const sg = s.navSide, C = 9;
+    const at = (u, v) => ({ x: cx + A.ux * u + A.vx * v, z: cz + A.uz * u + A.vz * v });
+    if (pu < -6.9 && Math.abs(pv) < C - 0.6) return at(-C, sg * C);   // behind: to the back corner first
+    return at(C, sg * C);                                              // alongside: to the front corner
+  }
+  doorBusy(f, me) {
+    return this.list.some((o) => o !== me && o.alive && Math.hypot(o.pos.x - f.doorCenter.x, o.pos.z - f.doorCenter.z) < 1.6);
+  }
+  nearestLadder(f, p, end) {
+    return f.ladders.reduce((a, b) => (Math.hypot(a[end].x - p.x, a[end].z - p.z) <= Math.hypot(b[end].x - p.x, b[end].z - p.z) ? a : b));
+  }
+  // up or down a ladder (a quick climb)
+  climbTo(s, p) { s.pos.set(p.x, p.y, p.z); s.climbT = 0.8; s.steerO = 0; }
+  goTo(s, gx, gz, speed, dt, gy) {
+    let r = this.route(s, gx, gz, gy);
+    if (s.queued) { const d = Math.hypot(r.x - s.pos.x, r.z - s.pos.z); if (d < 0.8) { s.speed = 0; this.settle(s, dt); return false; } }
+    this.watchProgress(s, gx, gz, gy, dt);
     // water ahead: prefer a bridge / ford nearby, swim only if there is none
     if (!s.swimming && Math.hypot(r.x - s.pos.x, r.z - s.pos.z) > 6) {
       s.crossT = (s.crossT || 0) - dt;
@@ -516,6 +578,27 @@ export class Enemies {
       if (s.detour) { if (Math.hypot(s.detour.x - s.pos.x, s.detour.z - s.pos.z) < 2) s.detour = null; else r = s.detour; }
     }
     return this.moveToward(s, r.x, r.z, speed, dt);
+  }
+  // No progress toward the goal for a few seconds: re-plan (other side of
+  // the fort, fresh detour). Still stuck: put him on the ground at the
+  // nearest fort door (inside if he is heading in), never left shaking.
+  watchProgress(s, gx, gz, gy, dt) {
+    s.progT = (s.progT || 0) + dt;
+    if (s.progT < 1) return;
+    s.progT = 0;
+    const d = Math.hypot(gx - s.pos.x, gz - s.pos.z) + (gy != null ? Math.abs(gy - s.pos.y) : 0);
+    const went = s.progP ? Math.hypot(s.pos.x - s.progP.x, s.pos.z - s.progP.z) : 9;
+    const moved = s.progD == null || s.progD - d > 0.4 || went > 1.2 || d < 1.5 || s.queued;
+    s.progD = d; s.progP = { x: s.pos.x, z: s.pos.z };
+    s.noProg = moved ? 0 : (s.noProg || 0) + 1;
+    if (s.noProg === 3 || s.noProg === 5) { s.navSide = -(s.navSide || 1); s.detour = null; s.crossT = 0; s.steerO = 0; s.routing = null; }
+    if (s.noProg >= 7) {
+      const inS = this.fortXZ(s.pos.x, s.pos.z), inG = this.fortXZ(gx, gz), f = inG || inS || this.game.forts.nearest(s.pos);
+      if (!f || Math.hypot(f.cx - s.pos.x, f.cz - s.pos.z) > 30) return;    // open ground: the hole rule handles it
+      const p = inG ? f.doorIn : f.doorOut;
+      const y = inG ? f.base : (this.ground(p.x, p.z, f.base + 2) ?? f.base);
+      s.pos.set(p.x, y, p.z); s.noProg = 0; s.progD = null; s.routing = inG ? 'in' : null; s.swimming = false;
+    }
   }
   // the doorway of a fort (inside and out): nobody should stand there
   inDoorway(x, z) {
@@ -580,6 +663,16 @@ export class Enemies {
   dispatch(dt) {
     if (this.noDispatch) return;
     for (const faction of this.allies ? ['enemy', 'ally'] : ['enemy']) {
+      // patrols: always a few out in the field, by day and by night
+      this.patrolT[faction] -= dt;
+      if (this.patrolT[faction] <= 0) {
+        this.patrolT[faction] = 12;
+        const want = Math.max(1, PATROLS[this.diff] - (faction === 'ally' ? 1 : 0));
+        if (this.squads.filter((q) => q.faction === faction && q.patrol && q.members.some((m) => m.alive)).length < want) {
+          const [lo, hi] = PATROL_SIZE[this.diff];
+          this.launchPatrol(faction, lo + Math.floor(Math.random() * (hi - lo + 1)));
+        }
+      }
       this.dispatchT[faction] -= dt;
       if (this.dispatchT[faction] > 0) continue;
       const night = this.nightPressure();
@@ -623,6 +716,79 @@ export class Enemies {
 
   // A squad forms at one fort; spare soldiers from nearby forts of the same
   // side walk over to join it. Guards always stay behind.
+  // Purposeful patrol: out from a fort along a short route (toward another
+  // fort, a river crossing, the area around the other side's fort or the
+  // cabin), then back home. No warning when it leaves.
+  launchPatrol(faction, size) {
+    const pick = this.pickSoldiers(faction, size, true);
+    if (!pick) return null;
+    const { src, picked } = pick;
+    const g = this.game, here = { x: src.cx + 0.5, z: src.cz + 0.5 };
+    const toward = (p, d) => { const dx = here.x - p.x, dz = here.z - p.z, L = Math.hypot(dx, dz) || 1; return { x: p.x + dx / L * d, z: p.z + dz / L * d }; };
+    const opts = [];
+    const other = g.forts.list.filter((f) => f !== src).sort((a, b) => this.d2(a.center, here) - this.d2(b.center, here))[0];
+    if (other) opts.push(toward({ x: other.cx + 0.5, z: other.cz + 0.5 }, other.owner === faction ? 12 : 30));
+    const foe = faction === 'enemy' ? 'ally' : 'enemy';
+    const theirs = this.ownForts(foe).sort((a, b) => this.d2(a.center, here) - this.d2(b.center, here))[0];
+    if (theirs) opts.push(toward({ x: theirs.cx + 0.5, z: theirs.cz + 0.5 }, 42));
+    const cabin = faction === 'enemy' && g.world.sites.find((st) => st.type === 'cabin');
+    if (cabin) opts.push(toward({ x: cabin.x + 0.5, z: cabin.z + 0.5 }, 35));
+    const ford = this.riverSpot(here);
+    if (ford) opts.push(ford);
+    for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+    const W = g.world, clamp = (p) => ({ x: Math.max(8, Math.min(W.W - 8, p.x)), z: Math.max(8, Math.min(W.D - 8, p.z)), patrol: true });
+    const route = opts.slice(0, 2).map(clamp);
+    if (!route.length) route.push(clamp({ x: here.x + (Math.random() - 0.5) * 80, z: here.z + (Math.random() - 0.5) * 80 }));
+    const sq = this.formSquad(faction, src, picked);
+    sq.patrol = true; sq.attack = false; sq.route = route; sq.obj = route[0]; sq.tnt = 0;
+    return sq;
+  }
+  // a dry spot at a river or lake edge within reach (a crossing to watch)
+  riverSpot(from) {
+    const W = this.game.world;
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, r = 25 + Math.random() * 55;
+      const x = Math.floor(from.x + Math.cos(a) * r), z = Math.floor(from.z + Math.sin(a) * r);
+      if (x < 8 || z < 8 || x > W.W - 8 || z > W.D - 8 || W.get(x, SEA - 1, z) !== B.WATER) continue;
+      for (let d = 1; d < 8; d++) {
+        const bx = Math.floor(x - Math.cos(a) * d), bz = Math.floor(z - Math.sin(a) * d);
+        if (this.groundAny(bx, bz) != null) return { x: bx + 0.5, z: bz + 0.5 };
+      }
+    }
+    return null;
+  }
+  // spare soldiers (never the guards) from one fort, topped up from its neighbours
+  pickSoldiers(faction, size, near = false) {
+    const guards = GUARDS[this.diff];
+    const spare = (f) => {
+      const sq = this.squads.find((q) => q.garrison === f && q.faction === faction);
+      if (!sq) return [];
+      const ok = sq.members.filter((m) => m.alive && m.armed && !m.surrender).sort((a, b) => (a.type === 'officer') - (b.type === 'officer'));
+      return ok.slice(0, Math.max(0, ok.length - guards));
+    };
+    const forts = this.ownForts(faction).map((f) => ({ f, spare: spare(f) })).filter((c) => c.spare.length);
+    if (!forts.length) return null;
+    forts.sort((a, b) => b.spare.length - a.spare.length);
+    const src = near ? forts[Math.floor(Math.random() * Math.min(3, forts.length))].f : forts[0].f;
+    const pool = forts.sort((a, b) => this.d2(a.f.center, src.center) - this.d2(b.f.center, src.center))
+      .filter((c) => !near || this.d2(c.f.center, src.center) < 110 * 110).flatMap((c) => c.spare);
+    const picked = pool.slice(0, size);
+    if (picked.length < 3) return null;
+    return { src, picked };
+  }
+  formSquad(faction, src, picked) {
+    const sq = this.newSquad(src.doorOut, faction);
+    sq.home = src; sq.mode = 'muster';
+    sq.musterMax = picked.some((m) => m.home !== src) ? 120 : 30;
+    const A = this.fortAxes(src);
+    const out = { x: src.doorOut.x + A.ux * 4, z: src.doorOut.z + A.uz * 4 };
+    sq.rally = out; sq.wp = { ...out };
+    for (const s of picked) {
+      if (s.squad) s.squad.members = s.squad.members.filter((m) => m !== s);
+      sq.members.push(s); s.squad = sq; s.setRole('squad'); s.post = null;
+    }
+    return sq;
+  }
   launchSquad(faction, size) {
     const guards = GUARDS[this.diff];
     const spare = (f) => {
@@ -687,6 +853,11 @@ export class Enemies {
     if (o && o.player) { o.x = g.player.pos.x; o.z = g.player.pos.z; }
     if (sq.mode === 'march') {
       const d = Math.hypot(o.x - cx, o.z - cz);
+      if (o.patrol && d < 9) {
+        sq.route.shift();
+        if (sq.route.length) { sq.obj = sq.route[0]; } else { sq.obj = null; sq.mode = 'return'; }
+        return;
+      }
       if (o.fort && d < 26) { sq.mode = 'assault'; sq.fort = o.fort; return; }
       if (o.cabin && d < 26) { sq.mode = 'siege'; sq.t = 0; return; }
       if ((o.player || o.point) && d < 20) { sq.mode = 'engage'; sq.resume = 'march'; sq.alert = new THREE.Vector3(o.x, 0, o.z); sq.alertT = 0; return; }
@@ -849,7 +1020,7 @@ export class Enemies {
     // nobody idles in a doorway
     if (!P.goal && !s.routing) { const d = this.inDoorway(s.pos.x, s.pos.z); if (d) { P.goal = this.clearOfDoor(s.pos); P.speed = 2.5; } }
     if (P.goal && P.speed > 0) {
-      const arrived = this.goTo(s, P.goal.x, P.goal.z, P.speed * slow, dt);
+      const arrived = this.goTo(s, P.goal.x, P.goal.z, P.speed * slow, dt, P.goal.y);
       if (arrived) s.speed = 0;
     } else { s.speed = 0; this.settle(s, dt); }
     // stuck in a hole: try to scramble out; after ~10 s it counts as a defeat
@@ -876,7 +1047,6 @@ export class Enemies {
       s.post = this.postFor(f, 0);
     }
     const d = Math.hypot(s.pos.x - s.post.x, s.pos.z - s.post.z);
-    if (s.post.y > s.post.fort.base + 1 && d < 2.6 && s.pos.y < s.post.y - 1) { s.pos.set(s.post.x, s.post.y, s.post.z); s.climbT = 0.6; } // up the ladder
     if (d > 0.8) { P.goal = s.post; P.speed = tgt ? 3.6 : 2.2; }
     if (tgt) P.face = tgt.pos;
     // ramparts give cover: duck between shots
@@ -991,7 +1161,6 @@ export class Enemies {
       if (!s.patrol || s.patrolT <= 0) { s.patrol = f.posts[Math.floor(Math.random() * f.posts.length)]; s.patrolT = 8 + Math.random() * 10; }
       if (tgt) { P.face = tgt.pos; if (s.patrol.y > f.base + 1 && s.pos.y > f.base + 1) { this.peek(s, dt); P.crouch = !s.peeking; } return; }
       const d = Math.hypot(s.pos.x - s.patrol.x, s.pos.z - s.patrol.z);
-      if (s.patrol.y > f.base + 1 && d < 2.6 && s.pos.y < s.patrol.y - 1) { s.pos.set(s.patrol.x, s.patrol.y, s.patrol.z); s.climbT = 0.6; }
       if (d > 0.8) { P.goal = s.patrol; P.speed = 1.8; }
       return;
     }
@@ -1221,7 +1390,10 @@ export class Enemies {
     if (s.swimming) speed = Math.min(speed, 2.2);
     const step = Math.min(d, speed * dt);
     const climb = s.trapT > 3 ? 2.1 : 1.05;    // scramble out of a hole
-    for (let pass = 0; pass < 2; pass++) for (const o of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]) {
+    // keep turning the same way around an obstacle (no left-right flip-flop)
+    const so = s.steerO || 0;
+    const order = so ? [0, so, so * 2, so * 3.2, -so, -so * 2, -so * 3.2] : [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9];
+    for (let pass = 0; pass < 2; pass++) for (const o of order) {
       // first pass: dry land only (ahead-ish); second: water too
       if (pass === 0 && Math.abs(o) > 1.3 && !s.swimming) continue;
       const a = base + o;
@@ -1235,6 +1407,7 @@ export class Enemies {
         s.swimming = swim;
         s.yaw = this.turn(s.yaw, a, dt * 6);
         s.speed = speed; s.stuckT = o === 0 ? 0 : s.stuckT + dt * 0.5;
+        if (o) { s.steerO = Math.sign(o) * 0.6; s.steerT = 0; } else if ((s.steerT = (s.steerT || 0) + dt) > 0.6) { s.steerO = 0; s.steerT = 0; }
         return false;
       }
     }
