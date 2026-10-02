@@ -221,15 +221,17 @@ export class Enemies {
   }
   spawnScattered(faction, n, armed) {
     const at = this.farSpot(faction === 'enemy' ? 70 : 40, faction);
-    if (!at) return;
+    if (!at) return false;
     let sq = this.squads.find((q) => q.faction === faction && q.mode === 'regroup');
     if (!sq) { sq = this.newSquad(at, faction); sq.mode = 'regroup'; sq.wp = { x: at.x, z: at.z }; }
     for (let i = 0; i < n; i++) {
-      const x = at.x + (Math.random() - 0.5) * 30, z = at.z + (Math.random() - 0.5) * 30;
-      const y = this.ground(x, z, at.y + 2) ?? at.y;
+      let x = at.x + (Math.random() - 0.5) * 12, z = at.z + (Math.random() - 0.5) * 12;
+      let y = this.ground(x, z, at.y + 2);
+      if (y == null) { x = at.x; z = at.z; y = at.y; }
       const s = this.add(faction, ['rifleman', 'gunner', 'grenadier', 'rifleman', 'officer'][i % 5], x, y, z, sq, armed);
       s.setRole('scatter');
     }
+    return true;
   }
   add(faction, type, x, y, z, sq, armed) {
     const s = new Soldier(this, faction, type, x, y, z, sq, armed);
@@ -251,11 +253,57 @@ export class Enemies {
     }
     return null;
   }
-  // open water a squad member can swim across (surface level), or null
+  // Water a soldier can cross: shallow water is waded (feet on the bottom),
+  // deeper water is swum at the surface. Returns { y, swim } or null.
   water(x, z) {
     const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
     if (bx < 1 || bz < 1 || bx >= w.W - 1 || bz >= w.D - 1) return null;
-    return w.get(bx, SEA - 1, bz) === B.WATER && !SOLID[w.get(bx, SEA, bz)] ? SEA - 1.25 : null;
+    if (w.get(bx, SEA - 1, bz) !== B.WATER || SOLID[w.get(bx, SEA, bz)]) return null;
+    if (SOLID[w.get(bx, SEA - 2, bz)]) return { y: SEA - 1, swim: false };
+    return { y: SEA - 1.25, swim: true };
+  }
+  // dry (or shallow) footing along a straight line?
+  dryLine(ax, az, bx, bz) {
+    const d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / 1.5);
+    for (let i = 1; i <= n; i++) {
+      const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n;
+      if (this.groundAny(x, z) == null) { const wv = this.water(x, z); if (!wv || wv.swim) return false; }
+    }
+    return true;
+  }
+  // any walkable top surface in this column (bridges over water included)
+  groundAny(x, z) {
+    const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
+    const top = w.surfaceY(bx, bz);
+    if (top < SEA - 1 || w.get(bx, top, bz) === B.WATER) return null;
+    return SOLID[w.get(bx, top, bz)] ? top + 1 : null;
+  }
+  // About to swim? Look once for a bridge, raft-free shallow ford or dry
+  // land route within ~30 blocks to either side and walk that way instead.
+  findCrossing(s, gx, gz) {
+    const dx = gx - s.pos.x, dz = gz - s.pos.z, d = Math.hypot(dx, dz) || 1;
+    const px = -dz / d, pz = dx / d, reach = Math.min(d, 60);
+    for (const off of [6, -6, 12, -12, 18, -18, 24, -24, 30, -30]) {
+      const mx = s.pos.x + dx / d * reach * 0.5 + px * off, mz = s.pos.z + dz / d * reach * 0.5 + pz * off;
+      if (this.dryLine(s.pos.x, s.pos.z, mx, mz) && this.dryLine(mx, mz, s.pos.x + dx / d * reach, s.pos.z + dz / d * reach)) return { x: mx, z: mz };
+    }
+    return null;
+  }
+  // in a hole or pit he cannot simply walk out of?
+  inHole(s) {
+    if (this.fortXZ(s.pos.x, s.pos.z) || s.swimming) return false;
+    const w = this.game.world;
+    let walls = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2, x = Math.floor(s.pos.x + Math.cos(a) * 2.5), z = Math.floor(s.pos.z + Math.sin(a) * 2.5);
+      if (SOLID[w.get(x, Math.floor(s.pos.y) + 1, z)] && SOLID[w.get(x, Math.floor(s.pos.y) + 2, z)]) walls++;
+    }
+    return walls >= 6;
+  }
+  // stuck for good: counts as a defeat; he comes back near one of his forts
+  trapped(s) {
+    this.pending.push({ type: s.type === 'commander' ? 'officer' : s.type, faction: s.faction, t: 3 + Math.random() * 4 });
+    this.remove(s);
   }
 
   // ---------------------------------------------------------- hostility
@@ -456,7 +504,17 @@ export class Enemies {
     return s.routing === 'in' ? inG.doorIn : inG.doorOut;
   }
   goTo(s, gx, gz, speed, dt) {
-    const r = this.route(s, gx, gz);
+    let r = this.route(s, gx, gz);
+    // water ahead: prefer a bridge / ford nearby, swim only if there is none
+    if (!s.swimming && Math.hypot(r.x - s.pos.x, r.z - s.pos.z) > 6) {
+      s.crossT = (s.crossT || 0) - dt;
+      if (s.crossT <= 0) {
+        s.crossT = 8;
+        const ax = s.pos.x + (r.x - s.pos.x) * Math.min(1, 8 / Math.hypot(r.x - s.pos.x, r.z - s.pos.z)), az = s.pos.z + (r.z - s.pos.z) * Math.min(1, 8 / Math.hypot(r.x - s.pos.x, r.z - s.pos.z));
+        s.detour = this.dryLine(s.pos.x, s.pos.z, ax, az) ? null : this.findCrossing(s, r.x, r.z);
+      }
+      if (s.detour) { if (Math.hypot(s.detour.x - s.pos.x, s.detour.z - s.pos.z) < 2) s.detour = null; else r = s.detour; }
+    }
     return this.moveToward(s, r.x, r.z, speed, dt);
   }
   // the doorway of a fort (inside and out): nobody should stand there
@@ -520,6 +578,7 @@ export class Enemies {
   // Forts send out attack squads. No warning: they only show up on the radar
   // once they are close.
   dispatch(dt) {
+    if (this.noDispatch) return;
     for (const faction of this.allies ? ['enemy', 'ally'] : ['enemy']) {
       this.dispatchT[faction] -= dt;
       if (this.dispatchT[faction] > 0) continue;
@@ -546,6 +605,22 @@ export class Enemies {
     if (faction === 'enemy' && this.allies && !list.length && !g.dead) list.push({ player: true, x: g.player.pos.x, z: g.player.pos.z });
     return list.sort((a, b) => this.d2(a, from) - this.d2(b, from));
   }
+  // Mission squads: fresh soldiers that appear at `at` and go for `obj`
+  // ({ fort } | { x, z, player: true } | { x, z, point: true }).
+  missionSquad(faction, n, at, obj, { tnt = 3, mode = 'march', types = null } = {}) {
+    const sq = this.newSquad(at, faction);
+    sq.attack = true; sq.mission = true; sq.obj = obj; sq.tnt = tnt; sq.mode = mode; sq.wp = { x: at.x, z: at.z };
+    sq.rally = { x: at.x, z: at.z };
+    const T = types || ['officer', 'gunner', 'grenadier', 'rifleman', 'rifleman', 'sniper', 'rifleman', 'gunner'];
+    for (let i = 0; i < n; i++) {
+      const x = at.x + (Math.random() - 0.5) * 8, z = at.z + (Math.random() - 0.5) * 8;
+      const y = this.ground(x, z, at.y + 2) ?? at.y;
+      const s = this.add(faction, T[i % T.length], x, y, z, sq, true);
+      s.setRole('squad');
+    }
+    return sq;
+  }
+
   // A squad forms at one fort; spare soldiers from nearby forts of the same
   // side walk over to join it. Guards always stay behind.
   launchSquad(faction, size) {
@@ -614,7 +689,7 @@ export class Enemies {
       const d = Math.hypot(o.x - cx, o.z - cz);
       if (o.fort && d < 26) { sq.mode = 'assault'; sq.fort = o.fort; return; }
       if (o.cabin && d < 26) { sq.mode = 'siege'; sq.t = 0; return; }
-      if (o.player && d < 20) { sq.mode = 'engage'; sq.resume = 'march'; sq.alert = new THREE.Vector3(o.x, 0, o.z); sq.alertT = 0; return; }
+      if ((o.player || o.point) && d < 20) { sq.mode = 'engage'; sq.resume = 'march'; sq.alert = new THREE.Vector3(o.x, 0, o.z); sq.alertT = 0; return; }
       // a moving waypoint keeps the squad together on the way
       if (Math.hypot(sq.wp.x - cx, sq.wp.z - cz) < 7) {
         const step = Math.min(14, d);
@@ -762,6 +837,12 @@ export class Enemies {
       this.unarmedBehaviour(s, dt, pdist);
       return;
     } else if (s.role === 'garrison') this.garrisonBehaviour(s, dt);
+    else if (s.role === 'carrier') {
+      // mission: carry supplies to a fort, fighting back only when needed
+      const P = s.plan;
+      if (s.target && s.target.pos.distanceTo(s.pos) < 25) this.fieldCombat(s, dt, s.pos, 5);
+      else if (s.dest) { P.goal = s.dest; P.speed = 3.4; }
+    }
     else if (s.inSquad) this.squadOrderBehaviour(s, dt, pdist);
     else this.squadBehaviour(s, dt);
     const P = s.plan;
@@ -771,6 +852,15 @@ export class Enemies {
       const arrived = this.goTo(s, P.goal.x, P.goal.z, P.speed * slow, dt);
       if (arrived) s.speed = 0;
     } else { s.speed = 0; this.settle(s, dt); }
+    // stuck in a hole: try to scramble out; after ~10 s it counts as a defeat
+    s.holeT = (s.holeT || 0) - dt;
+    if (s.holeT <= 0) {
+      s.holeT = 1;
+      const wants = P.goal && P.speed > 0 && Math.hypot(P.goal.x - s.pos.x, P.goal.z - s.pos.z) > 3;
+      s.trapT = wants && s.stuckT > 0.5 || (wants && this.inHole(s)) ? (s.trapT || 0) + 1 : 0;
+      if (s.trapT >= 10 && this.inHole(s)) { this.trapped(s); return; }
+      if (s.trapT >= 14 && !s.inSquad) { this.trapped(s); return; }      // wedged somewhere else for good
+    }
     s.crouch = P.crouch && s.speed < 2;
     const face = P.face || (s.target ? s.target.pos : null);
     if (face && s.speed < 0.5) s.yaw = this.turn(s.yaw, Math.atan2(-(face.x - s.pos.x), -(face.z - s.pos.z)), dt * 6);
@@ -1088,8 +1178,8 @@ export class Enemies {
         const s = this.add(p.faction, p.type, at.x, at.y, at.z, sq, true);
         s.setRole('squad'); s.home = f;
       } else {
-        this.pending.splice(this.pending.indexOf(p), 1);
-        this.spawnScattered(p.faction, 1, false);
+        if (this.spawnScattered(p.faction, 1, false)) this.pending.splice(this.pending.indexOf(p), 1);
+        else p.t = 5;
       }
     }
   }
@@ -1128,16 +1218,19 @@ export class Enemies {
     const dx = tx - s.pos.x, dz = tz - s.pos.z, d = Math.hypot(dx, dz);
     if (d < 0.4) { s.speed = 0; this.settle(s, dt); return true; }
     const base = Math.atan2(-dx, -dz);
-    const swimOk = s.inSquad;
     if (s.swimming) speed = Math.min(speed, 2.2);
     const step = Math.min(d, speed * dt);
-    for (const o of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]) {
+    const climb = s.trapT > 3 ? 2.1 : 1.05;    // scramble out of a hole
+    for (let pass = 0; pass < 2; pass++) for (const o of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]) {
+      // first pass: dry land only (ahead-ish); second: water too
+      if (pass === 0 && Math.abs(o) > 1.3 && !s.swimming) continue;
       const a = base + o;
       const nx = s.pos.x - Math.sin(a) * step, nz = s.pos.z - Math.cos(a) * step;
       let gy = this.ground(nx, nz, s.pos.y), swim = false;
-      if (gy == null && swimOk) { gy = this.water(nx, nz); swim = gy != null; }
-      if (gy != null && gy - s.pos.y <= 1.05 && gy - s.pos.y > -3) {
-        if (gy - s.pos.y > 0.5) s.climbT = 0.35;
+      if (gy == null && pass === 1) { const wv = this.water(nx, nz); if (wv) { gy = wv.y; swim = wv.swim; } }
+      if (s.faction === 'enemy' && this.game.cabin && this.game.cabin.covers(nx, nz)) continue;   // nobody gets into the cabin
+      if (gy != null && gy - s.pos.y <= climb && gy - s.pos.y > -3) {
+        if (gy - s.pos.y > 0.5) s.climbT = gy - s.pos.y > 1.2 ? 0.8 : 0.35;
         s.pos.x = nx; s.pos.z = nz; s.pos.y += (gy - s.pos.y) * Math.min(1, dt * 12);
         s.swimming = swim;
         s.yaw = this.turn(s.yaw, a, dt * 6);
@@ -1207,6 +1300,7 @@ export class Enemies {
   // -------------------------------------------------------------- combat
   tryFire(s, dt, dist) {
     if (!s.armed || s.weapon === 'knife' || dist > s.T.range || s.reloadT > 0) return;
+    if (s.swimming && s.weapon !== 'pistol') return;     // long guns can't be used while swimming
     if (s.burstLeft > 0) {
       s.burstT -= dt;
       if (s.burstT <= 0) { s.burstT = s.T.burstGap || 0.1; s.burstLeft--; this.shoot(s, dist); }

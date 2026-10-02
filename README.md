@@ -1,4 +1,4 @@
-# Mighty Men o' War
+# Mighty Man o' War
 
 An original 3D block-building war survival game that runs in the browser
 (HTML, CSS, JavaScript and Three.js). Every texture, icon, sound and the logo
@@ -20,7 +20,7 @@ Then open `http://localhost:8080/`.
 2. **Animals, hunting, food, hunger, campfires, crafting** (done)
 3. **Weapons, aiming, scope, TNT, enemies, looting** (done)
 4. **Forts, capturing, surrender, allies, commands, callouts** (done)
-5. Play Alone cabin, Peace mode extras, war map, statistics, manual, PWA
+5. **Missions, Play Alone cabin, Peace extras, war map, statistics, manual, music, logo, installable app** (done)
 
 ## Requirements saved for later stages
 

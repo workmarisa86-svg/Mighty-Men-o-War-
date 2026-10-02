@@ -22,6 +22,10 @@ import { Flashlight } from './flashlight.js';
 import { Forts } from './forts.js';
 import { ScopeView } from './scope.js';
 import { OrderWheel } from './orders.js';
+import { Cabin } from './cabin.js';
+import { ContextBar } from './context.js';
+import { Mission } from './missions.js';
+import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
@@ -138,6 +142,7 @@ export class Game {
     this.autosave = 60;
     this.scopeView = new ScopeView(this);
     this.orders = new OrderWheel(this);
+    this.ctx = new ContextBar(this);
 
     this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
     this.campfires = new Campfires(this);
@@ -147,6 +152,7 @@ export class Game {
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
     this.forts = new Forts(this, save.forts);
+    this.cabin = new Cabin(this, save.cabin);
     this.enemies = new Enemies(this, { followers: save.followers });
     this.supplyT = 0;
     this.shake = 0;
@@ -154,7 +160,10 @@ export class Game {
     this.use = { item: null, t: 0 };
     this.hungerStage = this.player.hunger <= 0 ? 2 : this.player.hunger < 20 ? 1 : 0;
 
+    if (this.stats.aloneSince == null) this.stats.aloneSince = this.time;
+    this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
+    this.mission = this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
 
@@ -256,6 +265,7 @@ export class Game {
     this.updateWeather(dt);
 
     if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
+    this.ctx.update(dt, input, playing);
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -282,6 +292,7 @@ export class Game {
     if (!this.paused) {
       this.animals.update(dt); this.pickups.update(dt);
       this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
+      if (this.mission) this.mission.update(dt);
       this.supplyT -= dt;
       this.updateDefuse(dt);
     }
@@ -381,6 +392,7 @@ export class Game {
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
+    if (input.hit('KeyM') || input.thit('map')) this.app.openPanel('map', { from: 'game' });
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
@@ -574,7 +586,8 @@ export class Game {
     if (!hit || hit.ny !== 1) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
     const x = hit.x, y = hit.y + 1, z = hit.z;
     if (this.world.get(x, y, z) !== B.AIR || hit.id === B.WATER || hit.id === B.WIRE) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
-    if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
+    // inside a fort the only thing you may place is a campfire (for crafting)
+    if (this.forts.protectedCell(x, y, z) && !this.forts.interiorCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     if (!this.has('wood', 3)) { this.hud.toast(t('hud.fireWood')); sfx.error(); return; }
     this.take('wood', 3);
     this.world.set(x, y, z, B.CAMPFIRE);
@@ -666,7 +679,8 @@ export class Game {
       this.hud.toast(t('hud.regroup'), 'warn');
       return;
     }
-    const s = this.world.spawn;
+    // alone: wake up beside the cabin bed
+    const s = this.cabin.on ? this.cabin.bedSpot() : this.world.spawn;
     p.pos.set(s.x, s.y, s.z);
   }
 
@@ -675,6 +689,7 @@ export class Game {
     const { eye, dir } = this.aim();
     const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (!hit || hit.id !== B.SUPPLY) return false;
+    if (this.cabin.isChest(hit.x, hit.y, hit.z)) { this.app.openPanel('chest'); return true; }
     const f = this.forts.fortAt(new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5));
     if (!f || f.owner !== 'ally') { this.hud.toast(t('fort.notYours')); sfx.error(); return true; }
     if (this.supplyT > 0) { this.hud.toast(t('fort.rationsWait')); return true; }
@@ -771,7 +786,9 @@ export class Game {
     if (this.dead) return;
     this.stats.deaths = (this.stats.deaths || 0) + 1;
     const alone = this.cfg.sub === 'alone';
-    if (cause === 'starve' && alone) { this.dead = true; this.app.gameOver(); return; }
+    if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
+    if (this.mission) this.mission.playerDied();
+    this.stats.aloneSince = this.time;
     const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
     let lost = [];
     if (cause === 'starve') {
@@ -792,6 +809,24 @@ export class Game {
   }
 
   // ----------------------------------------------------------------- saving
+  // push this world's progress into the lifetime statistics
+  flushStats() {
+    if (this.peace && !this.mission) { this.statsFlushed = { ...this.stats, time: this.time }; return; }
+    const f = this.statsFlushed, s = this.stats, d = {};
+    for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals']) d[k] = (s[k] || 0) - (f[k] || 0);
+    d.days = Math.max(0, this.time - (f.time || 0));
+    const maxes = this.cfg.sub === 'alone' ? { longestAlone: this.time - (s.aloneSince || 0) } : {};
+    addStats(this.peace ? null : this.cfg.difficulty, d, maxes);
+    this.statsFlushed = { ...this.stats, time: this.time };
+  }
+  missionEnded(result) {
+    this.flushStats();
+    if (result.ok) recordMission(this.peace ? null : this.cfg.difficulty, this.mission.id, result.medal);
+    sfx[result.ok ? 'done' : 'warn']();
+    this.app.saveGame(true);
+    this.app.openPanel('missionEnd', result);
+  }
+
   toSave() {
     const p = this.player;
     return {
@@ -801,7 +836,7 @@ export class Game {
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
-      edits: this.world.serializeEdits(),
+      edits: this.world.serializeEdits(), cabin: this.cabin.toSave(), mission: this.mission ? this.mission.toSave() : null,
     };
   }
 
@@ -814,7 +849,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
-    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose();
+    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose();
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

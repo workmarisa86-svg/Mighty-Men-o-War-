@@ -389,3 +389,72 @@ body:not(.allies) [data-btn=squad] { display: none; }
 .manual .man-h i { font-style: normal; opacity: 0.7; }
 .manual .man-item p { display: none; margin: 0 2px 10px; line-height: 1.45; opacity: 0.9; }
 .manual .man-item.open p { display: block; }
+.chest { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.chest-row { display: grid; grid-template-columns: 28px 1fr auto auto auto; align-items: center; gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.chest-row img { width: 26px; height: 26px; image-rendering: pixelated; }
+.chest-row .btn.small { min-width: 40px; padding: 6px 8px; }
+@media (max-width: 640px) { .chest { grid-template-columns: 1fr; } }
+
+/* ---- missions ---- */
+#mission { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: rgba(18, 20, 14, 0.6); border: 1px solid rgba(200, 170, 80, 0.45); border-radius: 6px; padding: 4px 12px; color: #ece6cc; text-shadow: 0 1px 1px #000; max-width: 70vw; text-align: center; }
+#mission b { font-family: var(--stencil); font-weight: normal; letter-spacing: 1px; color: #e8c860; font-size: 13px; }
+#mission span { font-size: 13px; }
+#mission em { font-style: normal; font-size: 15px; font-weight: 600; }
+#mission em:empty { display: none; }
+#mission.urgent em { color: #ff7a5a; }
+@media (pointer: coarse) { #mission { top: 52px; padding: 3px 8px; } #mission span { font-size: 12px; } }
+.missions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.missions.need { outline: 2px solid #c8503c; }
+.mission { border: 2px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer; background: rgba(0,0,0,0.2); }
+.mission.on { border-color: var(--khaki); background: rgba(90, 96, 68, 0.5); }
+.mission h3 { font-family: var(--stencil); font-weight: normal; font-size: 15px; margin: 0 0 4px; letter-spacing: 1px; }
+.mission p { margin: 2px 0; font-size: 13px; line-height: 1.35; }
+.medal { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 3px; border: 2px solid rgba(0,0,0,0.5); }
+.medal.gold { background: radial-gradient(circle at 35% 35%, #fff2b0, #d8a830 60%, #8a6a18); }
+.medal.silver { background: radial-gradient(circle at 35% 35%, #ffffff, #b8bcc0 60%, #6a6e72); }
+.medal.bronze { background: radial-gradient(circle at 35% 35%, #ffd8b0, #b07040 60%, #6a3e1e); }
+.medal.big { width: 84px; height: 84px; border-width: 4px; margin: 6px auto; display: block; }
+.warn { color: #e0806a; }
+.stats-wrap { overflow-x: auto; }
+table.stats { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.stats th, table.stats td { padding: 5px 8px; border-bottom: 1px dashed var(--line); text-align: right; white-space: nowrap; }
+table.stats th:first-child, table.stats td:first-child { text-align: left; }
+.warmap { display: flex; justify-content: center; }
+.warmap canvas { border: 2px solid var(--line); border-radius: 4px; max-width: 100%; height: auto !important; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 8px; font-size: 13px; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 5px; border: 1px solid #000; vertical-align: -1px; }
+.legend i.you { background: #fff; clip-path: polygon(50% 0, 100% 100%, 50% 70%, 0 100%); }
+.legend i.obj { border: 2px solid #ffd040; border-radius: 50%; }
+
+/* ---- contextual squad buttons ---- */
+.ctx { pointer-events: auto; position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 64vw; }
+.ctx.empty { display: none; }
+.cb { font-family: var(--body); font-size: 14px; color: #f0e8cc; background: rgba(30, 34, 22, 0.82); border: 2px solid rgba(190, 170, 100, 0.85); border-radius: 22px;
+  min-height: 44px; min-width: 96px; padding: 4px 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.cb[hidden] { display: none; }
+.cb small { font-size: 10px; opacity: 0.7; }
+.cb kbd { font-family: var(--body); font-size: 11px; opacity: 0.75; margin-right: 4px; }
+.cb.down { background: rgba(150, 128, 60, 0.85); }
+#hud .ctx-desk { pointer-events: none; }
+body:not(.ingame) .ctx { display: none; }
+/* touch button size setting */
+body.tb-s .tb { transform: scale(0.85); } body.tb-l .tb { transform: scale(1.18); }
+body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 16px; min-height: 52px; }
+.speaker { position: absolute; right: 14px; bottom: 14px; width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--line); background: rgba(0,0,0,0.35); color: var(--khaki); padding: 8px; cursor: pointer; }
+.speaker svg { width: 100%; height: 100%; display: block; }
+.speaker .x { display: none; } .speaker.off .x { display: inline; } .speaker.off .w { display: none; }
+.logo-art { width: min(560px, 92vw); height: auto; max-height: 46vh; display: block; margin: 0 auto 6px; filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)); border-radius: 6px; }
+.logo-art.small { width: min(360px, 80vw); max-height: 34vh; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#update { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px;
+  background: rgba(24, 26, 18, 0.95); border: 2px solid var(--khaki); border-radius: 6px; padding: 8px 12px; color: #f0e8cc; font-family: var(--body); box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
+@media (pointer: coarse) {
+  .ctx { bottom: 64px; gap: 6px; max-width: 46vw; }
+  .cb { font-size: 12px; min-height: 36px; min-width: 0; padding: 2px 10px; border-radius: 18px; }
+  .cb small { display: none; }
+  #squadlist .sq-row:nth-child(n+5) { display: none; }
+  #squadlist { width: 150px; }
+  #squadlist .sq-row { grid-template-columns: 8px 1fr 26px; }
+  #squadlist .sq-row span { display: none; }
+}
