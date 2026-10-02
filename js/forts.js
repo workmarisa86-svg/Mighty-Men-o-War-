@@ -288,6 +288,13 @@ export class Forts {
   }
 
   // ------------------------------------------------------------ ownership
+  // change hands silently (mission set-up)
+  setOwnerQuiet(f, owner) {
+    const prev = f.owner;
+    f.owner = owner; f.charges = 0; f.officerDead = false;
+    f.cloth.material.map = makeFlag(owner === 'ally' ? 'ally' : 'enemy'); f.cloth.visible = owner !== 'none';
+    this.game.enemies.fortChanged(f, prev, owner);
+  }
   setOwner(f, owner) {
     const prev = f.owner;
     if (prev === owner) return;

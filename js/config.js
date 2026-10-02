@@ -1,6 +1,6 @@
 // Global constants shared by every module.
 export const GAME_VERSION = '0.5.0';
-export const SAVE_FORMAT = 1;
+export const SAVE_FORMAT = 2;
 export const STORE_PREFIX = 'blocks-';
 
 export const CHUNK = 16;          // chunk width/depth in blocks

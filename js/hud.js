@@ -33,6 +33,7 @@ export class HUD {
     this.defuseProgress = 0; this.markerEls = [];
     this.minimap = new Minimap(game);
     this.squadEl = $('#squadlist'); this.squadT = 0;
+    this.missionEl = $('#mission'); this.missionT = 0;
     this.radioEl = $('#radio'); this.alertEl = $('#alertbar');
     this.dirtyHotbar = true;
     this.digProgress = 0;
@@ -117,6 +118,7 @@ export class HUD {
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.updateMarkers();
     this.updateSquadList(dt);
+    this.updateMission(dt);
     this.minimap.update(dt);
     this.underwater.classList.toggle('on', p.headInWater);
 
@@ -216,6 +218,21 @@ export class HUD {
     this.root.hidden = true;
     this.toasts.innerHTML = '';
     this.radioEl.innerHTML = '';
+  }
+
+  // current mission: name, objective, time left
+  updateMission(dt) {
+    const m = this.game.mission;
+    this.missionT -= dt;
+    if (this.missionT > 0) return;
+    this.missionT = 0.25;
+    if (!m || m.done) { this.missionEl.hidden = true; return; }
+    this.missionEl.hidden = false;
+    const left = m.timeLeft();
+    const txt = [t('ms.' + m.id + '.name'), m.status(), left == null ? '' : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`];
+    const els = this.missionEl.children;
+    for (let i = 0; i < 3; i++) if (els[i].textContent !== txt[i]) els[i].textContent = txt[i];
+    this.missionEl.classList.toggle('urgent', left != null && left < 30);
   }
 
   // small list of the player's squad: who, what order, how healthy

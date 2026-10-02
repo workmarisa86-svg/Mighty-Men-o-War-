@@ -23,6 +23,8 @@ import { Forts } from './forts.js';
 import { ScopeView } from './scope.js';
 import { OrderWheel } from './orders.js';
 import { Cabin } from './cabin.js';
+import { Mission } from './missions.js';
+import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
@@ -156,6 +158,8 @@ export class Game {
     this.use = { item: null, t: 0 };
     this.hungerStage = this.player.hunger <= 0 ? 2 : this.player.hunger < 20 ? 1 : 0;
 
+    this.mission = this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
+    this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
@@ -284,6 +288,7 @@ export class Game {
     if (!this.paused) {
       this.animals.update(dt); this.pickups.update(dt);
       this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
+      if (this.mission) this.mission.update(dt);
       this.supplyT -= dt;
       this.updateDefuse(dt);
     }
@@ -383,6 +388,7 @@ export class Game {
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
+    if (input.hit('KeyM') || input.thit('map')) this.app.openPanel('map', { from: 'game' });
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
@@ -776,7 +782,9 @@ export class Game {
     if (this.dead) return;
     this.stats.deaths = (this.stats.deaths || 0) + 1;
     const alone = this.cfg.sub === 'alone';
-    if (cause === 'starve' && alone) { this.dead = true; this.app.gameOver(); return; }
+    if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
+    if (this.mission) this.mission.playerDied();
+    this.stats.aloneSince = this.time;
     const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
     let lost = [];
     if (cause === 'starve') {
@@ -797,6 +805,24 @@ export class Game {
   }
 
   // ----------------------------------------------------------------- saving
+  // push this world's progress into the lifetime statistics
+  flushStats() {
+    if (this.peace && !this.mission) { this.statsFlushed = { ...this.stats, time: this.time }; return; }
+    const f = this.statsFlushed, s = this.stats, d = {};
+    for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals']) d[k] = (s[k] || 0) - (f[k] || 0);
+    d.days = Math.max(0, this.time - (f.time || 0));
+    const maxes = this.cfg.sub === 'alone' ? { longestAlone: this.time - (s.aloneSince || 0) } : {};
+    addStats(this.peace ? null : this.cfg.difficulty, d, maxes);
+    this.statsFlushed = { ...this.stats, time: this.time };
+  }
+  missionEnded(result) {
+    this.flushStats();
+    if (result.ok) recordMission(this.peace ? null : this.cfg.difficulty, this.mission.id, result.medal);
+    sfx[result.ok ? 'done' : 'warn']();
+    this.app.saveGame(true);
+    this.app.openPanel('missionEnd', result);
+  }
+
   toSave() {
     const p = this.player;
     return {
@@ -806,7 +832,7 @@ export class Game {
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
-      edits: this.world.serializeEdits(), cabin: this.cabin.toSave(),
+      edits: this.world.serializeEdits(), cabin: this.cabin.toSave(), mission: this.mission ? this.mission.toSave() : null,
     };
   }
 

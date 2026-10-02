@@ -578,6 +578,7 @@ export class Enemies {
   // Forts send out attack squads. No warning: they only show up on the radar
   // once they are close.
   dispatch(dt) {
+    if (this.noDispatch) return;
     for (const faction of this.allies ? ['enemy', 'ally'] : ['enemy']) {
       this.dispatchT[faction] -= dt;
       if (this.dispatchT[faction] > 0) continue;
@@ -604,6 +605,22 @@ export class Enemies {
     if (faction === 'enemy' && this.allies && !list.length && !g.dead) list.push({ player: true, x: g.player.pos.x, z: g.player.pos.z });
     return list.sort((a, b) => this.d2(a, from) - this.d2(b, from));
   }
+  // Mission squads: fresh soldiers that appear at `at` and go for `obj`
+  // ({ fort } | { x, z, player: true } | { x, z, point: true }).
+  missionSquad(faction, n, at, obj, { tnt = 3, mode = 'march', types = null } = {}) {
+    const sq = this.newSquad(at, faction);
+    sq.attack = true; sq.mission = true; sq.obj = obj; sq.tnt = tnt; sq.mode = mode; sq.wp = { x: at.x, z: at.z };
+    sq.rally = { x: at.x, z: at.z };
+    const T = types || ['officer', 'gunner', 'grenadier', 'rifleman', 'rifleman', 'sniper', 'rifleman', 'gunner'];
+    for (let i = 0; i < n; i++) {
+      const x = at.x + (Math.random() - 0.5) * 8, z = at.z + (Math.random() - 0.5) * 8;
+      const y = this.ground(x, z, at.y + 2) ?? at.y;
+      const s = this.add(faction, T[i % T.length], x, y, z, sq, true);
+      s.setRole('squad');
+    }
+    return sq;
+  }
+
   // A squad forms at one fort; spare soldiers from nearby forts of the same
   // side walk over to join it. Guards always stay behind.
   launchSquad(faction, size) {
@@ -672,7 +689,7 @@ export class Enemies {
       const d = Math.hypot(o.x - cx, o.z - cz);
       if (o.fort && d < 26) { sq.mode = 'assault'; sq.fort = o.fort; return; }
       if (o.cabin && d < 26) { sq.mode = 'siege'; sq.t = 0; return; }
-      if (o.player && d < 20) { sq.mode = 'engage'; sq.resume = 'march'; sq.alert = new THREE.Vector3(o.x, 0, o.z); sq.alertT = 0; return; }
+      if ((o.player || o.point) && d < 20) { sq.mode = 'engage'; sq.resume = 'march'; sq.alert = new THREE.Vector3(o.x, 0, o.z); sq.alertT = 0; return; }
       // a moving waypoint keeps the squad together on the way
       if (Math.hypot(sq.wp.x - cx, sq.wp.z - cz) < 7) {
         const step = Math.min(14, d);
@@ -820,6 +837,12 @@ export class Enemies {
       this.unarmedBehaviour(s, dt, pdist);
       return;
     } else if (s.role === 'garrison') this.garrisonBehaviour(s, dt);
+    else if (s.role === 'carrier') {
+      // mission: carry supplies to a fort, fighting back only when needed
+      const P = s.plan;
+      if (s.target && s.target.pos.distanceTo(s.pos) < 25) this.fieldCombat(s, dt, s.pos, 5);
+      else if (s.dest) { P.goal = s.dest; P.speed = 3.4; }
+    }
     else if (s.inSquad) this.squadOrderBehaviour(s, dt, pdist);
     else this.squadBehaviour(s, dt);
     const P = s.plan;

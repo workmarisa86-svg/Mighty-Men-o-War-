@@ -59,17 +59,38 @@ class App {
     if (this.game) this.game.resize();
   }
 
-  newGame({ mode, sub, difficulty, timeMode = 'cycle', name }) {
+  newGame({ mode, sub, difficulty, timeMode = 'cycle', name, gameType = 'open', mission = null }) {
     const size = mode === 'peace' ? PEACE_SIZE : DIFF[difficulty].size;
     const now = Date.now();
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode: mode === 'peace' ? 'day' : timeMode },
+      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode: mode === 'peace' ? 'day' : timeMode, gameType, mission },
     });
   }
   loadGame(id) {
     const s = readSave(id);
-    if (s) this.startGame(s);
+    if (!s) return;
+    // worlds from earlier stages: keep the name and settings, rebuild the world
+    if ((s.v || 1) < SAVE_FORMAT) {
+      const keep = { v: SAVE_FORMAT, id: s.id, name: s.name, created: s.created, updated: Date.now(), cfg: Object.assign({ gameType: 'open', timeMode: 'cycle' }, s.cfg), stats: s.stats };
+      this.startGame(keep);
+      return;
+    }
+    this.startGame(s);
+  }
+  // after a mission: same mission again (fresh world), or carry on in this world
+  replayMission() {
+    const c = this.game.cfg;
+    const name = this.game.save.name;
+    this.quitToMenu(true);
+    this.newGame({ mode: c.mode, sub: c.sub, difficulty: c.difficulty, timeMode: c.timeMode, name, gameType: 'mission', mission: c.mission });
+  }
+  continueOpenWorld() {
+    const g = this.game;
+    g.cfg.gameType = 'open'; g.cfg.mission = null; g.mission = null;
+    if (g.enemies) g.enemies.noDispatch = false;
+    this.saveGame(true);
+    this.closePanel();
   }
 
   async startGame(save) {
@@ -118,6 +139,7 @@ class App {
 
   saveGame(quiet) {
     if (!this.game) return;
+    this.game.flushStats();
     const ok = writeSave(this.game.toSave());
     if (!quiet || !ok) this.game.hud.toast(t(ok ? 'hud.saved' : 'hud.saveFail'));
     if (!quiet && ok) sfx.done();
@@ -135,15 +157,16 @@ class App {
     this.input.exitLock();
     this.ui.show('gameover', { days });
   }
-  quitToMenu() {
+  quitToMenu(silent) {
     if (!this.game) return;
+    this.game.flushStats();
     this.saveGame(true);
     this.game.dispose();
     this.game = null;
     document.body.classList.remove('ingame');
     this.input.enabled = false;
     this.input.exitLock();
-    this.ui.show('main');
+    if (!silent) this.ui.show('main');
   }
 
   loop(now) {

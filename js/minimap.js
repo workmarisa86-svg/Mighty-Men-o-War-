@@ -110,6 +110,15 @@ export class Minimap {
       if (d < RADAR_RANGE) { c.fillStyle = OWNER_COLORS.enemy; c.strokeStyle = '#000'; c.lineWidth = 1.5; c.fillRect(x - 5, y - 4, 10, 8); c.strokeRect(x - 5, y - 4, 10, 8); }
     }
 
+    // mission objective: a gold ring, pinned to the rim when far away
+    const mk = g.mission && g.mission.marker();
+    if (mk) {
+      let [x, y, d] = toRadar(mk.x, mk.z);
+      if (d > RADAR_RANGE) { x = R + (x - R) * RADAR_RANGE / d; y = R + (y - R) * RADAR_RANGE / d; }
+      c.strokeStyle = '#ffd040'; c.lineWidth = 2.5; c.beginPath(); c.arc(x, y, 6, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = '#ffd040'; c.beginPath(); c.arc(x, y, 2, 0, Math.PI * 2); c.fill();
+    }
+
     // flashing TNT warnings (enemy charges)
     if (Math.floor(this.t * 3) % 2 === 0) {
       for (const l of g.explosives.lit.values()) {

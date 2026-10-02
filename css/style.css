@@ -394,3 +394,35 @@ body:not(.allies) [data-btn=squad] { display: none; }
 .chest-row img { width: 26px; height: 26px; image-rendering: pixelated; }
 .chest-row .btn.small { min-width: 40px; padding: 6px 8px; }
 @media (max-width: 640px) { .chest { grid-template-columns: 1fr; } }
+
+/* ---- missions ---- */
+#mission { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: rgba(18, 20, 14, 0.6); border: 1px solid rgba(200, 170, 80, 0.45); border-radius: 6px; padding: 4px 12px; color: #ece6cc; text-shadow: 0 1px 1px #000; max-width: 70vw; text-align: center; }
+#mission b { font-family: var(--stencil); font-weight: normal; letter-spacing: 1px; color: #e8c860; font-size: 13px; }
+#mission span { font-size: 13px; }
+#mission em { font-style: normal; font-size: 15px; font-weight: 600; }
+#mission em:empty { display: none; }
+#mission.urgent em { color: #ff7a5a; }
+@media (pointer: coarse) { #mission { top: 52px; padding: 3px 8px; } #mission span { font-size: 12px; } }
+.missions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.missions.need { outline: 2px solid #c8503c; }
+.mission { border: 2px solid var(--line); border-radius: 4px; padding: 8px 10px; cursor: pointer; background: rgba(0,0,0,0.2); }
+.mission.on { border-color: var(--khaki); background: rgba(90, 96, 68, 0.5); }
+.mission h3 { font-family: var(--stencil); font-weight: normal; font-size: 15px; margin: 0 0 4px; letter-spacing: 1px; }
+.mission p { margin: 2px 0; font-size: 13px; line-height: 1.35; }
+.medal { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 3px; border: 2px solid rgba(0,0,0,0.5); }
+.medal.gold { background: radial-gradient(circle at 35% 35%, #fff2b0, #d8a830 60%, #8a6a18); }
+.medal.silver { background: radial-gradient(circle at 35% 35%, #ffffff, #b8bcc0 60%, #6a6e72); }
+.medal.bronze { background: radial-gradient(circle at 35% 35%, #ffd8b0, #b07040 60%, #6a3e1e); }
+.medal.big { width: 84px; height: 84px; border-width: 4px; margin: 6px auto; display: block; }
+.warn { color: #e0806a; }
+.stats-wrap { overflow-x: auto; }
+table.stats { border-collapse: collapse; width: 100%; font-size: 14px; }
+table.stats th, table.stats td { padding: 5px 8px; border-bottom: 1px dashed var(--line); text-align: right; white-space: nowrap; }
+table.stats th:first-child, table.stats td:first-child { text-align: left; }
+.warmap { display: flex; justify-content: center; }
+.warmap canvas { border: 2px solid var(--line); border-radius: 4px; max-width: 100%; height: auto !important; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 8px; font-size: 13px; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 5px; border: 1px solid #000; vertical-align: -1px; }
+.legend i.you { background: #fff; clip-path: polygon(50% 0, 100% 100%, 50% 70%, 0 100%); }
+.legend i.obj { border: 2px solid #ffd040; border-radius: 50%; }
