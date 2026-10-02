@@ -23,11 +23,11 @@ export class HUD {
     this.ring = $('#digring circle');
     this.toasts = $('#toasts');
     this.craftbar = $('#craftbar'); this.craftLabel = $('#craftbar .label'); this.craftFill = $('#craftbar .fill');
-    this.binoc = $('#binoc'); this.underwater = $('#underwater'); this.flashEl = $('#flash');
+    this.underwater = $('#underwater'); this.flashEl = $('#flash');
     this.keyhint = $('#keyhint');
     this.cross = $('#crosshair'); this.hitEl = $('#hitmark'); this.hint = $('#hint');
     this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
-    this.scope = $('#scope'); this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
+    this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
     this.defuseProgress = 0; this.markerEls = [];
     this.minimap = new Minimap(game);
     this.radioEl = $('#radio'); this.alertEl = $('#alertbar');
@@ -74,10 +74,10 @@ export class HUD {
     if (this.statusTimer <= 0) {
       this.statusTimer = 0.5;
       const day = Math.floor(g.time) + 1;
-      const tod = g.peace ? 0.45 : g.time % 1;
+      const tod = g.dayOnly ? 0.45 : g.time % 1;
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : clock];
+      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : g.dayOnly ? t('hud.daylight') : clock];
       if (!g.peace && g.weather.rain > 0.15) parts.push(t('hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
@@ -95,12 +95,12 @@ export class HUD {
 
     // reticle: crosshair for guns, a dot for the knife, small dot otherwise
     const W = WEAPONS[g.selected()];
-    const ret = g.combat.scoped ? 'none' : W ? (W.reticle === 'arc' ? 'tool' : W.reticle) : 'tool';
-    this.scope.classList.toggle('on', g.combat.scoped);
+    const scoped = g.scopeView.ease() > 0.5;
+    const ret = scoped ? 'none' : W ? (W.reticle === 'arc' ? 'tool' : W.reticle) : 'tool';
     if (ret !== this.ret) { this.ret = ret; this.cross.className = ret; }
     // context hint
     let hint = '';
-    if (!g.overlay && !g.paused && !g.combat.scoped) {
+    if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
       else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
       else if (W && W.scope) hint = t('hint.scope');
@@ -111,7 +111,6 @@ export class HUD {
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
     const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
-    this.binoc.classList.toggle('on', g.zoom && !g.combat.scoped);
     this.updateMarkers();
     this.minimap.update(dt);
     this.underwater.classList.toggle('on', p.headInWater);

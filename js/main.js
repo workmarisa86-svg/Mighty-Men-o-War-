@@ -59,12 +59,12 @@ class App {
     if (this.game) this.game.resize();
   }
 
-  newGame({ mode, sub, difficulty, name }) {
+  newGame({ mode, sub, difficulty, timeMode = 'cycle', name }) {
     const size = mode === 'peace' ? PEACE_SIZE : DIFF[difficulty].size;
     const now = Date.now();
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty },
+      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode: mode === 'peace' ? 'day' : timeMode },
     });
   }
   loadGame(id) {

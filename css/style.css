@@ -214,7 +214,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); }
 .hotbar .slot b { position: absolute; right: 3px; bottom: 0; font-size: 13px; text-shadow: 0 1px 2px #000; }
 #keyhint { position: absolute; left: 50%; bottom: 160px; transform: translateX(-50%); width: min(92vw, 860px); text-align: center; font-size: 12px; line-height: 1.5; color: var(--khaki-d); text-shadow: 0 1px 2px #000; transition: opacity 2s; }
 #keyhint.fade { opacity: 0; }
-#binoc { position: absolute; inset: 0; opacity: 0; transition: opacity .15s;
+#binoc-unused { position: absolute; inset: 0; opacity: 0; transition: opacity .15s;
   background:
     radial-gradient(circle at 36% 50%, transparent 0 26vh, transparent 26vh),
     radial-gradient(circle at 64% 50%, transparent 0 26vh, transparent 26vh);
@@ -312,3 +312,30 @@ body:not(.allies) [data-btn=squad] { display: none; }
 @media (pointer: coarse) { #radio { bottom: 96px; max-width: 52vw; } .rline { font-size: 12px; } }
 .tbtns.top { gap: 6px; }
 .tbtns.top .tb { font-size: 9.5px; letter-spacing: 0; }
+
+/* ---------------------------------------------------------------- scope view */
+#scopeview { position: absolute; inset: 0; display: none; opacity: 0; pointer-events: none; --r: 41vmin; }
+#scopeview .mask { position: absolute; inset: -2px;
+  background: radial-gradient(circle at 50% 50%, transparent 0 calc(var(--r) - 1vmin), rgba(4, 4, 3, 0.75) var(--r), rgba(2, 2, 2, 0.98) calc(var(--r) + 7vmin));
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin));
+  mask: radial-gradient(circle at 50% 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin)); }
+#scopeview .lens { position: absolute; left: 50%; top: 50%; width: calc(var(--r) * 2); height: calc(var(--r) * 2);
+  transform: translate(-50%, -50%) scale(var(--zoom, 1)); border-radius: 50%;
+  box-shadow: inset 0 0 5vmin 1.2vmin rgba(0, 0, 0, 0.8), 0 0 0 0.6vmin #0d0d0b;
+  background: radial-gradient(circle at 50% 50%, transparent 70%, rgba(30, 40, 46, 0.25) 100%); }
+#scopeview .glint { position: absolute; inset: 3%; border-radius: 50%; border-top: 0.45vmin solid rgba(230, 240, 255, 0.22);
+  border-left: 0.2vmin solid rgba(230, 240, 255, 0.08); transform: rotate(-35deg); filter: blur(0.6px); }
+#scopeview .reticle { position: absolute; left: 50%; top: 50%; width: calc(var(--r) * 2); height: calc(var(--r) * 2);
+  transform: translate(-50%, -50%) scale(var(--zoom, 1)); display: none; }
+#scopeview.sniper .reticle.sniper, #scopeview.binoc .reticle.binoc { display: block; }
+/* binoculars: two overlapping lenses */
+#scopeview.binoc { --r: 33vmin; }
+#scopeview.binoc .mask {
+  -webkit-mask: radial-gradient(circle at calc(50% - 15vmin) 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin)),
+    radial-gradient(circle at calc(50% + 15vmin) 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin));
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+  mask: radial-gradient(circle at calc(50% - 15vmin) 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin)),
+    radial-gradient(circle at calc(50% + 15vmin) 50%, transparent calc(var(--r) - 2vmin), #000 calc(var(--r) + 0.5vmin));
+  background: rgba(3, 3, 3, 0.94); }
+#scopeview.binoc .lens { width: calc(var(--r) * 2 + 30vmin); border-radius: 40vmin; box-shadow: inset 0 0 5vmin 1.2vmin rgba(0, 0, 0, 0.75); }

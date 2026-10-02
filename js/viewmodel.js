@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { ITEMS, iconCanvas } from './items.js';
 import { buildAtlas } from './textures.js';
+import { gunModel } from './gunmodels.js';
 
 const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
 const M = {
@@ -55,6 +56,8 @@ const BUILD = {
     return g;
   },
   sniper() { return BUILD.rifle(false, true); },
+  // the solid wood / blued steel / brass models shared with the soldiers
+  realRifle(id) { const g = gunModel(id); g.scale.setScalar(0.52); g.position.set(0.02, 0.03, 0.08); return g; },
   smg() {
     const g = new THREE.Group();
     g.add(bx(0.06, 0.07, 0.34, M.steel, 0, 0.02, -0.05));
@@ -109,7 +112,11 @@ export class ViewModel {
     if (this.cache[id]) return this.cache[id];
     let g;
     const def = ITEMS[id] || {};
-    if (BUILD[id]) g = BUILD[id]();
+    if (id === 'rifle' || id === 'sniper') g = BUILD.realRifle(id);
+    else if (id === 'smg') { g = gunModel('smg'); g.scale.setScalar(0.6); }
+    else if (id === 'pistol') { g = gunModel('pistol'); g.position.z = 0.02; }
+    else if (id === 'knife') { g = gunModel('knife'); g.rotation.set(0.25, 0, 0.15); }
+    else if (BUILD[id]) g = BUILD[id]();
     else if (def.tiles) {
       const a = buildAtlas();
       const mk = (n) => { const t = new THREE.CanvasTexture(a.tileCanvas(n)); t.magFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return new THREE.MeshLambertMaterial({ map: t }); };

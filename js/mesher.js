@@ -17,7 +17,7 @@ const UVC = [[0, 0], [1, 0], [1, 1], [0, 1]];
 const AO_CURVE = [0.45, 0.64, 0.82, 1.0];
 
 class Buf {
-  constructor() { this.pos = []; this.nor = []; this.uv = []; this.col = []; this.glow = []; this.idx = []; this.n = 0; }
+  constructor() { this.pos = []; this.nor = []; this.uv = []; this.col = []; this.glow = []; this.sky = []; this.idx = []; this.n = 0; }
   toGeometry() {
     if (this.n === 0) return null;
     const g = new THREE.BufferGeometry();
@@ -26,6 +26,7 @@ class Buf {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('glow', new THREE.Float32BufferAttribute(this.glow, 1));
+    g.setAttribute('sky', new THREE.Float32BufferAttribute(this.sky, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return g;
@@ -44,14 +45,85 @@ function crossQuads(buf, x, y, z, tile, light) {
         buf.pos.push(x + pts[k][0], y + pts[k][1], z + pts[k][2]);
         buf.nor.push(nx / nl, 0, nz / nl);
         buf.uv.push(UVC[k][0] ? tile[2] : tile[0], UVC[k][1] ? tile[3] : tile[1]);
-        buf.col.push(light, light, light);
+        buf.col.push(0.92, 0.92, 0.92);
         buf.glow.push(0);
+        buf.sky.push(light);
       }
       if (flip) buf.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
       else buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
       buf.n += 4;
     }
   }
+}
+
+// ------------------------------------------------------------------ light
+// Sky light: 12 in cells open to the sky (less the deeper they are below the
+// original ground), then -1 per block as it spreads sideways and down into
+// tunnels. Turned into a gentle brightness curve that never goes pitch black.
+export const LIGHT_R = 10;
+const MAXL = 12;
+export const MIN_SKY = 0.13;
+function curve(l) { return MIN_SKY + (1 - MIN_SKY) * Math.pow(Math.max(0, l) / MAXL, 1.35); }
+
+export function skyField(world, bx, bz, size, yLimit = null) {
+  const W = world.W, D = world.D, H = world.H, data = world.data, tops = world.tops;
+  let maxY = 0;
+  const top = new Int16Array(size * size);
+  for (let lz = 0; lz < size; lz++) for (let lx = 0; lx < size; lx++) {
+    const x = bx + lx, z = bz + lz;
+    let y = 0;
+    if (x >= 0 && z >= 0 && x < W && z < D) { y = H - 1; while (y > 0 && !OPAQUE[data[x + W * (z + D * y)]]) y--; }
+    top[lx + lz * size] = y;
+    if (y > maxY) maxY = y;
+  }
+  const HY = Math.min(H, (yLimit ?? maxY) + 3);
+  const light = new Uint8Array(size * size * HY);
+  const q = new Int32Array(size * size * HY);
+  let qh = 0, qt = 0;
+  const id = (lx, y, lz) => lx + size * (lz + size * y);
+  for (let lz = 0; lz < size; lz++) for (let lx = 0; lx < size; lx++) {
+    const x = bx + lx, z = bz + lz;
+    const t = top[lx + lz * size];
+    const ground = tops && x >= 0 && z >= 0 && x < W && z < D ? tops[x + z * W] : t;
+    for (let y = HY - 1; y > t; y--) {
+      const depth = Math.max(0, ground - y);          // below the original ground: deeper shafts are dimmer
+      const l = Math.max(1, MAXL - Math.floor(depth * 0.75));
+      light[id(lx, y, lz)] = l; q[qt++] = id(lx, y, lz);
+    }
+  }
+  const S2 = size * size;
+  while (qh < qt) {
+    const c = q[qh++];
+    const l = light[c] - 1;
+    if (l <= 0) continue;
+    const lx = c % size, lz = Math.floor(c / size) % size, y = Math.floor(c / S2);
+    const tryN = (nx, ny, nz) => {
+      if (nx < 0 || nz < 0 || nx >= size || nz >= size || ny < 0 || ny >= HY) return;
+      const n = id(nx, ny, nz);
+      if (light[n] >= l) return;
+      const X = bx + nx, Z = bz + nz;
+      const b = (X < 0 || Z < 0 || X >= W || Z >= D) ? 0 : data[X + W * (Z + D * ny)];
+      if (OPAQUE[b]) return;
+      light[n] = l; q[qt++] = n;
+    };
+    tryN(lx + 1, y, lz); tryN(lx - 1, y, lz); tryN(lx, y, lz + 1); tryN(lx, y, lz - 1); tryN(lx, y - 1, lz); tryN(lx, y + 1, lz);
+  }
+  return {
+    maxY,
+    level(x, y, z) {
+      const lx = x - bx, lz = z - bz;
+      if (lx < 0 || lz < 0 || lx >= size || lz >= size || y >= HY) return MAXL;
+      if (y < 0) return 0;
+      return light[id(lx, y, lz)];
+    },
+    bright(x, y, z) { return curve(this.level(x, y, z)); },
+  };
+}
+
+// brightness of daylight at a single point (for the player's held item)
+export function skyAt(world, x, y, z) {
+  const f = skyField(world, Math.floor(x) - 8, Math.floor(z) - 8, 17, Math.floor(y) + 4);
+  return f.bright(Math.floor(x), Math.floor(y), Math.floor(z));
 }
 
 export function buildChunk(world, cx, cz, uvs, useAO) {
@@ -63,26 +135,10 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
     if (y >= H || x < 0 || z < 0 || x >= W || z >= D) return B.AIR;
     return data[x + W * (z + D * y)];
   };
-  // local sky height map (with 1 block border) – highest opaque block per column
-  const SW = CHUNK + 2;
-  const sky = new Int16Array(SW * SW);
-  let maxY = 0;
-  for (let lz = 0; lz < SW; lz++) for (let lx = 0; lx < SW; lx++) {
-    const x = x0 + lx - 1, z = z0 + lz - 1;
-    let y = H - 1;
-    if (x >= 0 && z >= 0 && x < W && z < D) {
-      while (y > 0 && !OPAQUE[data[x + W * (z + D * y)]]) y--;
-    } else y = 0;
-    sky[lx + lz * SW] = y;
-    if (y > maxY) maxY = y;
-  }
-  const skyLight = (x, y, z) => {
-    const lx = x - x0 + 1, lz = z - z0 + 1;
-    if (lx < 0 || lz < 0 || lx >= SW || lz >= SW) return 1;
-    const top = sky[lx + lz * SW];
-    if (y > top) return 1;
-    return Math.max(0.28, 1 - (top - y + 1) * 0.16);
-  };
+  // sky light that spreads from the open sky into trenches and tunnels
+  const L = skyField(world, x0 - LIGHT_R, z0 - LIGHT_R, CHUNK + LIGHT_R * 2);
+  const maxY = L.maxY;
+  const skyLight = (x, y, z) => L.bright(x, y, z);
 
   const solid = new Buf(), water = new Buf();
   const yMax = Math.min(H - 1, maxY + 2);
@@ -131,9 +187,10 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
           ao = (s1 && s2) ? 0 : 3 - (s1 + s2 + s3);
         }
         aos[k] = ao;
-        const l = AO_CURVE[ao] * shade * sl;
+        const l = AO_CURVE[ao] * shade;
         buf.col.push(l, l, l);
         buf.glow.push(glow);
+        buf.sky.push(sl);
       }
       if (aos[0] + aos[2] < aos[1] + aos[3]) buf.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
       else buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);

@@ -43,15 +43,12 @@ export class World {
     return true;
   }
 
+  // a change can alter light up to 10 blocks away, so neighbouring chunks rebuild too
   markDirty(x, z) {
-    const cx = x >> 4, cz = z >> 4;
-    const add = (a, b) => { if (a >= 0 && b >= 0 && a < this.cx && b < this.cz) this.dirty.add(a + b * this.cx); };
-    add(cx, cz);
-    const lx = x & 15, lz = z & 15;
-    if (lx === 0) add(cx - 1, cz);
-    if (lx === 15) add(cx + 1, cz);
-    if (lz === 0) add(cx, cz - 1);
-    if (lz === 15) add(cx, cz + 1);
+    const R = 10;
+    for (let cz = (z - R) >> 4; cz <= (z + R) >> 4; cz++) for (let cx = (x - R) >> 4; cx <= (x + R) >> 4; cx++) {
+      if (cx >= 0 && cz >= 0 && cx < this.cx && cz < this.cz) this.dirty.add(cx + cz * this.cx);
+    }
   }
 
   // highest non-air, non-water block

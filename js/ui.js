@@ -75,7 +75,7 @@ export class UI {
 
   // -------------------------------------------------------------- new game
   r_newgame(p) {
-    const st = Object.assign({ step: 'mode', mode: null, sub: null, difficulty: 'medium' }, p);
+    const st = Object.assign({ step: 'mode', mode: null, sub: null, difficulty: 'medium', timeMode: 'cycle' }, p);
     const go = (patch) => this.show('newgame', Object.assign({}, st, patch));
     let body = '';
     if (st.step === 'mode') {
@@ -90,7 +90,9 @@ export class UI {
       const n = listSaves().length + 1;
       body = (st.mode === 'war' ? `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
         <div class="choice small ${st.difficulty === d ? 'on' : ''}" data-d="${d}">
-          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>` : '') +
+          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>
+        <p class="label">${t('new.time')}</p><div class="choices">${['cycle', 'day'].map((m) => `
+        <div class="choice small ${st.timeMode === m ? 'on' : ''}" data-tm="${m}"><h3>${t('new.time.' + m)}</h3><p>${t('new.time.' + m + 'Desc')}</p></div>`).join('')}</div>` : '') +
         `<p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
@@ -105,6 +107,10 @@ export class UI {
       if (st.step === 'mode') go(v === 'war' ? { step: 'sub', mode: 'war' } : { step: 'final', mode: 'peace', sub: null });
       else go({ step: 'final', sub: v });
     });
+    panel.querySelectorAll('.choice[data-tm]').forEach((c) => c.onclick = () => {
+      st.timeMode = c.dataset.tm;
+      panel.querySelectorAll('.choice[data-tm]').forEach((x) => x.classList.toggle('on', x === c));
+    });
     panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => {
       st.difficulty = c.dataset.d;
       panel.querySelectorAll('.choice[data-d]').forEach((x) => x.classList.toggle('on', x === c));
@@ -112,14 +118,14 @@ export class UI {
     const sb = panel.querySelector('#startbtn');
     if (sb) sb.onclick = () => {
       const name = panel.querySelector('#wname').value.trim() || t('new.defaultName', { n: 1 });
-      this.app.newGame({ mode: st.mode, sub: st.mode === 'war' ? st.sub : null, difficulty: st.mode === 'war' ? st.difficulty : null, name });
+      this.app.newGame({ mode: st.mode, sub: st.mode === 'war' ? st.sub : null, difficulty: st.mode === 'war' ? st.difficulty : null, timeMode: st.mode === 'war' ? st.timeMode : 'day', name });
     };
   }
 
   // ------------------------------------------------------------------ load
   r_load() {
     const saves = listSaves();
-    const modeLabel = (m) => m.mode === 'peace' ? t('mode.peace') : `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)}`;
+    const modeLabel = (m) => m.mode === 'peace' ? t('mode.peace') : `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)} · ${t('new.time.' + (m.timeMode || 'cycle'))}`;
     const body = saves.length ? `<div class="saves">${saves.map((m) => `
       <div class="save">
         <div><h3>${esc(m.name)}</h3><p>${modeLabel(m)} · ${t('load.day', { n: m.day })}</p>
