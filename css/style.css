@@ -441,3 +441,6 @@ body:not(.ingame) .ctx { display: none; }
 /* touch button size setting */
 body.tb-s .tb { transform: scale(0.85); } body.tb-l .tb { transform: scale(1.18); }
 body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 16px; min-height: 52px; }
+.speaker { position: absolute; right: 14px; bottom: 14px; width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--line); background: rgba(0,0,0,0.35); color: var(--khaki); padding: 8px; cursor: pointer; }
+.speaker svg { width: 100%; height: 100%; display: block; }
+.speaker .x { display: none; } .speaker.off .x { display: inline; } .speaker.off .w { display: none; }

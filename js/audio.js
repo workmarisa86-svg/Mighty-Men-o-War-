@@ -132,3 +132,4 @@ export function setRain(intensity) {
   }
   rainGain.gain.setTargetAtTime(intensity * 0.16, ctx.currentTime, 0.5);
 }
+export function audioCtx() { return ctx; }

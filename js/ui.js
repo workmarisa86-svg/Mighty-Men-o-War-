@@ -67,10 +67,13 @@ export class UI {
         <button class="btn" data-go="stats">${t('menu.stats')}</button>
       </div>
       ${this.langSwitch()}
+      <button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button>
       <p class="ver">v${this.app.version}</p>
     </div>`;
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go, { what: b.dataset.what, from: 'main' }));
     this.bindLang(this.root);
+    const spk = this.root.querySelector('#spk');
+    if (spk) spk.onclick = () => { const s = this.app.settings; s.musicMute = !s.musicMute; this.app.applySettings(); spk.classList.toggle('off', s.musicMute); };
   }
 
   // Manual: search, sort A-Z / Z-A, filter by category, open/close entries.

@@ -7,6 +7,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
 import { initAudio, setVolume, sfx } from './audio.js';
+import { startMusic, stopMusic, setMusic } from './music.js';
 
 class App {
   constructor() {
@@ -14,6 +15,7 @@ class App {
     this.settings = loadSettings();
     onLang(() => applyI18n());
     setLang(this.settings.lang);
+    document.body.classList.add('tb-' + (this.settings.touchSize || 'm'));
     this.canvas = document.getElementById('game');
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x14160f);
@@ -28,7 +30,8 @@ class App {
     this.ui.show('main');
 
     addEventListener('resize', () => this.resize());
-    addEventListener('pointerdown', () => initAudio(), { capture: true });
+    // audio may only start after the first tap or click; menu music then fades in
+    addEventListener('pointerdown', () => { initAudio(); setMusic(this.settings.music, this.settings.musicMute); if (!this.game) startMusic(); }, { capture: true });
     addEventListener('keydown', (e) => {
       initAudio();
       if (!this.game) return;
@@ -48,6 +51,7 @@ class App {
   applySettings() {
     saveSettings(this.settings);
     setVolume(this.settings.volume);
+    setMusic(this.settings.music, this.settings.musicMute);
     const q = QUALITY[this.settings.quality] || QUALITY.medium;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     applyI18n();
@@ -95,6 +99,7 @@ class App {
   }
 
   async startGame(save) {
+    stopMusic();
     this.ui.show('loading');
     await new Promise((r) => setTimeout(r, 30));
     this.game = new Game(this, save);
@@ -157,6 +162,7 @@ class App {
     this.input.enabled = false;
     this.input.exitLock();
     this.ui.show('gameover', { days });
+    startMusic();
   }
   quitToMenu(silent) {
     if (!this.game) return;
@@ -167,7 +173,7 @@ class App {
     document.body.classList.remove('ingame');
     this.input.enabled = false;
     this.input.exitLock();
-    if (!silent) this.ui.show('main');
+    if (!silent) { this.ui.show('main'); startMusic(); }
   }
 
   loop(now) {
