@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { itemIcon, ITEMS } from './items.js';
 import { WEAPONS } from './weapons.js';
+import { Minimap } from './minimap.js';
 import { t } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -27,6 +28,7 @@ export class HUD {
     this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
     this.scope = $('#scope'); this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
     this.defuseProgress = 0; this.markerEls = [];
+    this.minimap = new Minimap(game);
     this.dirtyHotbar = true;
     this.digProgress = 0;
     this.statusTimer = 0;
@@ -109,6 +111,7 @@ export class HUD {
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.binoc.classList.toggle('on', g.zoom && !g.combat.scoped);
     this.updateMarkers();
+    this.minimap.update(dt);
     this.underwater.classList.toggle('on', p.headInWater);
 
     if (this.dirtyHotbar) this.renderHotbar();

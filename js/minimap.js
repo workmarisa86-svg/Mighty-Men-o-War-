@@ -1,0 +1,126 @@
+// Circular radar in the corner: rotates with the player's facing, player at
+// the centre. Red = enemies, blue = allies, fort squares by owner, cabin icon,
+// flashing TNT warnings. Limited range, so distant units never show.
+export const RADAR_RANGE = 60;
+const SIZES = { s: 118, m: 156, l: 204 };
+export const OWNER_COLORS = { ally: '#5aa8ff', enemy: '#e0503c', none: '#b8b49c' };
+
+export class Minimap {
+  constructor(game) {
+    this.game = game;
+    this.wrap = document.getElementById('minimap');
+    this.canvas = this.wrap.querySelector('canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.t = 0; this.timer = 0;
+    this.applySettings();
+  }
+
+  applySettings() {
+    const s = this.game.settings;
+    const on = s.minimap !== false;
+    this.wrap.hidden = !on;
+    const touchScale = this.game.app.input.touch ? 0.8 : 1;
+    const px = Math.round((SIZES[s.minimapSize] || SIZES.m) * touchScale);
+    this.size = px;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.canvas.width = this.canvas.height = Math.round(px * dpr);
+    this.canvas.style.width = this.canvas.style.height = px + 'px';
+    this.dpr = dpr;
+    document.documentElement.style.setProperty('--mm', on ? px + 'px' : '0px');
+  }
+
+  update(dt) {
+    if (this.wrap.hidden) return;
+    this.t += dt;
+    this.timer -= dt;
+    if (this.timer > 0) return;
+    this.timer = 1 / 15;      // 15 redraws a second is plenty
+    this.draw();
+  }
+
+  draw() {
+    const g = this.game, c = this.ctx, S = this.size, dpr = this.dpr;
+    const R = S / 2, scale = (R - 6) / RADAR_RANGE;
+    const p = g.player.pos, yaw = g.player.yaw;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    // world offset -> radar pixels (facing direction is up)
+    const toRadar = (x, z) => {
+      const dx = x - p.x, dz = z - p.z;
+      return [R + (dx * rx + dz * rz) * scale, R - (dx * fx + dz * fz) * scale, Math.hypot(dx, dz)];
+    };
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, S, S);
+    c.save();
+    c.beginPath(); c.arc(R, R, R - 1, 0, Math.PI * 2); c.clip();
+    c.fillStyle = 'rgba(22, 25, 17, 0.78)'; c.fillRect(0, 0, S, S);
+    // range rings and a faint forward wedge
+    c.strokeStyle = 'rgba(160, 160, 120, 0.22)'; c.lineWidth = 1;
+    for (const f of [1 / 3, 2 / 3]) { c.beginPath(); c.arc(R, R, (R - 6) * f, 0, Math.PI * 2); c.stroke(); }
+    c.beginPath(); c.moveTo(R, 6); c.lineTo(R, S - 6); c.moveTo(6, R); c.lineTo(S - 6, R); c.stroke();
+    c.fillStyle = 'rgba(214, 204, 166, 0.06)';
+    c.beginPath(); c.moveTo(R, R); c.arc(R, R, R, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5); c.fill();
+
+    // forts and the cabin
+    for (const f of (g.forts ? g.forts.list : [])) {
+      const [x, y, d] = toRadar(f.cx + 0.5, f.cz + 0.5);
+      if (d > RADAR_RANGE + 6) continue;
+      const s = Math.max(7, 13 * scale * 2);
+      c.fillStyle = OWNER_COLORS[f.owner] || OWNER_COLORS.none;
+      c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1.5;
+      c.save(); c.translate(x, y);
+      c.fillRect(-s / 2, -s / 2, s, s); c.strokeRect(-s / 2, -s / 2, s, s);
+      c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(-s / 4, -s / 4, s / 2, s / 2);
+      c.restore();
+      if (f.alarm > 0 && Math.floor(this.t * 4) % 2 === 0) { c.strokeStyle = '#ff6040'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, s, 0, Math.PI * 2); c.stroke(); }
+    }
+    const cabin = g.world.sites.find((st) => st.type === 'cabin');
+    if (cabin) {
+      const [x, y, d] = toRadar(cabin.x + 0.5, cabin.z + 0.5);
+      if (d <= RADAR_RANGE + 6) {
+        c.fillStyle = '#d8c890'; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(x, y - 7); c.lineTo(x + 7, y - 1); c.lineTo(x + 5, y - 1); c.lineTo(x + 5, y + 6);
+        c.lineTo(x - 5, y + 6); c.lineTo(x - 5, y - 1); c.lineTo(x - 7, y - 1); c.closePath(); c.fill(); c.stroke();
+      }
+    }
+
+    // soldiers: small dots, smaller when the area is crowded
+    const units = g.enemies ? g.enemies.list.filter((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < RADAR_RANGE) : [];
+    const dot = units.length > 18 ? 2 : units.length > 9 ? 2.5 : 3;
+    for (const s of units) {
+      const [x, y] = toRadar(s.pos.x, s.pos.z);
+      c.fillStyle = s.faction === 'ally' ? (s.follow ? '#9ad0ff' : OWNER_COLORS.ally) : OWNER_COLORS.enemy;
+      c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;
+      c.beginPath(); c.arc(x, y, dot, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    const tank = g.enemies && g.enemies.tank;
+    if (tank && tank.alive) {
+      const [x, y, d] = toRadar(tank.pos.x, tank.pos.z);
+      if (d < RADAR_RANGE) { c.fillStyle = OWNER_COLORS.enemy; c.strokeStyle = '#000'; c.lineWidth = 1.5; c.fillRect(x - 5, y - 4, 10, 8); c.strokeRect(x - 5, y - 4, 10, 8); }
+    }
+
+    // flashing TNT warnings (enemy charges)
+    if (Math.floor(this.t * 3) % 2 === 0) {
+      for (const l of g.explosives.lit.values()) {
+        if (l.owner !== 'enemy') continue;
+        const [x, y, d] = toRadar(l.x + 0.5, l.z + 0.5);
+        if (d > RADAR_RANGE) continue;
+        c.fillStyle = '#ffb030'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(x, y - 7); c.lineTo(x + 7, y + 5); c.lineTo(x - 7, y + 5); c.closePath(); c.fill(); c.stroke();
+        c.fillStyle = '#000'; c.fillRect(x - 0.75, y - 3, 1.5, 4.5); c.fillRect(x - 0.75, y + 2.5, 1.5, 1.5);
+      }
+    }
+
+    // the player: chevron pointing up (the direction you face)
+    c.fillStyle = '#f0e6c4'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(R, R - 7); c.lineTo(R + 5, R + 5); c.lineTo(R, R + 2); c.lineTo(R - 5, R + 5); c.closePath(); c.fill(); c.stroke();
+    c.restore();
+
+    // bezel and a north marker on the rim
+    c.strokeStyle = '#75724f'; c.lineWidth = 2;
+    c.beginPath(); c.arc(R, R, R - 1, 0, Math.PI * 2); c.stroke();
+    const nx = R - rz * (R - 9), ny = R + fz * (R - 9);   // world north (-Z) on the rim
+    c.fillStyle = '#c9a24a'; c.font = `bold ${Math.round(S / 13)}px Oswald, Arial, sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('N', nx, ny);
+  }
+}

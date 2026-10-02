@@ -18,6 +18,7 @@ import { ViewModel } from './viewmodel.js';
 import { Combat, WEAPONS } from './weapons.js';
 import { Explosives } from './explosives.js';
 import { Enemies } from './soldiers.js';
+import { Flashlight } from './flashlight.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
@@ -66,11 +67,8 @@ export class Game {
     this.particles = new Particles(this.scene);
     this.particles.density = this.quality.particles;
 
-    // flashlight (standard gear)
-    this.flashlight = new THREE.SpotLight(0xfff0cf, 0, 34, 0.42, 0.55, 1);
-    this.flashlight.position.set(0.25, -0.2, 0);
-    this.flashlight.target.position.set(0, 0, -1);
-    this.camera.add(this.flashlight, this.flashlight.target);
+    // flashlight (standard gear, always available)
+    this.flashlight = new Flashlight(this.camera);
     this.lightOn = false;
 
     // target highlight + cracks
@@ -275,7 +273,8 @@ export class Game {
     this.camera.far = (this.settings.renderDist + 1.5) * CHUNK + 40;
 
     this.sky.update(dt, this.time % 1, this.peace ? 0 : this.weather.rain, this.camera.position, this.peace);
-    this.flashlight.intensity = this.lightOn ? 14 : 0;
+    this.flashlight.on = this.lightOn;
+    this.flashlight.update(1 - this.sky.daylight, this.peace ? 0 : this.weather.rain);
 
     this.updateChunks(dt);
     this.vm.set(scoped ? null : this.selected());

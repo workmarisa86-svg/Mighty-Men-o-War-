@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS = {
   volume: 0.7,
   sensitivity: 1.0,
   invertY: false,
+  minimap: true,
+  minimapSize: 'm',
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
 export function saveSettings(s) { save('settings', s); }

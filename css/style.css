@@ -176,7 +176,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); }
 .toast.warn { border-left-color: var(--red); color: #f0c0b0; }
 #digring { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; transform: rotate(-90deg); transition: opacity .2s; opacity: 0; }
 #digring circle { fill: none; stroke: var(--amber); stroke-width: 3; }
-#toasts { position: absolute; left: 16px; top: 90px; display: flex; flex-direction: column; gap: 6px; max-width: 60vw; }
+#toasts { position: absolute; left: 16px; top: calc(var(--mm, 0px) + 24px); display: flex; flex-direction: column; gap: 6px; max-width: 60vw; }
 .toast {
   background: rgba(24, 26, 18, 0.8); border-left: 3px solid var(--amber); padding: 5px 10px; font-size: 14px;
   letter-spacing: .5px; animation: tin .2s ease-out; transition: opacity .5s, transform .5s;
@@ -290,3 +290,7 @@ body:not(.peace) [data-btn=fly] { display: none; }
   border: 2px solid currentColor; border-radius: 3px; background: rgba(0,0,0,0.45); white-space: nowrap; }
 .marker.danger { color: #ff8a60; animation: pulse 0.6s infinite alternate; }
 @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
+
+#minimap { position: absolute; left: 12px; top: 12px; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.5); line-height: 0; }
+#minimap canvas { display: block; border-radius: 50%; }
+@media (pointer: coarse) { #minimap { left: 8px; top: 8px; } #toasts { top: calc(var(--mm, 0px) + 16px); } }
