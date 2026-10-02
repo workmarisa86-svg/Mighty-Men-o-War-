@@ -82,6 +82,21 @@ export class Player {
     return false;
   }
 
+  // Wading: with your feet in water, walk straight up a one-block step onto
+  // the shore or riverbed, like walking out of a real river.
+  wadeStep(world, rafts, axis, d) {
+    if (this.flying || d === 0) return false;
+    const p = this.pos;
+    if (world.get(Math.floor(p.x), Math.floor(p.y + 0.2), Math.floor(p.z)) !== B.WATER) return false;
+    const y0 = p.y;
+    const lift = Math.floor(y0) + 1 - y0 + 0.001; // up to the top of the next block
+    if (lift > 1.05 || this.collides(world, rafts, p.x, y0 + lift, p.z)) return false;
+    p.y = y0 + lift; p[axis] += d;
+    if (this.collides(world, rafts, p.x, p.y, p.z)) { p[axis] -= d; p.y = y0; return false; }
+    if (this.vel.y < 0) this.vel.y = 0;
+    return true;
+  }
+
   update(dt, world, rafts, it, env) {
     const p = this.pos, v = this.vel;
     const wasGround = this.onGround;
@@ -168,10 +183,10 @@ export class Player {
       }
       const guard = this.crouch && wasGround && !this.flying;
       const ox = p.x;
-      if (this.moveAxis(world, rafts, 'x', v.x * sdt)) { v.x = 0; this.blockedH = true; }
+      if (this.moveAxis(world, rafts, 'x', v.x * sdt) && !this.wadeStep(world, rafts, 'x', v.x * sdt)) { v.x = 0; this.blockedH = true; }
       if (guard && !this.hasSupport(world, rafts, p.x, p.z)) { p.x = ox; v.x = 0; }
       const oz = p.z;
-      if (this.moveAxis(world, rafts, 'z', v.z * sdt)) { v.z = 0; this.blockedH = true; }
+      if (this.moveAxis(world, rafts, 'z', v.z * sdt) && !this.wadeStep(world, rafts, 'z', v.z * sdt)) { v.z = 0; this.blockedH = true; }
       if (guard && !this.hasSupport(world, rafts, p.x, p.z)) { p.z = oz; v.z = 0; }
     }
     if (!this.onGround && v.y <= 0 && this.hasSupport(world, rafts, p.x, p.z)) this.onGround = true;
