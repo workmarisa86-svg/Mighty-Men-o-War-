@@ -6,7 +6,7 @@ import fs from 'fs';
 const root = new URL('..', import.meta.url).pathname;
 const v = /GAME_VERSION = '([^']+)'/.exec(fs.readFileSync(root + 'js/config.js', 'utf8'))[1];
 const files = fs.readdirSync(root + 'js').filter((f) => f.endsWith('.js')).sort();
-const imports = { three: 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js' };
+const imports = { three: './js/vendor/three.module.js?v=' + v };   // three.js is kept in this folder too
 for (const f of files) imports['./js/' + f] = './js/' + f + '?v=' + v;
 const map = '<script type="importmap">\n' + JSON.stringify({ imports }, null, 2).split('\n').map((l) => '    ' + l).join('\n') + '\n  </script>';
 let html = fs.readFileSync(root + 'index.html', 'utf8');
@@ -15,7 +15,7 @@ html = html.replace(/href="css\/style\.css(\?v=[^"]*)?"/, `href="css/style.css?v
 html = html.replace(/src="js\/main\.js(\?v=[^"]*)?"/, `src="js/main.js?v=${v}"`);
 fs.writeFileSync(root + 'index.html', html);
 const icons = fs.readdirSync(root + 'icons').map((f) => './icons/' + f);
-const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, ...files.map((f) => './js/' + f + '?v=' + v), ...icons];
+const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, './js/vendor/three.module.js?v=' + v, ...files.map((f) => './js/' + f + '?v=' + v), ...icons];
 let sw = fs.readFileSync(root + 'sw.js', 'utf8');
 sw = sw.replace(/const VERSION = '[^']*';/, `const VERSION = '${v}';`).replace(/const FILES = \[[\s\S]*?\];/, 'const FILES = ' + JSON.stringify(offline, null, 2) + ';');
 fs.writeFileSync(root + 'sw.js', sw);

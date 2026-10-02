@@ -55,6 +55,10 @@ Then open `http://localhost:8080/`.
 | `js/i18n.js` | English / Spanish text |
 | `js/storage.js` | Save slots and settings (all keys prefixed `blocks-`) |
 
+## Third-party code
+
+`js/vendor/three.module.js` is three.js r160 (MIT licence, see `js/vendor/three.LICENSE.txt`), kept in this folder so the app works offline and never loads code from outside its own folder.
+
 ## Updating
 
 After changing files, bump `GAME_VERSION` in `js/config.js` and run `node tools/stamp-version.mjs` so browsers load the new files instead of cached ones.

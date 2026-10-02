@@ -203,7 +203,16 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   addEventListener('load', async () => {
     try {
       let wantReload = false;
-      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      const scope = new URL('./', location.href).href;
+      // remove any worker of this game registered with a different scope
+      // (other apps on this domain have their own scripts and are left alone)
+      for (const r of await navigator.serviceWorker.getRegistrations()) {
+        const script = (r.active || r.waiting || r.installing || {}).scriptURL || '';
+        if (r.scope !== scope && script.startsWith(scope)) await r.unregister();
+      }
+      // caches from older versions of this game with other names
+      if (window.caches) for (const k of await caches.keys()) if (k.startsWith('blocks-mmow-') && !k.startsWith('blocks-mmow-cache-')) await caches.delete(k);
+      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' });
       const notify = (w) => {
         if (!w || document.getElementById('update')) return;
         const el = document.createElement('div'); el.id = 'update';
