@@ -1,4 +1,5 @@
 // Military-style heads-up display: compass, health/hunger bars, hotbar, toasts.
+import * as THREE from 'three';
 import { itemIcon, ITEMS } from './items.js';
 import { WEAPONS } from './weapons.js';
 import { t } from './i18n.js';
@@ -24,6 +25,8 @@ export class HUD {
     this.keyhint = $('#keyhint');
     this.cross = $('#crosshair'); this.hitEl = $('#hitmark'); this.hint = $('#hint');
     this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
+    this.scope = $('#scope'); this.dmgEl = $('#dmgdir'); this.markersEl = $('#markers');
+    this.defuseProgress = 0; this.markerEls = [];
     this.dirtyHotbar = true;
     this.digProgress = 0;
     this.statusTimer = 0;
@@ -75,7 +78,7 @@ export class HUD {
       this.status.textContent = parts.join('  ·  ');
     }
 
-    const prog = Math.min(1, this.digProgress);
+    const prog = Math.min(1, Math.max(this.digProgress, this.defuseProgress));
     this.ring.style.strokeDashoffset = String(100 - prog * 100);
     this.ring.parentElement.style.opacity = prog > 0 ? 1 : 0;
 
@@ -88,19 +91,24 @@ export class HUD {
 
     // reticle: crosshair for guns, a dot for the knife, small dot otherwise
     const W = WEAPONS[g.selected()];
-    const ret = W ? W.reticle : 'tool';
+    const ret = g.combat.scoped ? 'none' : W ? (W.reticle === 'arc' ? 'tool' : W.reticle) : 'tool';
+    this.scope.classList.toggle('on', g.combat.scoped);
     if (ret !== this.ret) { this.ret = ret; this.cross.className = ret; }
     // context hint
     let hint = '';
-    if (!g.overlay && !g.paused) {
-      if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
+    if (!g.overlay && !g.paused && !g.combat.scoped) {
+      if (g.defusing) hint = t('hint.defusing');
+      else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
+      else if (W && W.scope) hint = t('hint.scope');
+      else if (W && W.throw) hint = t('hint.throw');
       else if (g.selected() === 'flint') hint = t('hint.flint');
       else if (ITEMS[g.selected()] && (ITEMS[g.selected()].food || ITEMS[g.selected()].heal)) hint = t('hint.eat');
     }
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
     const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
-    this.binoc.classList.toggle('on', g.zoom);
+    this.binoc.classList.toggle('on', g.zoom && !g.combat.scoped);
+    this.updateMarkers();
     this.underwater.classList.toggle('on', p.headInWater);
 
     if (this.dirtyHotbar) this.renderHotbar();
@@ -144,7 +152,33 @@ export class HUD {
     setTimeout(() => el.remove(), 3200);
   }
   pickup(id, n) { this.toast(t('hud.got', { n, item: t('item.' + id) }), 'pick'); }
-  hitMarker() { this.hitEl.classList.remove('on'); void this.hitEl.offsetWidth; this.hitEl.classList.add('on'); }
+  hitMarker(head) {
+    this.hitEl.classList.toggle('head', !!head);
+    this.hitEl.classList.remove('on'); void this.hitEl.offsetWidth; this.hitEl.classList.add('on');
+  }
+  killNote() { this.toast(t('hud.enemyDown'), 'kill'); }
+  // red arc at the screen edge pointing to where damage came from
+  damageFrom(angle) {
+    this.dmgEl.style.transform = `rotate(${-angle}rad)`;
+    this.dmgEl.classList.remove('on'); void this.dmgEl.offsetWidth; this.dmgEl.classList.add('on');
+  }
+  // danger markers: enemy grenades and lit enemy TNT near the player
+  updateMarkers() {
+    const g = this.game, cam = g.camera, p = g.player.pos;
+    const list = [];
+    for (const pr of g.explosives.projectiles) if (pr.owner === 'enemy' && pr.kind === 'grenade' && pr.pos.distanceTo(p) < 14) list.push({ pos: pr.pos, label: '!' });
+    for (const l of g.explosives.lit.values()) if (l.owner === 'enemy' && Math.hypot(l.x - p.x, l.z - p.z) < 45) list.push({ pos: new THREE.Vector3(l.x + 0.5, l.y + 1.3, l.z + 0.5), label: 'TNT ' + Math.max(0, l.t).toFixed(0) });
+    while (this.markerEls.length < list.length) { const d = document.createElement('div'); d.className = 'marker danger'; this.markersEl.appendChild(d); this.markerEls.push(d); }
+    this.markerEls.forEach((el, i) => {
+      const m = list[i];
+      if (!m) { el.style.display = 'none'; return; }
+      const v = m.pos.clone().project(cam);
+      let x = (v.x * 0.5 + 0.5) * innerWidth, y = (-v.y * 0.5 + 0.5) * innerHeight;
+      if (v.z > 1) { x = innerWidth - x; y = innerHeight - 40; }
+      x = Math.max(30, Math.min(innerWidth - 30, x)); y = Math.max(40, Math.min(innerHeight - 40, y));
+      el.style.display = 'block'; el.style.transform = `translate(${x}px, ${y}px)`; el.textContent = m.label;
+    });
+  }
   bigMessage(title, sub = '') {
     this.big.innerHTML = '';
     const h = document.createElement('h2'); h.textContent = title; this.big.appendChild(h);

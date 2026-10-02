@@ -29,6 +29,7 @@ export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wi
 // Peace mode never runs out of these
 export const UNLIMITED = [...MATERIALS, 'raft', 'watchtower'];
 export const WEAPON_IDS = ['knife', 'pistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
+export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 
 // Crafting happens at a campfire. Weapon times rise 2 s per level of
 // destructive power, and stronger weapons cost more iron.
@@ -39,8 +40,8 @@ export const RECIPES = [
   { id: 'rifle', cat: 'weapons', needs: { iron: 3, wood: 2 }, time: 9 },
   { id: 'sniper', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 11 },
   { id: 'smg', cat: 'weapons', needs: { iron: 5, wood: 1 }, time: 13 },
-  { id: 'grenade', cat: 'weapons', needs: { iron: 2 }, time: 15, later: true },
-  { id: 'smoke', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 15, later: true },
+  { id: 'grenade', cat: 'weapons', needs: { iron: 2 }, time: 15, out: 2 },
+  { id: 'smoke', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 15, out: 2 },
   { id: 'tnt', cat: 'weapons', needs: { iron: 2, wood: 2, dirt: 2 }, time: 17 },
   { id: 'sandbag', cat: 'defense', needs: { dirt: 3 }, time: 3, out: 2 },
   { id: 'wire', cat: 'defense', needs: { iron: 1 }, time: 4, out: 3 },

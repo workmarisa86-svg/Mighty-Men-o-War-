@@ -4,8 +4,6 @@ import { SEA } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
 
-const lerp = (a, b, t) => a + (b - a) * t;
-const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
 
 export function generate(world) {
   const { seed, mode, sub } = world.cfg;
@@ -18,66 +16,72 @@ export function generate(world) {
 
   // --- heightmap -----------------------------------------------------------
   // An open battlefield: mostly level ground with only gentle, wide swells.
-  const hm = new Float32Array(W * D);
-  const crater = new Uint8Array(W * D);
+  // Water is decided first as a mask; land and riverbed heights are then
+  // shaped by distance to the shoreline, so the ground slides gently into
+  // shallow water and only deepens toward the middle (no banks or ledges).
+  const land = new Float32Array(W * D);
+  const water = new Uint8Array(W * D);
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    let h = SEA + 3 + n1.fbm(x / 220, z / 220, 3) * 3;
-    // winding rivers along a noise ridge, with wide sloping banks
-    const rv = Math.abs(n3.fbm(x / 190, z / 190, 2));
-    const rw = 0.05;
-    if (rv < rw * 2.6) h = lerp(h, SEA - 5, smooth((1 - rv / (rw * 2.6)) * 1.6));
-    // lakes
-    const lk = n4.fbm(x / 95, z / 95, 2);
-    if (lk > 0.36) h = lerp(h, SEA - 6, smooth((lk - 0.36) / 0.2));
-    // keep the cabin clearing (Play Alone) dry and level
-    if (alone) {
-      const d = Math.hypot(x - cxW, z - czW);
-      if (d < 22) h = lerp(h, SEA + 3, smooth(1 - d / 22));
-    }
-    hm[x + z * W] = h;
+    const k = x + z * W;
+    land[k] = SEA + 3 + n1.fbm(x / 220, z / 220, 3) * 2.5;
+    const rv = Math.abs(n3.fbm(x / 190, z / 190, 2));   // winding rivers
+    const lk = n4.fbm(x / 95, z / 95, 2);                // lakes
+    let wet = rv < 0.032 || lk > 0.42;
+    if (alone && Math.hypot(x - cxW, z - czW) < 24) wet = false; // dry cabin clearing
+    if (x < 3 || z < 3 || x >= W - 3 || z >= D - 3) wet = false;
+    water[k] = wet ? 1 : 0;
   }
-
-  // soften everything (smooth river banks, no ragged edges)
-  const tmp = new Float32Array(W * D);
+  // smooth the water outline (no one-block inlets or specks)
   for (let pass = 0; pass < 2; pass++) {
-    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-      let sum = 0, n = 0;
-      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
-        const xx = x + dx, zz = z + dz;
-        if (xx < 0 || zz < 0 || xx >= W || zz >= D) continue;
-        sum += hm[xx + zz * W]; n++;
-      }
-      tmp[x + z * W] = sum / n;
+    const copy = water.slice();
+    for (let z = 1; z < D - 1; z++) for (let x = 1; x < W - 1; x++) {
+      const k = x + z * W;
+      let n = 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) n += copy[k + dx + dz * W];
+      water[k] = n >= 5 ? 1 : 0;
     }
-    hm.set(tmp);
   }
+  const distLand = distanceField(W, D, (k) => water[k] === 1); // land: distance to nearest water
+  const distWater = distanceField(W, D, (k) => water[k] === 0); // water: distance to nearest land
 
-  // rare, shallow shell craters (at most ~1 block deep, easy to walk out of)
+  // rare, shallow shell craters on dry ground (about one block deep)
+  const crater = new Uint8Array(W * D);
   const nCraters = Math.floor(W * D / 5000);
   for (let i = 0; i < nCraters; i++) {
     const cx = rnd() * W, cz = rnd() * D, r = 2 + rnd() * 1.8;
-    if (alone && Math.hypot(cx - cxW, cz - czW) < 24) continue;
-    if (hm[Math.floor(cx) + Math.floor(cz) * W] < SEA + 1.5) continue; // not on banks
+    if (alone && Math.hypot(cx - cxW, cz - czW) < 26) continue;
+    const ck = Math.floor(cx) + Math.floor(cz) * W;
+    if (distLand[ck] < 8) continue; // never on the shore
     const R = Math.ceil(r);
     for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
       const x = Math.floor(cx + dx), z = Math.floor(cz + dz);
       if (x < 0 || z < 0 || x >= W || z >= D) continue;
       const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz) / r;
-      if (d < 1) { hm[x + z * W] -= 1.1 * (1 - d * d); crater[x + z * W] = 1; }
+      if (d < 1) { land[x + z * W] -= 1.1 * (1 - d * d); crater[x + z * W] = 1; }
     }
   }
 
-  // integer tops, then limit every step between neighbours to 1 block
-  // (two sweeps of a chamfer pass: no cliffs, pits or walls anywhere)
   const tops = new Int16Array(W * D);
-  for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 12, Math.round(hm[k])));
-  // remove isolated one-block bumps and dips
+  for (let k = 0; k < W * D; k++) {
+    if (water[k]) {
+      // riverbed: 1 block deep at the edge, deepening ~1 block per 2.5 blocks out, max 5
+      tops[k] = SEA - 1 - Math.min(5, Math.ceil(distWater[k] / 2.5));
+    } else {
+      // shore is flush with the water surface, then rises 1 block per ~4 blocks inland
+      const shore = SEA - 1 + (distLand[k] - 1) / 4;
+      tops[k] = Math.round(Math.min(land[k], shore));
+      if (tops[k] < SEA - 1) tops[k] = SEA - 1; // no accidental ponds on land
+    }
+  }
+  // remove isolated one-block bumps and dips on land
   for (let z = 1; z < D - 1; z++) for (let x = 1; x < W - 1; x++) {
     const k = x + z * W;
+    if (water[k]) continue;
     const n = [tops[k - 1], tops[k + 1], tops[k - W], tops[k + W]];
     const mx = Math.max(...n), mn = Math.min(...n);
-    if (tops[k] > mx || tops[k] < mn) tops[k] = n.sort((p, q) => p - q)[1];
+    if (tops[k] > mx || tops[k] < mn) tops[k] = Math.max(SEA - 1, n.sort((p, q) => p - q)[1]);
   }
+  // limit every step between neighbours to 1 block (no cliffs anywhere)
   for (let pass = 0; pass < 2; pass++) {
     for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
       const k = x + z * W;
@@ -90,6 +94,7 @@ export function generate(world) {
       if (z < D - 1) tops[k] = Math.min(tops[k], tops[k + W] + 1);
     }
   }
+  for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 12, tops[k]));
 
   // --- columns -------------------------------------------------------------
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
@@ -100,7 +105,7 @@ export function generate(world) {
     if (top < SEA) surf = B.MUD;
     else if (top <= SEA) surf = (hash2(x, z, seed) < 0.6) ? B.MUD : B.DIRT;
     else if (crater[k] === 1) surf = hash2(x, z, seed + 5) < 0.45 ? B.RUBBLE : B.MUD;
-        else if (sn > 0.55) surf = B.RUBBLE;
+    else if (sn > 0.55) surf = B.RUBBLE;
     else if (sn < -0.5) surf = B.MUD;
     else surf = B.DIRT;
     for (let y = 0; y <= top; y++) {
@@ -156,6 +161,33 @@ export function generate(world) {
   world.tops = tops;
   world.spawn = findLand(world, cxW, czW);
   if (alone) world.sites.push({ type: 'cabin', x: Math.floor(cxW), z: Math.floor(czW), y: tops[Math.floor(cxW) + Math.floor(czW) * W] + 1 });
+}
+
+// Chamfer distance (1 per step, 1.41 diagonally) from every cell to the
+// nearest cell where isSource(k) is true.
+function distanceField(W, D, isSource) {
+  const d = new Float32Array(W * D);
+  for (let k = 0; k < W * D; k++) d[k] = isSource(k) ? 0 : 1e9;
+  const S = Math.SQRT2;
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const k = x + z * W;
+    if (x > 0) d[k] = Math.min(d[k], d[k - 1] + 1);
+    if (z > 0) {
+      d[k] = Math.min(d[k], d[k - W] + 1);
+      if (x > 0) d[k] = Math.min(d[k], d[k - W - 1] + S);
+      if (x < W - 1) d[k] = Math.min(d[k], d[k - W + 1] + S);
+    }
+  }
+  for (let z = D - 1; z >= 0; z--) for (let x = W - 1; x >= 0; x--) {
+    const k = x + z * W;
+    if (x < W - 1) d[k] = Math.min(d[k], d[k + 1] + 1);
+    if (z < D - 1) {
+      d[k] = Math.min(d[k], d[k + W] + 1);
+      if (x < W - 1) d[k] = Math.min(d[k], d[k + W + 1] + S);
+      if (x > 0) d[k] = Math.min(d[k], d[k + W - 1] + S);
+    }
+  }
+  return d;
 }
 
 export function plantTree(world, x, y, z, r) {

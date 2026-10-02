@@ -269,3 +269,24 @@ body:not(.peace) [data-btn=fly] { display: none; }
 .cell em { font-style: normal; color: #b9c48a; }
 .panel.center { text-align: center; }
 .panel p.big { font-family: var(--stencil); font-size: 26px; margin: 10px 0 18px; }
+
+#crosshair.none i { display: none !important; }
+#hitmark.head { filter: drop-shadow(0 0 2px #e05a40) brightness(1.3); }
+.toast.kill { border-left-color: #c9a24a; color: #e8dcb0; }
+/* sniper scope: dark surround, circular lens, fine reticle with range marks */
+#scope { position: absolute; inset: 0; display: none; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, transparent 0 34vmin, rgba(0,0,0,0.6) 34.2vmin, #050504 35vmin); }
+#scope.on { display: block; }
+#scope i { position: absolute; left: 50%; top: 50%; width: 68vmin; height: 68vmin; transform: translate(-50%, -50%);
+  background:
+    linear-gradient(#111, #111) center / 1px 100% no-repeat,
+    linear-gradient(#111, #111) center / 100% 1px no-repeat,
+    repeating-linear-gradient(#111 0 1px, transparent 1px 4vmin) center / 9px 100% no-repeat; border-radius: 50%; opacity: 0.85; }
+#dmgdir { position: absolute; left: 50%; top: 50%; width: 46vmin; height: 46vmin; margin: -23vmin 0 0 -23vmin; border-radius: 50%; opacity: 0;
+  border-top: 6px solid rgba(200, 40, 25, 0.85); filter: blur(1px); }
+#dmgdir.on { animation: flash 1.2s ease-out; }
+#markers { position: absolute; inset: 0; }
+.marker { position: absolute; left: 0; top: 0; margin: -12px 0 0 -18px; padding: 1px 6px; font-family: var(--stencil); font-size: 13px;
+  border: 2px solid currentColor; border-radius: 3px; background: rgba(0,0,0,0.45); white-space: nowrap; }
+.marker.danger { color: #ff8a60; animation: pulse 0.6s infinite alternate; }
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
