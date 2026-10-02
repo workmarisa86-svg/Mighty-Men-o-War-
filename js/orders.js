@@ -9,6 +9,7 @@ import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { FORMATIONS } from './soldiers.js';
 
+const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack'];
 export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'formation'];
 const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', formation: '&#8942;' };
 
@@ -52,9 +53,10 @@ export class OrderWheel {
     return { soldier: hit ? hit.soldier : null, point, fort };
   }
 
-  open() {
+  // short = the phone quick list: Hold, Defend, Spread out, Take cover, Attack
+  open(short = false) {
     if (!this.enabled) return;
-    this.isOpen = true; this.sel = -1; this.vx = this.vy = 0;
+    this.isOpen = true; this.sel = -1; this.vx = this.vy = 0; this.short = short;
     this.at = this.aimInfo();
     this.el.classList.toggle('list', this.game.app.input.touch);
     this.el.hidden = false;
@@ -67,7 +69,7 @@ export class OrderWheel {
     this.eatKeys = false;
     if (!this.enabled) return;
     const g = this.game, E = g.enemies;
-    if (input.hit('KeyQ') || input.thit('squad')) { if (this.isOpen) this.close(); else this.open(); this.eatKeys = true; }
+    if (input.hit('KeyQ')) { if (this.isOpen) this.close(); else this.open(); this.eatKeys = true; }
     if (!this.isOpen) {
       // G: add / remove the aimed soldier to the selected group (G at nothing clears it)
       if (input.hit('KeyG')) {
@@ -129,6 +131,7 @@ export class OrderWheel {
       const label = cmd === 'formation' ? t('ord.formation', { f: t('form.' + (g.settings.formation || 'loose')) }) : t('ord.' + cmd);
       b.innerHTML = `<i>${ICONS[cmd]}</i><span>${label}</span><kbd>${i + 1}</kbd>`;
       b.classList.toggle('on', i === this.sel);
+      b.hidden = !!this.short && !SHORT.includes(cmd);
     });
   }
 }

@@ -23,6 +23,7 @@ import { Forts } from './forts.js';
 import { ScopeView } from './scope.js';
 import { OrderWheel } from './orders.js';
 import { Cabin } from './cabin.js';
+import { ContextBar } from './context.js';
 import { Mission } from './missions.js';
 import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
@@ -141,6 +142,7 @@ export class Game {
     this.autosave = 60;
     this.scopeView = new ScopeView(this);
     this.orders = new OrderWheel(this);
+    this.ctx = new ContextBar(this);
 
     this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
     this.campfires = new Campfires(this);
@@ -263,6 +265,7 @@ export class Game {
     this.updateWeather(dt);
 
     if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
+    this.ctx.update(dt, input, playing);
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
