@@ -51,7 +51,7 @@ class App {
     const q = QUALITY[this.settings.quality] || QUALITY.medium;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     applyI18n();
-    if (this.game) { this.game.settings = this.settings; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
+    if (this.game) { this.game.settings = this.settings; this.game.quality = q; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
   }
 
   resize() {

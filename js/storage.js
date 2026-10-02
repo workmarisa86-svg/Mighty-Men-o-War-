@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS = {
   invertY: false,
   minimap: true,
   minimapSize: 'm',
+  formation: 'loose',
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
 export function saveSettings(s) { save('settings', s); }

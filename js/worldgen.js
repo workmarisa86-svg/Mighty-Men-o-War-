@@ -177,7 +177,11 @@ export function generate(world) {
   // --- spawn ---------------------------------------------------------------
   world.tops = tops;
   world.spawn = startFort ? { x: startFort.cx + 0.5, y: startFort.base, z: startFort.cz + 0.5 } : findLand(world, cxW, czW);
-  if (alone) world.sites.push({ type: 'cabin', x: Math.floor(cxW), z: Math.floor(czW), y: tops[Math.floor(cxW) + Math.floor(czW) * W] + 1 });
+  if (alone) {
+    const c = buildCabin(world, Math.floor(world.spawn.x), Math.floor(world.spawn.y), Math.floor(world.spawn.z));
+    world.sites.push({ type: 'cabin', x: c.x, z: c.z, y: c.y });
+    world.spawn = { x: c.x + 0.5, y: c.y, z: c.z + 0.5 };
+  }
 }
 
 // Chamfer distance (1 per step, 1.41 diagonally) from every cell to the
@@ -252,4 +256,35 @@ export function findLand(world, cx, cz) {
     }
   }
   return { x: cx, y: 40, z: cz };
+}
+
+// Play Alone: a small log cabin (indestructible) where the player starts.
+// Door on the +Z side, a window in each other wall, plank floor and roof.
+function buildCabin(world, cx, by, cz) {
+  const R = 3;
+  const put = (x, y, z, id, lock = true) => {
+    if (!world.inside(x, y, z)) return;
+    const i = world.idx(x, y, z);
+    world.data[i] = id; world.locked[i] = lock && id !== B.AIR ? 1 : 0;
+  };
+  for (let dz = -R - 1; dz <= R + 1; dz++) for (let dx = -R - 1; dx <= R + 1; dx++) {
+    const x = cx + dx, z = cz + dz;
+    // solid ground under the cabin and its porch, open air above
+    for (let y = by - 1; y > by - 6; y--) { if (world.get(x, y, z) === B.AIR || world.get(x, y, z) === B.WATER) put(x, y, z, B.DIRT, false); }
+    for (let y = by; y <= by + 6; y++) put(x, y, z, B.AIR);
+    const inside = Math.abs(dx) <= R && Math.abs(dz) <= R;
+    put(x, by - 1, z, inside ? B.WOOD : B.DIRT, inside);
+    if (!inside) continue;
+    const wall = Math.abs(dx) === R || Math.abs(dz) === R;
+    if (wall) for (let y = by; y <= by + 2; y++) put(x, y, z, B.LOG);
+    put(x, by + 3, z, B.WOOD);                                     // roof
+    if (Math.abs(dx) <= R - 1 && Math.abs(dz) <= 1) put(x, by + 4, z, B.WOOD); // ridge
+  }
+  put(cx, by, cz + R, B.AIR); put(cx, by + 1, cz + R, B.AIR);       // door
+  put(cx - R, by + 1, cz, B.AIR); put(cx + R, by + 1, cz, B.AIR); put(cx, by + 1, cz - R, B.AIR); // windows
+  for (let dz = -R - 1; dz <= R + 1; dz++) for (let dx = -R - 1; dx <= R + 1; dx++) {
+    const k = cx + dx + (cz + dz) * world.W;
+    if (world.tops && k >= 0 && k < world.tops.length) world.tops[k] = Math.max(world.tops[k], by + (Math.abs(dx) <= R && Math.abs(dz) <= R ? 4 : -1));
+  }
+  return { x: cx, y: by, z: cz };
 }

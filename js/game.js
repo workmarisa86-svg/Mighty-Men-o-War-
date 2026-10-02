@@ -21,6 +21,8 @@ import { Enemies } from './soldiers.js';
 import { Flashlight } from './flashlight.js';
 import { Forts } from './forts.js';
 import { ScopeView } from './scope.js';
+import { OrderWheel } from './orders.js';
+import { setCharacterQuality } from './characters.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
@@ -41,6 +43,7 @@ export class Game {
     document.body.classList.toggle('allies', this.cfg.sub === 'allies' && !this.peace);
     this.settings = app.settings;
     this.quality = QUALITY[this.settings.quality] || QUALITY.medium;
+    setCharacterQuality(this.settings.quality);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.05, 400);
@@ -134,6 +137,7 @@ export class Game {
     this.paused = true;
     this.autosave = 60;
     this.scopeView = new ScopeView(this);
+    this.orders = new OrderWheel(this);
 
     this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
     this.campfires = new Campfires(this);
@@ -251,6 +255,7 @@ export class Game {
     this.time += dt / DAY_SECONDS;
     this.updateWeather(dt);
 
+    if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -365,7 +370,7 @@ export class Game {
 
   handleKeys(input) {
     const inv = this.inv;
-    for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
+    if (!this.orders.eatKeys) for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
     if (input.mouse.wheel) { inv.sel = (inv.sel + (input.mouse.wheel > 0 ? 1 : 8)) % 9; this.hud.dirtyHotbar = true; }
     if (input.hit('KeyF') || input.thit('light')) {
       this.lightOn = !this.lightOn; sfx.toggle();
@@ -378,12 +383,6 @@ export class Game {
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
-    if ((input.hit('KeyQ') || input.thit('squad')) && this.cfg.sub === 'allies' && !this.peace) {
-      const { eye, dir } = this.aim();
-      const block = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 40, false, 'bullet');
-      const hit = this.enemies.raycast(eye, dir, block ? block.dist : 40, 'ally');
-      this.app.openPanel('orders', { soldier: hit ? hit.soldier : null });
-    }
   }
 
   // ------------------------------------------------------------ dig & place
