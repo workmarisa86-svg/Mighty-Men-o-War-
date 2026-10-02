@@ -76,6 +76,13 @@ const BUILD = {
   },
   meat_raw() { const g = new THREE.Group(); const s = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.meat); s.scale.set(1.3, 0.7, 1); g.add(s); g.add(bx(0.02, 0.02, 0.1, M.bone, 0.08, 0, -0.04)); return g; },
   meat_cooked() { const g = BUILD.meat_raw(); g.children[0].material = M.cooked; return g; },
+  grenade() {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), M.olive); b.scale.y = 1.25; g.add(b);
+    g.add(bx(0.03, 0.035, 0.03, M.steel, 0, 0.075, 0)); g.add(bx(0.012, 0.012, 0.07, M.steel, 0.02, 0.07, 0.03));
+    return g;
+  },
+  smoke() { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.14, 10), M.kit); g.add(c); g.add(bx(0.081, 0.03, 0.081, M.cross, 0, 0.02, 0)); return g; },
   medkit() { const g = new THREE.Group(); g.add(bx(0.16, 0.1, 0.12, M.kit)); g.add(bx(0.06, 0.101, 0.02, M.cross, 0, 0, -0.061)); g.add(bx(0.02, 0.101, 0.06, M.cross, 0, 0, -0.061)); return g; },
 };
 

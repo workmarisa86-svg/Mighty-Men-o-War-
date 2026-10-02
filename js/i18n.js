@@ -76,7 +76,11 @@ const STR = {
     'item.grenade': 'Grenade', 'item.smoke': 'Smoke grenade', 'item.sandbag': 'Sandbags', 'item.wire': 'Barbed wire',
     'item.watchtower': 'Watchtower', 'item.meat_raw': 'Raw meat', 'item.meat_cooked': 'Cooked meat', 'item.medkit': 'Medkit',
     'item.helmet': 'Steel helmet', 'item.vest': 'Armor vest',
-    'help.keys': 'WASD move · Shift run · C crouch · Space jump/swim · Left click dig / attack · Right click place / use · 1-9 hotbar · E campfire · F flashlight · Z binoculars · I inventory · K craft · Esc pause',
+    'hud.grenadeWarn': 'Grenade! Move!', 'hud.tntWarn': 'Enemy TNT planted nearby! Run, shoot it, or touch it to defuse.',
+    'hud.tntLit': 'TNT lit! Get clear!', 'hud.defused': 'TNT defused', 'hud.tankSpotted': 'Enemy tank spotted in the area!',
+    'hud.tankDestroyed': 'Enemy tank destroyed!', 'hud.enemyDown': 'Enemy down',
+    'hint.defusing': 'Defusing… stay close', 'hint.scope': 'Right-click: scope on/off', 'hint.throw': 'Left-click to throw',
+    'help.keys': 'WASD move · Shift run · C crouch · Space jump/swim · Left click dig / attack · Right click place / use / scope · 1-9 hotbar · E campfire · F flashlight · Z binoculars · I inventory · K craft · Esc pause',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -154,7 +158,11 @@ const STR = {
     'item.grenade': 'Granada', 'item.smoke': 'Granada de humo', 'item.sandbag': 'Sacos terreros', 'item.wire': 'Alambre de espino',
     'item.watchtower': 'Torre de vigía', 'item.meat_raw': 'Carne cruda', 'item.meat_cooked': 'Carne cocinada', 'item.medkit': 'Botiquín',
     'item.helmet': 'Casco de acero', 'item.vest': 'Chaleco protector',
-    'help.keys': 'WASD move · Shift run · C crouch · Space jump/swim · Left click dig / attack · Right click place / use · 1-9 hotbar · E campfire · F flashlight · Z binoculars · I inventory · K craft · Esc pause',
+    'hud.grenadeWarn': '¡Granada! ¡Muévete!', 'hud.tntWarn': '¡TNT enemigo colocado cerca! Huye, dispárale o tócalo para desactivarlo.',
+    'hud.tntLit': '¡TNT encendido! ¡Aléjate!', 'hud.defused': 'TNT desactivado', 'hud.tankSpotted': '¡Tanque enemigo avistado en la zona!',
+    'hud.tankDestroyed': '¡Tanque enemigo destruido!', 'hud.enemyDown': 'Enemigo abatido',
+    'hint.defusing': 'Desactivando… no te alejes', 'hint.scope': 'Clic derecho: mira telescópica sí/no', 'hint.throw': 'Clic izquierdo para lanzar',
+    'help.keys': 'WASD moverse · Mayús correr · C agacharse · Espacio saltar/nadar · Clic izq. cavar / atacar · Clic der. colocar / usar / mira · 1-9 barra · E hoguera · F linterna · Z prismáticos · I inventario · K fabricar · Esc pausa',
   },
 };
 

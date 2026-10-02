@@ -65,7 +65,9 @@ export class World {
   }
 
   // Voxel traversal (Amanatides & Woo). Returns hit block and the face normal.
-  raycast(ox, oy, oz, dx, dy, dz, maxDist, hitWater = false) {
+  // mode 'dig': any block; 'bullet': solid blocks only (leaves, wire, fires are
+  // shot through); 'sight': solid blocks and leaves (foliage hides you).
+  raycast(ox, oy, oz, dx, dy, dz, maxDist, hitWater = false, mode = 'dig') {
     let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
     const sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
     const tdx = dx !== 0 ? Math.abs(1 / dx) : Infinity;
@@ -78,7 +80,12 @@ export class World {
     const startWater = this.get(x, y, z) === B.WATER;
     while (t <= maxDist) {
       const id = this.get(x, y, z);
-      if (id !== B.AIR && (id !== B.WATER || (hitWater && !startWater))) {
+      const isWater = id === B.WATER;
+      const blocks = isWater ? (hitWater && !startWater)
+        : mode === 'dig' ? id !== B.AIR
+          : mode === 'bullet' ? SOLID[id] === 1
+            : (SOLID[id] === 1 || id === B.LEAVES);
+      if (blocks) {
         return { x, y, z, id, nx, ny, nz, dist: t };
       }
       if (tmx < tmy && tmx < tmz) { x += sx; t = tmx; tmx += tdx; nx = -sx; ny = 0; nz = 0; }

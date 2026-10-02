@@ -18,7 +18,7 @@ Then open `http://localhost:8080/`.
 
 1. **World, movement, digging, building, water, rafts, bridges, saving** (done)
 2. **Animals, hunting, food, hunger, campfires, crafting** (done)
-3. Weapons, aiming, scope, TNT, enemies, looting
+3. **Weapons, aiming, scope, TNT, enemies, looting** (done)
 4. Forts, capturing, surrender, allies, commands, callouts
 5. Play Alone cabin, Peace mode extras, war map, statistics, manual, PWA
 
@@ -39,7 +39,9 @@ Then open `http://localhost:8080/`.
 | `js/player.js` | Walking, running, crouching, jumping, swimming, climbing, flying |
 | `js/sky.js` | Day/night cycle and rain |
 | `js/animals.js` | Herds and flocks, stealth detection, fleeing, respawning |
-| `js/weapons.js`, `js/viewmodel.js` | Knife and guns, tracers, the item held in hand |
+| `js/weapons.js`, `js/viewmodel.js` | Knife, guns, grenades, sniper scope, the item held in hand |
+| `js/soldiers.js` | Enemy soldiers (squads, senses, combat, looting, crafting) and the tank boss |
+| `js/explosives.js` | TNT, grenades, smoke, shells, blasts that spare built-in structures |
 | `js/campfire.js`, `js/pickups.js` | Campfires (crafting, cooking, light) and items on the ground |
 | `js/textures.js`, `js/items.js` | Procedural textures and icons |
 | `js/audio.js` | Synthesized sound effects |

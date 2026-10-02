@@ -16,7 +16,7 @@ export function initAudio() {
 export function setVolume(v) { volume = v; if (master) master.gain.value = v; }
 
 function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 0.005, freqEnd = null, delay = 0 } = {}) {
-  if (!ctx) return;
+  if (!ctx || !(gain > 0.0005)) return;
   const t = ctx.currentTime + delay;
   const src = ctx.createBufferSource(); src.buffer = noiseBuf;
   src.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -24,19 +24,19 @@ function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 
   if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(f); f.connect(g); g.connect(master);
   src.start(t, Math.random()); src.stop(t + dur + 0.05);
 }
 function tone(freq, dur, { type = 'sine', gain = 0.3, freqEnd = null, delay = 0, attack = 0.005 } = {}) {
-  if (!ctx) return;
+  if (!ctx || !(gain > 0.0005)) return;
   const t = ctx.currentTime + delay;
   const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
   if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
 }
@@ -90,6 +90,21 @@ export const sfx = {
   crackle(vol = 1) { noise(0.03, { type: 'highpass', freq: 2500, gain: 0.08 * vol }); },
   heal() { tone(440, 0.15, { type: 'triangle', gain: 0.08 }); tone(660, 0.25, { type: 'triangle', gain: 0.08, delay: 0.12 }); },
   warn() { tone(330, 0.25, { type: 'square', gain: 0.05 }); tone(262, 0.35, { type: 'square', gain: 0.05, delay: 0.25 }); },
+  explosion(vol = 1, big = true) {
+    if (vol <= 0.01) return;
+    noise(big ? 2.2 : 1.2, { freq: 900, gain: 0.9 * vol, freqEnd: 50, attack: 0.005 });
+    noise(0.12, { type: 'highpass', freq: 1500, gain: 0.5 * vol });
+    tone(big ? 48 : 70, big ? 1.4 : 0.8, { type: 'sine', gain: 0.7 * vol, freqEnd: 28 });
+  },
+  bounce(vol = 1) { tone(320 + Math.random() * 120, 0.06, { type: 'triangle', gain: 0.12 * vol, freqEnd: 200 }); },
+  hiss(vol = 1) { noise(0.25, { type: 'highpass', freq: 4000, gain: 0.07 * vol }); },
+  smoke(vol = 1) { noise(2.0, { type: 'bandpass', freq: 1800, gain: 0.12 * vol, attack: 0.2, q: 0.6 }); },
+  defuse() { tone(900, 0.05, { type: 'square', gain: 0.08 }); tone(600, 0.08, { type: 'square', gain: 0.06, delay: 0.08 }); },
+  scope() { tone(1200, 0.03, { type: 'square', gain: 0.04 }); noise(0.05, { type: 'highpass', freq: 3000, gain: 0.05 }); },
+  whistle(vol = 1) { tone(1400, 0.6, { type: 'sine', gain: 0.05 * vol, freqEnd: 500 }); },
+  cannon(vol = 1) { noise(0.9, { freq: 600, gain: 0.8 * vol, freqEnd: 40 }); tone(45, 0.8, { type: 'sine', gain: 0.6 * vol, freqEnd: 25 }); },
+  engine(vol = 1) { tone(38 + Math.random() * 6, 0.5, { type: 'sawtooth', gain: 0.05 * vol, attack: 0.1 }); },
+  thump() { tone(90, 0.12, { type: 'sine', gain: 0.25, freqEnd: 50 }); },
   thunder() { noise(2.5, { freq: 300, gain: 0.5, freqEnd: 60, attack: 0.2 }); },
 };
 

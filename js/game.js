@@ -16,6 +16,8 @@ import { Pickups } from './pickups.js';
 import { Campfires } from './campfire.js';
 import { ViewModel } from './viewmodel.js';
 import { Combat, WEAPONS } from './weapons.js';
+import { Explosives } from './explosives.js';
+import { Enemies } from './soldiers.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
@@ -116,6 +118,10 @@ export class Game {
     this.animals = new Animals(this);
     this.vm = new ViewModel();
     this.combat = new Combat(this);
+    this.explosives = new Explosives(this);
+    this.enemies = new Enemies(this);
+    this.shake = 0;
+    this.tntWarnT = 0;
     this.use = { item: null, t: 0 };
     this.hungerStage = this.player.hunger <= 0 ? 2 : this.player.hunger < 20 ? 1 : 0;
 
@@ -226,7 +232,7 @@ export class Game {
 
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
     const env = { rain: this.peace ? 0 : this.weather.rain, speedMul: inWire ? 0.4 : 1 };
-    const res = p.update(dt, this.world, this.rafts, it, env);
+    const res = p.update(dt, this.world, this.obstacles(), it, env);
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
     // breath underwater
@@ -243,15 +249,25 @@ export class Game {
 
     for (const r of this.rafts) r.update(dt);
     this.particles.update(dt);
-    if (!this.paused) { this.animals.update(dt); this.pickups.update(dt); }
+    if (!this.paused) {
+      this.animals.update(dt); this.pickups.update(dt);
+      this.enemies.update(dt); this.explosives.update(dt);
+      this.updateDefuse(dt);
+    }
     this.campfires.update(dt);
 
     // camera
     const eye = p.eye(this.tmpV);
     this.camera.position.copy(eye);
-    if (p.raft) this.camera.position.y += Math.sin(p.raft.t * 1.3) * 0.03;
+    if (p.raft instanceof Raft) this.camera.position.y += Math.sin(p.raft.t * 1.3) * 0.03;
     this.camera.rotation.set(p.pitch, p.yaw, 0);
-    const targetFov = this.zoom ? 16 : (p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
+    if (this.shake > 0) {
+      this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.3;
+      this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.3;
+      this.shake = Math.max(0, this.shake - dt * 2);
+    }
+    const scoped = this.combat.scoped;
+    const targetFov = scoped ? 12 : this.zoom ? 16 : (p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
@@ -262,7 +278,7 @@ export class Game {
     this.flashlight.intensity = this.lightOn ? 14 : 0;
 
     this.updateChunks(dt);
-    this.vm.set(this.selected());
+    this.vm.set(scoped ? null : this.selected());
     this.vm.update(dt, {
       moving: p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5, sprint: p.running,
       light: Math.min(1, this.sky.daylight + (this.lightOn ? 0.35 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
@@ -289,7 +305,7 @@ export class Game {
   }
 
   handleLook(input) {
-    const s = this.settings.sensitivity * (this.zoom ? 0.25 : 1) * 0.0022;
+    const s = this.settings.sensitivity * (this.zoom || this.combat.scoped ? 0.22 : 1) * 0.0022;
     const p = this.player;
     p.yaw -= input.mouse.dx * s;
     p.pitch -= input.mouse.dy * s * (this.settings.invertY ? -1 : 1);
@@ -472,7 +488,7 @@ export class Game {
     const item = this.selected();
     if (!item) return;
     const def = ITEMS[item];
-    if (def.weapon || def.food || def.heal) return;  // handled by combat / handleUse
+    if (def.weapon || def.throwable || def.food || def.heal) return;  // handled by combat / handleUse
     const { eye, dir } = this.aim();
     if (item === 'flint') { this.useFlint(eye, dir); return; }
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
@@ -508,6 +524,12 @@ export class Game {
   // Flint and steel: light a campfire from 3 wood (firewood) on solid ground.
   useFlint(eye, dir) {
     const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+    // light a TNT crate: instant, but you have to be right next to it
+    if (hit && hit.id === B.TNT) {
+      this.explosives.igniteTNT(hit.x, hit.y, hit.z, 4, 'player');
+      this.vm.doSwing(); this.hud.toast(t('hud.tntLit'), 'warn');
+      return;
+    }
     if (!hit || hit.ny !== 1) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
     const x = hit.x, y = hit.y + 1, z = hit.z;
     if (this.world.get(x, y, z) !== B.AIR || hit.id === B.WATER || hit.id === B.WIRE) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
@@ -583,6 +605,40 @@ export class Game {
     }
   }
 
+  // Solid things the player collides with besides blocks.
+  obstacles() {
+    const tank = this.enemies && this.enemies.tank;
+    return tank ? [...this.rafts, tank] : this.rafts;
+  }
+
+  // Lit TNT: approaching it is risky; touching it (staying next to it)
+  // pulls the wires and defuses it.
+  updateDefuse(dt) {
+    const p = this.player.pos;
+    this.defusing = null;
+    for (const l of this.explosives.lit.values()) {
+      if (l.owner === 'chain' || l.owner === 'shot') continue;
+      const d = Math.hypot(l.x + 0.5 - p.x, l.z + 0.5 - p.z);
+      if (Math.abs(l.y - p.y) > 2.5) continue;
+      if (d < 5 && !l.rolled) { l.rolled = true; if (l.owner === 'enemy' && Math.random() < 0.15) l.t = Math.min(l.t, 0.35); }
+      if (d < 1.6) {
+        l.defuse += dt;
+        this.defusing = l;
+        if (l.defuse >= 1.3) {
+          this.explosives.unlight(this.world.idx(l.x, l.y, l.z));
+          sfx.defuse(); this.hud.toast(t('hud.defused'));
+        }
+        break;
+      } else l.defuse = 0;
+    }
+    this.hud.defuseProgress = this.defusing ? this.defusing.defuse / 1.3 : 0;
+  }
+  onEnemyTNT(x, y, z) {
+    if (Math.hypot(x - this.player.pos.x, z - this.player.pos.z) < 40) {
+      this.hud.toast(t('hud.tntWarn'), 'warn'); sfx.warn();
+    }
+  }
+
   // ------------------------------------------------------------------ crafting
   // Crafting needs a lit campfire nearby (Peace mode: anywhere).
   craftFire() { return this.peace ? true : this.campfires.near(this.player.pos); }
@@ -617,10 +673,14 @@ export class Game {
     }
   }
 
-  damage(n, cause = 'hurt') {
-    if (this.peace || this.dead) return;
+  damage(n, cause = 'hurt', from = null) {
+    if (this.peace || this.dead || n <= 0) return;
     this.player.health = Math.max(0, this.player.health - n * (1 - this.armor()));
     this.hud.flash();
+    if (from) {
+      const ang = Math.atan2(-(from.x - this.player.pos.x), -(from.z - this.player.pos.z)) - this.player.yaw;
+      this.hud.damageFrom(ang);
+    }
     sfx.hurt();
     if (this.player.health <= 0) this.die(cause);
   }
@@ -644,6 +704,8 @@ export class Game {
     const s = this.world.spawn;
     this.player.pos.set(s.x, s.y, s.z); this.player.vel.set(0, 0, 0);
     this.player.health = 100; this.breath = 15;
+    this.combat.scoped = false;
+    this.enemies.playerDied();
     this.craft = null;
     this.hud.dirtyHotbar = true;
     this.hud.bigMessage(t(cause === 'starve' ? 'hud.diedStarve' : 'hud.died'),
@@ -672,6 +734,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
+    this.explosives.dispose(); this.enemies.dispose();
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

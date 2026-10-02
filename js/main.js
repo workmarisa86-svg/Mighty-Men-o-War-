@@ -149,15 +149,19 @@ class App {
   loop(now) {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    if (this.game) {
-      if (this.input.thit('pause') && !this.game.paused) this.pause();
-      this.game.update(dt);
-      if (this.game) this.game.render(this.renderer); // the run may have just ended
-    } else {
-      this.renderer.clear();
+    requestAnimationFrame((t) => this.loop(t));
+    try {
+      if (this.game) {
+        if (this.input.thit('pause') && !this.game.paused) this.pause();
+        this.game.update(dt);
+        if (this.game) this.game.render(this.renderer); // the run may have just ended
+      } else {
+        this.renderer.clear();
+      }
+    } catch (e) {
+      console.error(e); // keep the game running; log the problem
     }
     this.input.endFrame();
-    requestAnimationFrame((t) => this.loop(t));
   }
 }
 
