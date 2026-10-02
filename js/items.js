@@ -1,58 +1,169 @@
-// Item definitions and their (procedurally drawn) icons.
+// Item definitions, field recipes and (procedurally drawn) item icons.
 import { B } from './blocks.js';
 import { buildAtlas, cubeIcon } from './textures.js';
 
 export const ITEMS = {
   shovel: { tool: 'shovel' },
+  flint: { tool: 'flint' },
+  knife: { weapon: true }, pistol: { weapon: true }, rifle: { weapon: true },
+  sniper: { weapon: true }, smg: { weapon: true },
+  grenade: { throwable: true }, smoke: { throwable: true },
   dirt: { block: B.DIRT, tiles: ['dirt_top', 'dirt'] },
   wood: { block: B.WOOD, tiles: ['planks', 'planks'] },
   stone: { block: B.STONE, tiles: ['stone', 'stone'] },
   iron: { block: B.IRON, tiles: ['iron', 'iron'] },
   tnt: { block: B.TNT, tiles: ['tnt_top', 'tnt_side'] },
+  sandbag: { block: B.SANDBAG, tiles: ['sandbag_top', 'sandbag'] },
+  wire: { block: B.WIRE, flat: 'wire' },
   raft: { place: 'raft' },
+  watchtower: { place: 'watchtower' },
+  meat_raw: { food: 15 },
+  meat_cooked: { food: 45 },
+  medkit: { heal: 50 },
+  helmet: { armor: 0.15 },
+  vest: { armor: 0.25 },
   // standard gear (always carried in War mode, not on the hotbar)
-  flashlight: { gear: true }, flint: { gear: true }, compass: { gear: true }, binoculars: { gear: true },
+  flashlight: { gear: true }, compass: { gear: true }, binoculars: { gear: true },
 };
-export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt'];
+export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
+// Peace mode never runs out of these
+export const UNLIMITED = [...MATERIALS, 'raft', 'watchtower'];
+export const WEAPON_IDS = ['knife', 'pistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
 
-// Field recipes. Stage 2 moves crafting to campfires and adds many more.
+// Crafting happens at a campfire. Weapon times rise 2 s per level of
+// destructive power, and stronger weapons cost more iron.
+export const RECIPE_CATS = ['weapons', 'defense', 'gear', 'transport', 'food'];
 export const RECIPES = [
-  { id: 'raft', needs: { wood: 6 }, time: 7 },
+  { id: 'knife', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 5 },
+  { id: 'pistol', cat: 'weapons', needs: { iron: 2, wood: 1 }, time: 7 },
+  { id: 'rifle', cat: 'weapons', needs: { iron: 3, wood: 2 }, time: 9 },
+  { id: 'sniper', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 11 },
+  { id: 'smg', cat: 'weapons', needs: { iron: 5, wood: 1 }, time: 13 },
+  { id: 'grenade', cat: 'weapons', needs: { iron: 2 }, time: 15, later: true },
+  { id: 'smoke', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 15, later: true },
+  { id: 'tnt', cat: 'weapons', needs: { iron: 2, wood: 2, dirt: 2 }, time: 17 },
+  { id: 'sandbag', cat: 'defense', needs: { dirt: 3 }, time: 3, out: 2 },
+  { id: 'wire', cat: 'defense', needs: { iron: 1 }, time: 4, out: 3 },
+  { id: 'watchtower', cat: 'defense', needs: { wood: 16 }, time: 12 },
+  { id: 'helmet', cat: 'gear', needs: { iron: 3 }, time: 8 },
+  { id: 'vest', cat: 'gear', needs: { iron: 5 }, time: 10 },
+  { id: 'medkit', cat: 'gear', needs: { iron: 1, wood: 1 }, time: 6 },
+  { id: 'raft', cat: 'transport', needs: { wood: 6 }, time: 7 },
+  { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
 ];
 
 const ICON_DRAW = {
   shovel(c) {
     c.strokeStyle = '#2b2118'; c.lineWidth = 2;
-    c.fillStyle = '#7a5b3a'; // handle
+    c.fillStyle = '#7a5b3a';
     c.save(); c.translate(24, 24); c.rotate(-Math.PI / 4);
     c.fillRect(-2, -20, 4, 24); c.strokeRect(-2, -20, 4, 24);
     c.beginPath(); c.arc(0, -21, 4, Math.PI, 0); c.stroke();
-    c.fillStyle = '#5f6650'; // olive steel blade
+    c.fillStyle = '#5f6650';
     c.beginPath(); c.moveTo(-7, 4); c.lineTo(7, 4); c.lineTo(6, 16); c.lineTo(0, 21); c.lineTo(-6, 16); c.closePath();
     c.fill(); c.stroke();
     c.fillStyle = '#8b917c'; c.fillRect(-5, 6, 2, 9);
     c.restore();
   },
+  knife(c) {
+    c.save(); c.translate(24, 24); c.rotate(-Math.PI / 4);
+    c.fillStyle = '#3d2f22'; c.fillRect(-3, 4, 6, 14);
+    c.fillStyle = '#5a5a52'; c.fillRect(-6, 2, 12, 3);
+    c.fillStyle = '#b9bcb4'; c.beginPath(); c.moveTo(-3, 2); c.lineTo(3, 2); c.lineTo(2, -18); c.lineTo(-1, -21); c.lineTo(-3, -16); c.fill();
+    c.fillStyle = '#e2e4dc'; c.fillRect(-1, -14, 1, 14);
+    c.restore();
+  },
+  pistol(c) {
+    c.fillStyle = '#2e302a'; c.fillRect(8, 16, 30, 8);
+    c.fillStyle = '#3c3e36'; c.fillRect(8, 14, 30, 3);
+    c.fillStyle = '#5a4430'; c.beginPath(); c.moveTo(12, 24); c.lineTo(20, 24); c.lineTo(18, 38); c.lineTo(10, 38); c.fill();
+    c.strokeStyle = '#2e302a'; c.lineWidth = 2; c.beginPath(); c.arc(22, 26, 3, 0, Math.PI); c.stroke();
+  },
+  rifle(c) {
+    c.fillStyle = '#6a4a2e'; c.beginPath(); c.moveTo(2, 28); c.lineTo(14, 24); c.lineTo(30, 24); c.lineTo(30, 28); c.lineTo(10, 34); c.fill();
+    c.fillStyle = '#2c2e28'; c.fillRect(14, 21, 30, 3); c.fillRect(20, 24, 6, 3);
+    c.fillStyle = '#b9bcb4'; c.fillRect(38, 19, 9, 2); // bayonet
+  },
+  sniper(c) {
+    ICON_DRAW.rifle(c);
+    c.fillStyle = '#20221e'; c.fillRect(18, 14, 14, 5); c.fillRect(16, 15, 3, 3); c.fillRect(31, 15, 3, 3);
+    c.fillStyle = '#6a8a9a'; c.fillRect(32, 15, 1, 3);
+    c.clearRect(38, 18, 10, 4);
+  },
+  smg(c) {
+    c.fillStyle = '#2c2e28'; c.fillRect(8, 18, 32, 7); c.fillRect(38, 20, 8, 2);
+    c.fillStyle = '#1e201c'; c.fillRect(22, 25, 4, 14);
+    c.fillStyle = '#4a3a2a'; c.fillRect(12, 25, 6, 9);
+    c.strokeStyle = '#2c2e28'; c.lineWidth = 2; c.strokeRect(2, 19, 7, 6);
+  },
+  grenade(c) {
+    c.fillStyle = '#4c5338'; c.beginPath(); c.ellipse(24, 28, 10, 13, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#30351f'; c.lineWidth = 1;
+    for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(14, 28 + i * 5); c.lineTo(34, 28 + i * 5); c.stroke(); }
+    c.fillStyle = '#6a6c64'; c.fillRect(20, 12, 8, 5); c.fillRect(27, 13, 8, 2);
+    c.strokeStyle = '#8a8c84'; c.beginPath(); c.arc(16, 13, 4, 0, Math.PI * 2); c.stroke();
+  },
+  smoke(c) {
+    c.fillStyle = '#6a6e66'; c.fillRect(16, 14, 16, 26);
+    c.fillStyle = '#b9b29a'; c.fillRect(16, 22, 16, 6);
+    c.fillStyle = '#4a4e46'; c.fillRect(18, 9, 12, 5);
+    c.fillStyle = 'rgba(200,200,190,0.6)'; c.beginPath(); c.arc(30, 8, 5, 0, Math.PI * 2); c.arc(37, 5, 4, 0, Math.PI * 2); c.fill();
+  },
+  flint(c) {
+    c.fillStyle = '#4a4a50'; c.beginPath(); c.moveTo(8, 30); c.lineTo(20, 14); c.lineTo(28, 22); c.lineTo(18, 36); c.closePath(); c.fill();
+    c.strokeStyle = '#8a8f94'; c.lineWidth = 4; c.beginPath(); c.arc(32, 26, 9, 0.3, Math.PI * 1.7); c.stroke();
+    c.fillStyle = '#f0b040'; c.fillRect(24, 12, 2, 2); c.fillRect(27, 9, 2, 2); c.fillRect(22, 8, 2, 2);
+  },
   raft(c) {
     for (let i = 0; i < 5; i++) {
       const y = 12 + i * 6;
-      c.fillStyle = i % 2 ? '#6b5236' : '#5c452e';
-      c.fillRect(6, y, 36, 5);
+      c.fillStyle = i % 2 ? '#6b5236' : '#5c452e'; c.fillRect(6, y, 36, 5);
       c.fillStyle = '#3b2c1f'; c.fillRect(6, y + 4, 36, 1);
       c.fillStyle = '#8a6c48'; c.fillRect(5, y, 2, 5); c.fillRect(41, y, 2, 5);
     }
-    c.fillStyle = '#b8a27a'; c.fillRect(12, 10, 3, 32); c.fillRect(33, 10, 3, 32); // rope lashing
+    c.fillStyle = '#b8a27a'; c.fillRect(12, 10, 3, 32); c.fillRect(33, 10, 3, 32);
+  },
+  watchtower(c) {
+    c.fillStyle = '#5c452e';
+    c.fillRect(10, 18, 4, 26); c.fillRect(34, 18, 4, 26);
+    c.strokeStyle = '#6b5236'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(12, 44); c.lineTo(36, 22); c.moveTo(36, 44); c.lineTo(12, 22); c.stroke();
+    c.fillStyle = '#7a5f40'; c.fillRect(6, 14, 36, 5);
+    c.fillStyle = '#6b5236'; c.fillRect(6, 6, 3, 9); c.fillRect(39, 6, 3, 9); c.fillRect(6, 6, 36, 2);
+  },
+  meat_raw(c) {
+    c.fillStyle = '#7c2a24'; c.beginPath(); c.ellipse(22, 26, 14, 10, -0.4, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#a14a3c'; c.beginPath(); c.ellipse(20, 24, 8, 5, -0.4, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#e6dcc4'; c.fillRect(32, 14, 10, 4); c.beginPath(); c.arc(42, 14, 3, 0, Math.PI * 2); c.arc(42, 18, 3, 0, Math.PI * 2); c.fill();
+  },
+  meat_cooked(c) {
+    c.fillStyle = '#5a3a20'; c.beginPath(); c.ellipse(22, 26, 14, 10, -0.4, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#8a5a30'; c.beginPath(); c.ellipse(20, 24, 8, 5, -0.4, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#2e1c10'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(12 + i * 7, 32); c.lineTo(18 + i * 7, 18); c.stroke(); }
+    c.fillStyle = '#e6dcc4'; c.fillRect(32, 14, 10, 4); c.beginPath(); c.arc(42, 14, 3, 0, Math.PI * 2); c.arc(42, 18, 3, 0, Math.PI * 2); c.fill();
+  },
+  medkit(c) {
+    c.fillStyle = '#5a5e44'; c.fillRect(8, 14, 32, 24);
+    c.fillStyle = '#3e4230'; c.fillRect(18, 10, 12, 5);
+    c.fillStyle = '#d8d0b4'; c.fillRect(20, 20, 8, 12); c.fillRect(16, 24, 16, 4);
+  },
+  helmet(c) {
+    c.fillStyle = '#4e5538'; c.beginPath(); c.arc(24, 30, 16, Math.PI, 0); c.fill();
+    c.fillRect(4, 29, 40, 4);
+    c.fillStyle = '#626a48'; c.beginPath(); c.arc(20, 24, 6, Math.PI, 0); c.fill();
+    c.fillStyle = '#3a2e22'; c.fillRect(14, 33, 3, 7); c.fillRect(31, 33, 3, 7);
+  },
+  vest(c) {
+    c.fillStyle = '#4e5538'; c.beginPath(); c.moveTo(10, 10); c.lineTo(18, 10); c.lineTo(24, 16); c.lineTo(30, 10); c.lineTo(38, 10);
+    c.lineTo(40, 42); c.lineTo(8, 42); c.closePath(); c.fill();
+    c.fillStyle = '#3c422a'; c.fillRect(12, 26, 8, 8); c.fillRect(28, 26, 8, 8);
+    c.fillStyle = '#626a48'; c.fillRect(23, 18, 2, 24);
   },
   flashlight(c) {
     c.fillStyle = '#4b5240'; c.fillRect(10, 18, 22, 12);
     c.fillStyle = '#6a705c'; c.fillRect(30, 15, 8, 18);
     c.fillStyle = '#e8dca0'; c.fillRect(37, 17, 3, 14);
     c.fillStyle = '#2a2e24'; c.fillRect(16, 20, 4, 3);
-  },
-  flint(c) {
-    c.fillStyle = '#4a4a50'; c.beginPath(); c.moveTo(8, 30); c.lineTo(20, 14); c.lineTo(28, 22); c.lineTo(18, 36); c.closePath(); c.fill();
-    c.strokeStyle = '#8a8f94'; c.lineWidth = 4; c.beginPath(); c.arc(32, 26, 9, 0.3, Math.PI * 1.7); c.stroke();
-    c.fillStyle = '#f0b040'; c.fillRect(24, 12, 2, 2); c.fillRect(27, 9, 2, 2); c.fillRect(22, 8, 2, 2);
   },
   compass(c) {
     c.fillStyle = '#5a5a44'; c.beginPath(); c.arc(24, 24, 17, 0, Math.PI * 2); c.fill();
@@ -69,18 +180,24 @@ const ICON_DRAW = {
 };
 
 const iconCache = {};
-export function itemIcon(id) {
-  if (iconCache[id]) return iconCache[id];
+export function iconCanvas(id) {
   const def = ITEMS[id];
   let canvas;
   if (def && def.tiles) {
     const a = buildAtlas();
     canvas = cubeIcon(a.tileCanvas(def.tiles[0]), a.tileCanvas(def.tiles[1]));
+  } else if (def && def.flat) {
+    canvas = document.createElement('canvas'); canvas.width = canvas.height = 48;
+    const ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(buildAtlas().tileCanvas(def.flat), 4, 4, 40, 40);
   } else {
     canvas = document.createElement('canvas'); canvas.width = canvas.height = 48;
     const ctx = canvas.getContext('2d');
     (ICON_DRAW[id] || ((c) => { c.fillStyle = '#555'; c.fillRect(10, 10, 28, 28); }))(ctx);
   }
-  iconCache[id] = canvas.toDataURL();
+  return canvas;
+}
+export function itemIcon(id) {
+  if (!iconCache[id]) iconCache[id] = iconCanvas(id).toDataURL();
   return iconCache[id];
 }

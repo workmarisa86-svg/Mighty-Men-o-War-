@@ -68,6 +68,28 @@ export const sfx = {
   craftTick() { tone(300 + Math.random() * 80, 0.05, { type: 'square', gain: 0.04 }); },
   done() { tone(523, 0.1, { type: 'triangle', gain: 0.15 }); tone(784, 0.18, { type: 'triangle', gain: 0.15, delay: 0.1 }); },
   error() { tone(200, 0.15, { type: 'square', gain: 0.06, freqEnd: 150 }); },
+  // gunshots: sharp crack + body thump; vol falls off with distance (0..1)
+  shot(kind, vol = 1) {
+    const g = { pistol: 0.45, rifle: 0.7, sniper: 0.85, smg: 0.38 }[kind] || 0.5;
+    const f = { pistol: 1800, rifle: 1200, sniper: 900, smg: 2000 }[kind] || 1500;
+    noise(0.05, { type: 'highpass', freq: f, gain: g * vol });
+    noise(kind === 'sniper' ? 0.9 : kind === 'rifle' ? 0.6 : 0.3, { freq: f / 3, gain: g * 0.8 * vol, freqEnd: 80 });
+    tone(kind === 'sniper' ? 70 : 110, 0.18, { type: 'triangle', gain: g * 0.6 * vol, freqEnd: 40 });
+  },
+  swish() { noise(0.16, { type: 'bandpass', freq: 2400, gain: 0.12, freqEnd: 900, q: 2, attack: 0.04 }); },
+  stab() { noise(0.08, { freq: 500, gain: 0.25 }); tone(140, 0.08, { type: 'triangle', gain: 0.1, freqEnd: 80 }); },
+  hitMark() { tone(1400, 0.04, { type: 'square', gain: 0.04 }); },
+  ricochet() { tone(2600 + Math.random() * 800, 0.18, { type: 'sine', gain: 0.03, freqEnd: 900 }); },
+  pig(vol = 1) { tone(140 + Math.random() * 30, 0.25, { type: 'square', gain: 0.05 * vol, freqEnd: 90 }); tone(120, 0.15, { type: 'sawtooth', gain: 0.03 * vol, freqEnd: 80, delay: 0.18 }); },
+  cow(vol = 1) { tone(110 + Math.random() * 20, 1.0, { type: 'sawtooth', gain: 0.05 * vol, freqEnd: 85, attack: 0.15 }); },
+  bird(vol = 1) { for (let i = 0; i < 3; i++) tone(2200 + Math.random() * 900, 0.06, { type: 'sine', gain: 0.03 * vol, freqEnd: 1600, delay: i * 0.09 }); },
+  flap(vol = 1) { for (let i = 0; i < 4; i++) noise(0.06, { type: 'bandpass', freq: 700, gain: 0.08 * vol, q: 1, delay: i * 0.07 }); },
+  squeal(vol = 1) { tone(500, 0.3, { type: 'square', gain: 0.05 * vol, freqEnd: 260 }); },
+  eat() { for (let i = 0; i < 3; i++) noise(0.07, { type: 'bandpass', freq: 1200, gain: 0.12, q: 1, delay: i * 0.18 }); },
+  ignite() { noise(0.12, { type: 'highpass', freq: 3000, gain: 0.2 }); noise(0.6, { freq: 600, gain: 0.2, freqEnd: 200, delay: 0.1, attack: 0.1 }); },
+  crackle(vol = 1) { noise(0.03, { type: 'highpass', freq: 2500, gain: 0.08 * vol }); },
+  heal() { tone(440, 0.15, { type: 'triangle', gain: 0.08 }); tone(660, 0.25, { type: 'triangle', gain: 0.08, delay: 0.12 }); },
+  warn() { tone(330, 0.25, { type: 'square', gain: 0.05 }); tone(262, 0.35, { type: 'square', gain: 0.05, delay: 0.25 }); },
   thunder() { noise(2.5, { freq: 300, gain: 0.5, freqEnd: 60, attack: 0.2 }); },
 };
 

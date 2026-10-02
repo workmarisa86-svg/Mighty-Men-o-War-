@@ -1,7 +1,7 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, DIFF, PEACE_SIZE, QUALITY } from './config.js';
-import { loadSettings, saveSettings, readSave, writeSave } from './storage.js';
+import { loadSettings, saveSettings, readSave, writeSave, deleteSave } from './storage.js';
 import { setLang, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
@@ -122,6 +122,19 @@ class App {
     if (!quiet || !ok) this.game.hud.toast(t(ok ? 'hud.saved' : 'hud.saveFail'));
     if (!quiet && ok) sfx.done();
   }
+  // Play Alone starvation: the run is over and the save is removed.
+  gameOver() {
+    if (!this.game) return;
+    const days = Math.floor(this.game.time) + 1;
+    const id = this.game.save.id;
+    this.game.dispose();
+    this.game = null;
+    deleteSave(id);
+    document.body.classList.remove('ingame');
+    this.input.enabled = false;
+    this.input.exitLock();
+    this.ui.show('gameover', { days });
+  }
   quitToMenu() {
     if (!this.game) return;
     this.saveGame(true);
@@ -139,7 +152,7 @@ class App {
     if (this.game) {
       if (this.input.thit('pause') && !this.game.paused) this.pause();
       this.game.update(dt);
-      this.game.render(this.renderer);
+      if (this.game) this.game.render(this.renderer); // the run may have just ended
     } else {
       this.renderer.clear();
     }

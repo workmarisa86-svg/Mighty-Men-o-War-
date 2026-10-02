@@ -13,7 +13,15 @@ export class Particles {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
-    this.points = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.12, vertexColors: true }));
+    // soft round dots rather than squares
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d');
+    const grad = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.9)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = grad; x.fillRect(0, 0, 32, 32);
+    this.points = new THREE.Points(g, new THREE.PointsMaterial({
+      size: 0.09, vertexColors: true, map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, alphaTest: 0.05,
+    }));
     this.points.frustumCulled = false;
     for (let i = 0; i < max; i++) this.pos[i * 3 + 1] = -1e4;
     scene.add(this.points);

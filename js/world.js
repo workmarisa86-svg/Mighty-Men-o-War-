@@ -32,9 +32,11 @@ export class World {
     if (!this.inside(x, y, z)) return false;
     const i = this.idx(x, y, z);
     if (this.data[i] === id) return false;
+    const old = this.data[i];
     this.data[i] = id;
     this.edits.set(i, id);
     this.markDirty(x, z);
+    if (this.onSet) this.onSet(x, y, z, old, id);
     return true;
   }
 

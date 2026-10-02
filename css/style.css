@@ -153,7 +153,27 @@ input[type=range] { width: 100%; accent-color: var(--amber); }
   position: absolute; top: 52px; left: 50%; transform: translateX(-50%); font-size: 13px; letter-spacing: 1.5px;
   text-transform: uppercase; color: var(--khaki); text-shadow: 0 1px 2px #000; white-space: nowrap;
 }
-#crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: rgba(230, 222, 190, 0.9); border-radius: 50%; box-shadow: 0 0 2px #000; }
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+#crosshair i { position: absolute; display: none; background: rgba(230, 222, 190, 0.92); box-shadow: 0 0 2px #000; }
+#crosshair.tool i:first-child { display: block; width: 4px; height: 4px; left: -2px; top: -2px; border-radius: 50%; }
+#crosshair.dot i:first-child { display: block; width: 6px; height: 6px; left: -3px; top: -3px; border-radius: 50%; background: #e8b070; }
+#crosshair.cross i { display: block; }
+#crosshair.cross i:nth-child(1) { width: 2px; height: 8px; left: -1px; top: -14px; }
+#crosshair.cross i:nth-child(2) { width: 2px; height: 8px; left: -1px; top: 6px; }
+#crosshair.cross i:nth-child(3) { width: 8px; height: 2px; left: -14px; top: -1px; }
+#crosshair.cross i:nth-child(4) { width: 8px; height: 2px; left: 6px; top: -1px; }
+#hitmark { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; opacity: 0;
+  background: linear-gradient(45deg, transparent 45%, #f0e0c0 45% 55%, transparent 55%), linear-gradient(-45deg, transparent 45%, #f0e0c0 45% 55%, transparent 55%);
+  -webkit-mask: radial-gradient(circle, transparent 4px, #000 5px); mask: radial-gradient(circle, transparent 4px, #000 5px); }
+#hitmark.on { animation: flash .25s ease-out; }
+#hint { position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); font-size: 14px; letter-spacing: 1px; color: var(--khaki); text-shadow: 0 1px 3px #000; white-space: nowrap; }
+#bigmsg { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); text-align: center; opacity: 0; pointer-events: none; text-shadow: 0 2px 6px #000; }
+#bigmsg h2 { font-family: var(--stencil); font-weight: normal; font-size: 34px; letter-spacing: 3px; margin: 0; color: #d88a7a; }
+#bigmsg p { margin: 6px 0 0; font-size: 16px; }
+#bigmsg.on { animation: bigmsg 5s forwards; }
+@keyframes bigmsg { 0% { opacity: 0; } 8%, 75% { opacity: 1; } 100% { opacity: 0; } }
+#hungerstate { font-size: 12px; font-weight: 600; letter-spacing: 1.5px; color: #e08a6a; text-shadow: 0 1px 2px #000; min-width: 0; }
+.toast.warn { border-left-color: var(--red); color: #f0c0b0; }
 #digring { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; transform: rotate(-90deg); transition: opacity .2s; opacity: 0; }
 #digring circle { fill: none; stroke: var(--amber); stroke-width: 3; }
 #toasts { position: absolute; left: 16px; top: 90px; display: flex; flex-direction: column; gap: 6px; max-width: 60vw; }
@@ -242,3 +262,10 @@ body:not(.peace) [data-btn=fly] { display: none; }
   .hotbar .slot img { width: 24px; height: 24px; }
   .grid.hb { gap: 2px; }
 }
+
+.banner { border: 1px solid var(--amber); background: rgba(150, 110, 40, 0.25); padding: 8px 12px; margin-bottom: 10px; font-size: 14px; }
+.banner.ok { border-color: #8fa060; background: rgba(110, 130, 60, 0.2); }
+.need small { color: var(--khaki-d); }
+.cell em { font-style: normal; color: #b9c48a; }
+.panel.center { text-align: center; }
+.panel p.big { font-family: var(--stencil); font-size: 26px; margin: 10px 0 18px; }
