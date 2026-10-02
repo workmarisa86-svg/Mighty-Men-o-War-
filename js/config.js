@@ -26,3 +26,14 @@ export const QUALITY = {
   medium: { pixelRatio: 1.0, rain: 1100, particles: 0.7, ao: true },
   high:   { pixelRatio: 2.0, rain: 1800, particles: 1.0, ao: true },
 };
+
+// Player body and movement, measured in blocks. Blocks are ~12% smaller than
+// the original 1 block = 1 metre scale, so the body is ~13% larger in block
+// units and speeds/jump/reach are scaled to match (still fits 2-block gaps).
+export const BODY = {
+  halfWidth: 0.33, height: 1.9, crouchHeight: 1.6, eye: 1.78, crouchEye: 1.42,
+  walk: 4.9, run: 7.5, runRain: 5.9, crouch: 1.8, swim: 2.5, swimRain: 1.8,
+  fly: 10.2, flyRun: 20, raft: 3.4,
+  gravity: 31, jump: 9.3, climb: 3.8, terminal: 44, safeFall: 16,
+  reach: 5.6, digSpeed: 1.13, stride: 2.6,
+};

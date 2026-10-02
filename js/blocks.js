@@ -2,6 +2,7 @@
 export const B = {
   AIR: 0, DIRT: 1, MUD: 2, RUBBLE: 3, LOG: 4, WOOD: 5, LEAVES: 6,
   STONE: 7, IRON: 8, TNT: 9, WATER: 10, BEDROCK: 11,
+  SANDBAG: 12, WIRE: 13, CAMPFIRE: 14,
 };
 
 export const BLOCKS = [];
@@ -24,6 +25,11 @@ def(B.STONE, { name: 'stone', tiles: { top: 'stone', side: 'stone', bottom: 'sto
 def(B.IRON, { name: 'iron', tiles: { top: 'iron', side: 'iron', bottom: 'iron' }, hard: 1.8, drop: 'iron', color: [0.55, 0.45, 0.36] });
 def(B.TNT, { name: 'tnt', tiles: { top: 'tnt_top', side: 'tnt_side', bottom: 'planks' }, hard: 0.6, drop: 'tnt', color: [0.45, 0.36, 0.22] });
 def(B.WATER, { name: 'water', solid: false, opaque: false, render: 'water', hard: 0, tiles: { top: 'water', side: 'water', bottom: 'water' }, color: [0.24, 0.31, 0.34] });
+def(B.SANDBAG, { name: 'sandbag', tiles: { top: 'sandbag_top', side: 'sandbag', bottom: 'sandbag_top' }, hard: 0.8, drop: 'sandbag', color: [0.5, 0.45, 0.32] });
+// barbed wire: you can walk through it, but slowly (and it cuts enemies)
+def(B.WIRE, { name: 'wire', solid: false, opaque: false, render: 'cross', tiles: { top: 'wire', side: 'wire', bottom: 'wire' }, hard: 0.5, drop: 'wire', color: [0.3, 0.3, 0.3] });
+// campfire: drawn as its own animated model, not as a cube
+def(B.CAMPFIRE, { name: 'campfire', solid: false, opaque: false, render: 'none', hard: 0.3, drop: null, color: [0.3, 0.22, 0.15] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 
 // Quick lookup tables for hot loops (mesher, physics).

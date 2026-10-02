@@ -1,5 +1,6 @@
 // Military-style heads-up display: compass, health/hunger bars, hotbar, toasts.
 import { itemIcon, ITEMS } from './items.js';
+import { WEAPONS } from './weapons.js';
 import { t } from './i18n.js';
 
 const $ = (s) => document.querySelector(s);
@@ -21,6 +22,8 @@ export class HUD {
     this.craftbar = $('#craftbar'); this.craftLabel = $('#craftbar .label'); this.craftFill = $('#craftbar .fill');
     this.binoc = $('#binoc'); this.underwater = $('#underwater'); this.flashEl = $('#flash');
     this.keyhint = $('#keyhint');
+    this.cross = $('#crosshair'); this.hitEl = $('#hitmark'); this.hint = $('#hint');
+    this.big = $('#bigmsg'); this.hungerEl = $('#hungerstate');
     this.dirtyHotbar = true;
     this.digProgress = 0;
     this.statusTimer = 0;
@@ -83,6 +86,20 @@ export class HUD {
       this.craftFill.style.width = (g.craft.t / g.craft.total * 100) + '%';
     } else this.craftbar.hidden = true;
 
+    // reticle: crosshair for guns, a dot for the knife, small dot otherwise
+    const W = WEAPONS[g.selected()];
+    const ret = W ? W.reticle : 'tool';
+    if (ret !== this.ret) { this.ret = ret; this.cross.className = ret; }
+    // context hint
+    let hint = '';
+    if (!g.overlay && !g.paused) {
+      if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
+      else if (g.selected() === 'flint') hint = t('hint.flint');
+      else if (ITEMS[g.selected()] && (ITEMS[g.selected()].food || ITEMS[g.selected()].heal)) hint = t('hint.eat');
+    }
+    if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
+    const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
+    if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.binoc.classList.toggle('on', g.zoom);
     this.underwater.classList.toggle('on', p.headInWater);
 
@@ -98,9 +115,10 @@ export class HUD {
       if (id) {
         const c = g.count(id);
         const tool = ITEMS[id] && ITEMS[id].tool;
+        const single = ITEMS[id] && (ITEMS[id].weapon || ITEMS[id].armor);
         const empty = !tool && c <= 0;
         inner = `<img src="${itemIcon(id)}" alt="" class="${empty ? 'empty' : ''}">` +
-          (tool ? '' : `<b>${c === Infinity ? '∞' : c}</b>`);
+          (tool || (single && c <= 1) ? '' : `<b>${c === Infinity ? '∞' : c}</b>`);
       }
       html += `<div class="slot${i === g.inv.sel ? ' sel' : ''}" data-i="${i}" title="${id ? t('item.' + id) : ''}"><i>${i + 1}</i>${inner}</div>`;
     });
@@ -126,6 +144,13 @@ export class HUD {
     setTimeout(() => el.remove(), 3200);
   }
   pickup(id, n) { this.toast(t('hud.got', { n, item: t('item.' + id) }), 'pick'); }
+  hitMarker() { this.hitEl.classList.remove('on'); void this.hitEl.offsetWidth; this.hitEl.classList.add('on'); }
+  bigMessage(title, sub = '') {
+    this.big.innerHTML = '';
+    const h = document.createElement('h2'); h.textContent = title; this.big.appendChild(h);
+    if (sub) { const p = document.createElement('p'); p.textContent = sub; this.big.appendChild(p); }
+    this.big.classList.remove('on'); void this.big.offsetWidth; this.big.classList.add('on');
+  }
   flash() { this.flashEl.classList.remove('on'); void this.flashEl.offsetWidth; this.flashEl.classList.add('on'); }
 
   dispose() {

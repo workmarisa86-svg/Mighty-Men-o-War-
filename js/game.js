@@ -1,6 +1,6 @@
 // One running world: owns the scene, world, player, rafts and per-frame logic.
 import * as THREE from 'three';
-import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H } from './config.js';
+import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './config.js';
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
@@ -10,12 +10,19 @@ import { Player } from './player.js';
 import { Sky } from './sky.js';
 import { Raft } from './raft.js';
 import { Particles } from './particles.js';
-import { ITEMS, MATERIALS, RECIPES } from './items.js';
+import { ITEMS, UNLIMITED, RECIPES, WEAPON_IDS } from './items.js';
+import { Animals } from './animals.js';
+import { Pickups } from './pickups.js';
+import { Campfires } from './campfire.js';
+import { ViewModel } from './viewmodel.js';
+import { Combat, WEAPONS } from './weapons.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
 
-const REACH = 5;
+const REACH = BODY.reach;
+const HUNGER_DAYS = 4;              // a full stomach empties in about 4 in-game days
+const CRAFT_RANGE = 4.5;            // walk further than this from the fire and crafting stops
 
 export class Game {
   constructor(app, save) {
@@ -36,6 +43,10 @@ export class Game {
     this.world = new World(this.cfg);
     generate(this.world);
     this.world.applyEdits(save.edits);
+    this.world.onSet = (x, y, z, old, id) => {
+      if (old === B.CAMPFIRE) this.campfires.remove(x, y, z);
+      if (id === B.CAMPFIRE) this.campfires.add(x, y, z);
+    };
 
     // materials
     this.atlas = buildAtlas();
@@ -99,23 +110,36 @@ export class Game {
     this.autosave = 60;
     this.zoom = false;
 
+    this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
+    this.campfires = new Campfires(this);
+    this.pickups = new Pickups(this, save.pickups || []);
+    this.animals = new Animals(this);
+    this.vm = new ViewModel();
+    this.combat = new Combat(this);
+    this.use = { item: null, t: 0 };
+    this.hungerStage = this.player.hunger <= 0 ? 2 : this.player.hunger < 20 ? 1 : 0;
+
     this.hud = new HUD(this);
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
 
   defaultInventory() {
     const inv = { counts: {}, hotbar: Array(9).fill(null), sel: 0 };
-    inv.hotbar[0] = 'shovel';
     if (this.peace) {
-      ['dirt', 'wood', 'stone', 'iron', 'tnt', 'raft'].forEach((id, i) => { inv.hotbar[i + 1] = id; });
+      // relaxed mode: plenty of hunting weapons from the start
+      inv.hotbar = ['shovel', 'knife', 'rifle', 'flint', 'dirt', 'wood', 'stone', 'sandbag', 'raft'];
+      for (const w of ['knife', 'pistol', 'rifle', 'sniper', 'smg']) inv.counts[w] = 1;
+    } else {
+      inv.hotbar[0] = 'shovel'; inv.hotbar[1] = 'flint';
     }
     return inv;
   }
 
   // ---------------------------------------------------------------- inventory
-  count(id) { return this.peace && (MATERIALS.includes(id) || id === 'raft') ? Infinity : (this.inv.counts[id] || 0); }
+  count(id) { return this.peace && UNLIMITED.includes(id) ? Infinity : (this.inv.counts[id] || 0); }
   has(id, n = 1) { return this.count(id) >= n; }
-  take(id, n = 1) { if (this.peace && (MATERIALS.includes(id) || id === 'raft')) return; this.inv.counts[id] = Math.max(0, (this.inv.counts[id] || 0) - n); }
+  take(id, n = 1) { if (this.peace && UNLIMITED.includes(id)) return; this.inv.counts[id] = Math.max(0, (this.inv.counts[id] || 0) - n); }
+  armor() { return (this.has('helmet') ? ITEMS.helmet.armor : 0) + (this.has('vest') ? ITEMS.vest.armor : 0); }
   give(id, n = 1, quiet = false) {
     if (!id || n <= 0) return;
     this.inv.counts[id] = (this.inv.counts[id] || 0) + n;
@@ -200,7 +224,8 @@ export class Game {
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
 
-    const env = { rain: this.peace ? 0 : this.weather.rain };
+    const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
+    const env = { rain: this.peace ? 0 : this.weather.rain, speedMul: inWire ? 0.4 : 1 };
     const res = p.update(dt, this.world, this.rafts, it, env);
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
@@ -210,12 +235,16 @@ export class Game {
       if (this.breath <= 0) { this.breath = 1; this.damage(8); }
     } else this.breath = Math.min(15, this.breath + dt * 4);
 
-    if (playing) { this.handleDig(dt, input); this.handlePlace(dt, input); }
-    else { this.dig.key = null; this.crack.visible = false; }
+    if (playing) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
+    else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
+    this.combat.update(dt, input, playing);
     this.updateCraft(dt);
+    if (!this.paused) this.updateHunger(dt);
 
     for (const r of this.rafts) r.update(dt);
     this.particles.update(dt);
+    if (!this.paused) { this.animals.update(dt); this.pickups.update(dt); }
+    this.campfires.update(dt);
 
     // camera
     const eye = p.eye(this.tmpV);
@@ -233,6 +262,11 @@ export class Game {
     this.flashlight.intensity = this.lightOn ? 14 : 0;
 
     this.updateChunks(dt);
+    this.vm.set(this.selected());
+    this.vm.update(dt, {
+      moving: p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5, sprint: p.running,
+      light: Math.min(1, this.sky.daylight + (this.lightOn ? 0.35 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
+    });
     this.hud.update(dt);
 
     if (!this.paused) {
@@ -295,7 +329,7 @@ export class Game {
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
-    if (input.hit('KeyK') || input.thit('craft')) this.app.openPanel('craft');
+    if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
 
   // ------------------------------------------------------------ dig & place
@@ -319,7 +353,7 @@ export class Game {
       this.highlight.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
     } else this.highlight.visible = false;
 
-    const digging = input.mouse.left || input.tdown('dig');
+    const digging = (input.mouse.left || input.tdown('dig')) && !WEAPONS[this.selected()];
     if (!digging) { this.dig.key = null; this.dig.progress = 0; this.crack.visible = false; this.hud.digProgress = 0; return; }
 
     if (rh) { // pack up a raft
@@ -340,7 +374,7 @@ export class Game {
     if (!isFinite(def.hard) || this.world.isLocked(hit.x, hit.y, hit.z)) { this.hud.digProgress = 0; return; }
     const key = hit.x + ',' + hit.y + ',' + hit.z;
     if (this.dig.key !== key) { this.dig.key = key; this.dig.progress = 0; this.dig.tick = 0; }
-    let speed = 1 / def.hard;
+    let speed = BODY.digSpeed / def.hard;
     if (this.peace) speed *= 3;
     if (this.player.swimming) speed *= 0.5;
     this.dig.progress += dt * speed;
@@ -381,9 +415,9 @@ export class Game {
       const k = cx + ',' + cy + ',' + cz;
       if (seen.has(k)) continue;
       seen.add(k);
-      if (w.get(cx, cy, cz) !== B.LOG || cy < y) continue;
+      if (w.get(cx, cy, cz) !== B.LOG) continue;
       logs.push([cx, cy, cz]);
-      for (let dy = 0; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
         if (dx || dy || dz) stack.push([cx + dx, cy + dy, cz + dz]);
       }
     }
@@ -392,9 +426,9 @@ export class Game {
       this.particles.burst(lx + 0.5, ly + 0.5, lz + 0.5, BLOCKS[B.LOG].color, 5, 3, 0.8);
     }
     // the crown comes down with the trunk
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 0;
-    for (const [lx, ly, lz] of logs) { minX = Math.min(minX, lx); maxX = Math.max(maxX, lx); minZ = Math.min(minZ, lz); maxZ = Math.max(maxZ, lz); maxY = Math.max(maxY, ly); }
-    for (let yy = y; yy <= maxY + 3; yy++) for (let zz = minZ - 3; zz <= maxZ + 3; zz++) for (let xx = minX - 3; xx <= maxX + 3; xx++) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = 0;
+    for (const [lx, ly, lz] of logs) { minX = Math.min(minX, lx); maxX = Math.max(maxX, lx); minZ = Math.min(minZ, lz); maxZ = Math.max(maxZ, lz); minY = Math.min(minY, ly); maxY = Math.max(maxY, ly); }
+    for (let yy = minY; yy <= maxY + 3; yy++) for (let zz = minZ - 3; zz <= maxZ + 3; zz++) for (let xx = minX - 3; xx <= maxX + 3; xx++) {
       if (w.get(xx, yy, zz) === B.LEAVES) {
         w.set(xx, yy, zz, B.AIR);
         if (Math.random() < 0.15) this.particles.burst(xx + 0.5, yy + 0.5, zz + 0.5, BLOCKS[B.LEAVES].color, 3, 2, 1.2, 6);
@@ -406,7 +440,8 @@ export class Game {
 
   blockOverlapsBodies(x, y, z) {
     const p = this.player.pos, h = this.player.height;
-    if (x + 1 > p.x - 0.3 && x < p.x + 0.3 && z + 1 > p.z - 0.3 && z < p.z + 0.3 && y + 1 > p.y && y < p.y + h) return true;
+    const hw = BODY.halfWidth;
+    if (x + 1 > p.x - hw && x < p.x + hw && z + 1 > p.z - hw && z < p.z + hw && y + 1 > p.y && y < p.y + h) return true;
     for (const r of this.rafts) {
       const b = r.box();
       if (x + 1 > b.minX && x < b.maxX && z + 1 > b.minZ && z < b.maxZ && y + 1 > b.minY && y < b.maxY) return true;
@@ -437,8 +472,11 @@ export class Game {
     const item = this.selected();
     if (!item) return;
     const def = ITEMS[item];
+    if (def.weapon || def.food || def.heal) return;  // handled by combat / handleUse
     const { eye, dir } = this.aim();
+    if (item === 'flint') { this.useFlint(eye, dir); return; }
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+    if (def.place === 'watchtower') { this.placeWatchtower(hit); return; }
 
     if (def.place === 'raft') {
       if (!this.has('raft')) { this.hud.toast(t('hud.cantPlace', { item: t('item.raft') })); sfx.error(); return; }
@@ -467,23 +505,104 @@ export class Game {
     this.hud.dirtyHotbar = true;
   }
 
-  // ------------------------------------------------------------------ crafting
-  canCraft(r) {
-    if (this.peace) return true;
-    return Object.entries(r.needs).every(([id, n]) => this.has(id, n));
+  // Flint and steel: light a campfire from 3 wood (firewood) on solid ground.
+  useFlint(eye, dir) {
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+    if (!hit || hit.ny !== 1) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
+    const x = hit.x, y = hit.y + 1, z = hit.z;
+    if (this.world.get(x, y, z) !== B.AIR || hit.id === B.WATER || hit.id === B.WIRE) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
+    if (!this.has('wood', 3)) { this.hud.toast(t('hud.fireWood')); sfx.error(); return; }
+    this.take('wood', 3);
+    this.world.set(x, y, z, B.CAMPFIRE);
+    this.vm.doSwing();
+    sfx.ignite();
+    this.particles.burst(x + 0.5, y + 0.3, z + 0.5, [1, 0.7, 0.3], 10, 2, 0.5, 4);
+    this.hud.toast(t('hud.fireLit'));
+    this.hud.dirtyHotbar = true;
   }
+
+  // A small wooden lookout: corner ladder trunk, platform, half railing.
+  placeWatchtower(hit) {
+    if (!hit || hit.ny !== 1 || hit.id === B.WATER) { this.hud.toast(t('hud.towerWhere')); sfx.error(); return; }
+    if (!this.has('watchtower')) { this.hud.toast(t('hud.cantPlace', { item: t('item.watchtower') })); sfx.error(); return; }
+    const w = this.world, cx = hit.x, by = hit.y + 1, cz = hit.z;
+    for (let y = by; y <= by + 6; y++) for (let z = cz - 1; z <= cz + 1; z++) for (let x = cx - 1; x <= cx + 1; x++) {
+      const b = w.get(x, y, z);
+      if (!w.inside(x, y, z) || (b !== B.AIR && b !== B.LEAVES) || this.blockOverlapsBodies(x, y, z)) { this.hud.toast(t('hud.towerSpace')); sfx.error(); return; }
+    }
+    for (let y = by; y <= by + 4; y++) w.set(cx - 1, y, cz - 1, B.LOG);          // climbable corner post
+    for (const [x, z] of [[cx + 1, cz - 1], [cx - 1, cz + 1], [cx + 1, cz + 1]]) for (let y = by; y < by + 4; y++) w.set(x, y, z, B.WOOD);
+    for (let z = cz - 1; z <= cz + 1; z++) for (let x = cx - 1; x <= cx + 1; x++) if (!(x === cx - 1 && z === cz - 1)) w.set(x, by + 4, z, B.WOOD);
+    for (const [x, z] of [[cx + 1, cz - 1], [cx + 1, cz], [cx + 1, cz + 1], [cx, cz + 1], [cx - 1, cz + 1]]) w.set(x, by + 5, z, B.WOOD);
+    this.take('watchtower');
+    sfx.place(); this.hud.dirtyHotbar = true;
+  }
+
+  // Eating (food) and medkits: hold the use button.
+  handleUse(dt, input) {
+    const id = this.selected();
+    const def = ITEMS[id];
+    const holding = input.mouse.right || input.tdown('place');
+    if (!def || !(def.food || def.heal) || !holding || !this.has(id)) {
+      if (this.use.t > 0) this.hud.digProgress = 0;
+      this.use.t = 0; return;
+    }
+    const total = def.heal ? 1.6 : 1.2;
+    if (this.use.t === 0) { if (def.food) sfx.eat(); this.vm.doSwing(); }
+    this.use.t += dt;
+    this.hud.digProgress = this.use.t / total;
+    if (this.use.t >= total) {
+      this.use.t = 0; this.hud.digProgress = 0;
+      this.take(id);
+      const p = this.player;
+      if (def.food) {
+        p.hunger = Math.min(100, p.hunger + def.food);
+        if (p.hunger > 20) this.hungerStage = 0;
+        this.hud.toast(t(id === 'meat_raw' ? 'hud.ateRaw' : 'hud.ate'));
+      } else {
+        p.health = Math.min(100, p.health + def.heal);
+        sfx.heal(); this.hud.toast(t('hud.healed'));
+      }
+      this.hud.dirtyHotbar = true;
+    }
+  }
+
+  updateHunger(dt) {
+    if (this.peace) { this.player.hunger = 100; return; }
+    const p = this.player;
+    const rate = 100 / (HUNGER_DAYS * DAY_SECONDS) * (p.running ? 1.5 : 1);
+    p.hunger = Math.max(0, p.hunger - rate * dt);
+    if (p.hunger < 20 && this.hungerStage < 1) { this.hungerStage = 1; this.hud.toast(t('hud.veryHungry'), 'warn'); sfx.warn(); }
+    if (p.hunger <= 0) {
+      if (this.hungerStage < 2) { this.hungerStage = 2; this.hud.toast(t('hud.sick'), 'warn'); sfx.warn(); }
+      // sick from hunger: about one more in-game day before it kills
+      p.health -= 100 / DAY_SECONDS * dt;
+      if (p.health <= 0) this.die('starve');
+    } else if (p.hunger > 50 && p.health < 100) {
+      p.health = Math.min(100, p.health + 0.35 * dt); // slow recovery when fed
+    }
+  }
+
+  // ------------------------------------------------------------------ crafting
+  // Crafting needs a lit campfire nearby (Peace mode: anywhere).
+  craftFire() { return this.peace ? true : this.campfires.near(this.player.pos); }
+  hasMaterials(r) { return Object.entries(r.needs).every(([id, n]) => this.has(id, n)); }
+  canCraft(r) { return !r.later && !!this.craftFire() && this.hasMaterials(r); }
   startCraft(r) {
     if (this.craft) { this.hud.toast(t('craft.busy')); sfx.error(); return false; }
     if (!this.canCraft(r)) { sfx.error(); return false; }
     for (const [id, n] of Object.entries(r.needs)) this.take(id, n);
-    this.craft = { r, t: 0, total: this.peace ? 0.3 : r.time, at: this.player.pos.clone(), tick: 0 };
+    const fire = this.craftFire();
+    const at = fire === true ? this.player.pos.clone() : new THREE.Vector3(fire.x + 0.5, fire.y, fire.z + 0.5);
+    this.craft = { r, t: 0, total: this.peace ? 0.3 : r.time, at, tick: 0 };
     this.hud.dirtyHotbar = true;
     return true;
   }
   updateCraft(dt) {
     const c = this.craft;
     if (!c) return;
-    if (this.player.pos.distanceTo(c.at) > 3.5) {
+    const fireGone = !this.peace && !this.campfires.near(c.at, 0.8);
+    if (Math.hypot(this.player.pos.x - c.at.x, this.player.pos.z - c.at.z) > CRAFT_RANGE || fireGone) {
       for (const [id, n] of Object.entries(c.r.needs)) this.give(id, n, true); // materials returned
       this.craft = null; this.hud.toast(t('hud.craftCancel')); sfx.error(); return;
     }
@@ -491,25 +610,44 @@ export class Game {
     c.tick -= dt;
     if (c.tick <= 0) { c.tick = 0.6; sfx.craftTick(); }
     if (c.t >= c.total) {
-      this.give(c.r.id, 1, true);
+      this.give(c.r.id, c.r.out || 1, true);
       this.hud.toast(t('hud.crafted', { item: t('item.' + c.r.id) }));
       sfx.done();
       this.craft = null;
     }
   }
 
-  damage(n) {
-    if (this.peace) return;
-    this.player.health = Math.max(0, this.player.health - n);
+  damage(n, cause = 'hurt') {
+    if (this.peace || this.dead) return;
+    this.player.health = Math.max(0, this.player.health - n * (1 - this.armor()));
     this.hud.flash();
     sfx.hurt();
-    if (this.player.health <= 0) this.die();
+    if (this.player.health <= 0) this.die(cause);
   }
-  die() {
-    // Stage 1: simple respawn. Later stages add the full death rules.
+
+  // Death rules. Starving alone ends the game; starving with allies costs one
+  // weapon; any other death loses every carried weapon.
+  die(cause) {
+    if (this.dead) return;
+    this.stats.deaths = (this.stats.deaths || 0) + 1;
+    const alone = this.cfg.sub === 'alone';
+    if (cause === 'starve' && alone) { this.dead = true; this.app.gameOver(); return; }
+    const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
+    let lost = [];
+    if (cause === 'starve') {
+      if (carried.length) { const w = carried[Math.floor(Math.random() * carried.length)]; this.inv.counts[w]--; lost = [w]; }
+      this.player.hunger = 60; this.hungerStage = 0;
+    } else {
+      for (const w of carried) this.inv.counts[w] = 0;
+      lost = carried;
+    }
     const s = this.world.spawn;
     this.player.pos.set(s.x, s.y, s.z); this.player.vel.set(0, 0, 0);
-    this.player.health = 100;
+    this.player.health = 100; this.breath = 15;
+    this.craft = null;
+    this.hud.dirtyHotbar = true;
+    this.hud.bigMessage(t(cause === 'starve' ? 'hud.diedStarve' : 'hud.died'),
+      lost.length ? t('hud.lostWeapons', { list: lost.map((w) => t('item.' + w)).join(', ') }) : '');
   }
 
   // ----------------------------------------------------------------- saving
@@ -519,20 +657,22 @@ export class Game {
       v: SAVE_FORMAT, id: this.save.id, name: this.save.name, created: this.save.created, updated: Date.now(),
       cfg: this.cfg, time: this.time, weather: this.weather,
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger, flying: p.flying },
-      inv: this.inv,
+      inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
       edits: this.world.serializeEdits(),
     };
   }
 
-  render(renderer) { renderer.render(this.scene, this.camera); }
+  render(renderer) { renderer.render(this.scene, this.camera); this.vm.render(renderer); }
 
-  resize() { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); }
+  resize() { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.vm.resize(); }
 
   dispose() {
     setRain(0);
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
+    this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
+    this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());
     this.hud.dispose();

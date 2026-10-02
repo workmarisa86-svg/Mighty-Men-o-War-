@@ -5,7 +5,8 @@ export const TILE = 32;
 const COLS = 8;
 const TILE_NAMES = [
   'dirt', 'dirt_top', 'mud', 'rubble', 'log_side', 'log_top', 'planks', 'leaves',
-  'stone', 'iron', 'tnt_side', 'tnt_top', 'water', 'bedrock',
+  'stone', 'iron', 'tnt_side', 'tnt_top', 'water', 'bedrock', 'sandbag', 'sandbag_top',
+  'wire',
 ];
 
 const clamp = (v) => Math.max(0, Math.min(255, v | 0));
@@ -179,6 +180,43 @@ const PAINT = {
       const x = p.r() * 28 | 0, y = p.r() * 32 | 0;
       p.rect(x, y, 3 + (p.r() * 4 | 0), 1, [86, 104, 110]);
     }
+  },
+  sandbag(p) {
+    // two staggered rows of burlap sacks per block
+    p.fill([60, 54, 40], 6);
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 ? 8 : 0;
+      for (let b = -1; b < 2; b++) {
+        const x0 = b * 16 + off, y0 = row * 8;
+        for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) {
+          const ex = Math.min(x, 15 - x), ey = Math.min(y, 7 - y);
+          if (ex + ey < 2) continue;
+          const shade = ey === 0 || ex === 0 ? -26 : (y === 1 ? 14 : 0);
+          const weave = ((x + y) % 2) ? 4 : -4;
+          p.px(x0 + x, y0 + y, jit([128 + shade + weave, 114 + shade + weave, 82 + shade + weave], p.r, 10));
+        }
+        p.px(x0 + 3, y0 + 4, [90, 78, 56]); p.px(x0 + 12, y0 + 4, [90, 78, 56]);
+      }
+    }
+  },
+  sandbag_top(p) {
+    p.fill([118, 104, 74], 14);
+    for (let i = 0; i < 32; i += 16) { p.rect(0, i, 32, 1, [80, 70, 50]); p.rect(i + 8, 0, 1, 32, [86, 76, 54]); }
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if ((x + y) % 4 === 0) p.px(x, y, [104, 92, 66], 0.6);
+  },
+  wire(p) {
+    // coils of rusty barbed wire on a transparent background
+    p.clear();
+    for (let k = 0; k < 3; k++) {
+      const cy = 6 + k * 10;
+      for (let t = 0; t < 64; t++) {
+        const a = t / 64 * Math.PI * 6;
+        const x = (t / 64 * 34 - 1) | 0, y = Math.round(cy + Math.sin(a) * 4);
+        p.px(x, y, (t % 7 < 2) ? [120, 76, 50] : [62, 60, 56]);
+        if (t % 9 === 0) { p.px(x, y - 1, [90, 88, 82]); p.px(x, y + 1, [90, 88, 82]); p.px(x - 1, y, [90, 88, 82]); }
+      }
+    }
+    p.rect(15, 0, 2, 32, [64, 50, 36]); // stake
   },
   bedrock(p) {
     p.fill([36, 35, 34], 14);

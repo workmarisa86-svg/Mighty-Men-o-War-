@@ -31,6 +31,27 @@ class Buf {
   }
 }
 
+// two diagonal, double-sided quads (barbed wire and similar)
+function crossQuads(buf, x, y, z, tile, light) {
+  const quads = [[[0.1, 0.1], [0.9, 0.9]], [[0.9, 0.1], [0.1, 0.9]]];
+  for (const [[ax, az], [bx, bz]] of quads) {
+    for (const flip of [false, true]) {
+      const base = buf.n;
+      const pts = [[ax, 0, az], [bx, 0, bz], [bx, 1, bz], [ax, 1, az]];
+      const nx = (bz - az), nz = -(bx - ax), nl = Math.hypot(nx, nz) * (flip ? -1 : 1);
+      for (let k = 0; k < 4; k++) {
+        buf.pos.push(x + pts[k][0], y + pts[k][1], z + pts[k][2]);
+        buf.nor.push(nx / nl, 0, nz / nl);
+        buf.uv.push(UVC[k][0] ? tile[2] : tile[0], UVC[k][1] ? tile[3] : tile[1]);
+        buf.col.push(light, light, light);
+      }
+      if (flip) buf.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+      else buf.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      buf.n += 4;
+    }
+  }
+}
+
 export function buildChunk(world, cx, cz, uvs, useAO) {
   const W = world.W, D = world.D, H = world.H, data = world.data;
   const x0 = cx * CHUNK, z0 = cz * CHUNK;
@@ -67,6 +88,8 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
     const id = data[x + W * (z + D * y)];
     if (id === B.AIR) continue;
     const def = BLOCKS[id];
+    if (def.render === 'none') continue;
+    if (def.render === 'cross') { crossQuads(solid, x, y, z, uvs[def.tiles.side], skyLight(x, y, z)); continue; }
     const isWater = id === B.WATER;
     const buf = isWater ? water : solid;
     for (let f = 0; f < 6; f++) {

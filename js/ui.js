@@ -3,7 +3,7 @@
 import { t, setLang, getLang } from './i18n.js';
 import { DIFFICULTIES } from './config.js';
 import { listSaves, deleteSave } from './storage.js';
-import { itemIcon, ITEMS, MATERIALS, RECIPES } from './items.js';
+import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -200,13 +200,19 @@ export class UI {
   r_inventory() {
     const g = this.app.game;
     const sel = this.invPick;
-    const owned = Object.keys(ITEMS).filter((id) => !ITEMS[id].gear && (ITEMS[id].tool || g.count(id) > 0 || MATERIALS.includes(id)));
-    const gear = g.peace ? [] : ['flashlight', 'flint', 'compass', 'binoculars'];
+    const owned = Object.keys(ITEMS).filter((id) => {
+      const d = ITEMS[id];
+      if (d.gear || d.armor) return false;
+      return d.tool || g.count(id) > 0 || MATERIALS.includes(id);
+    });
+    const gear = (g.peace ? [] : ['flashlight', 'compass', 'binoculars']).concat(['helmet', 'vest'].filter((id) => g.has(id)));
     const cell = (id, cls = '') => {
+      const d = ITEMS[id];
       const c = g.count(id);
-      const showCount = !ITEMS[id].tool && !ITEMS[id].gear;
+      const showCount = !d.tool && !d.gear && !(d.armor) && !(d.weapon && c <= 1);
+      const worn = d.armor ? ` <em>${t('inv.worn')}</em>` : '';
       return `<div class="cell ${cls} ${sel === id ? 'picked' : ''}" data-item="${id}" title="${t('item.' + id)}">
-        <img src="${itemIcon(id)}" alt=""><b>${showCount ? (c === Infinity ? '∞' : c) : ''}</b><span>${t('item.' + id)}</span></div>`;
+        <img src="${itemIcon(id)}" alt=""><b>${showCount ? (c === Infinity ? '∞' : c) : ''}</b><span>${t('item.' + id)}${worn}</span></div>`;
     };
     const body = `<p class="muted small">${t('inv.hint')}</p>
       <p class="label">${t('inv.materials')}</p><div class="grid">${owned.map((id) => cell(id)).join('')}</div>
@@ -231,21 +237,45 @@ export class UI {
   // ----------------------------------------------------------------- craft
   r_craft() {
     const g = this.app.game;
+    const fire = g.craftFire();
     const need = (r) => Object.entries(r.needs).map(([id, n]) => {
       const ok = g.has(id, n);
-      return `<span class="need ${ok ? 'ok' : 'miss'}"><img src="${itemIcon(id)}" alt="">${n} ${t('item.' + id)}</span>`;
+      const have = g.count(id) === Infinity ? '∞' : g.count(id);
+      return `<span class="need ${ok ? 'ok' : 'miss'}"><img src="${itemIcon(id)}" alt="">${n} ${t('item.' + id)} <small>(${have})</small></span>`;
     }).join('');
-    const body = `<div class="recipes">${RECIPES.map((r) => {
-      const ok = g.canCraft(r);
-      return `<div class="recipe ${ok ? '' : 'locked'}"><img src="${itemIcon(r.id)}" alt="" class="ri">
-        <div class="rinfo"><h3>${t('item.' + r.id)}</h3><div>${need(r)}</div><p class="muted small">⏱ ${t('craft.time', { s: r.time })}</p></div>
-        <button class="btn ${ok ? 'primary' : ''}" data-r="${r.id}" ${ok && !g.craft ? '' : 'disabled'}>${ok ? t('craft.make') : '🔒 ' + t('craft.locked')}</button></div>`;
-    }).join('')}</div>`;
-    const panel = this.panel(t('craft.title'), body, { wide: true, onBack: () => this.app.closePanel() });
+    const banner = fire ? '' : `<div class="banner">🔥 ${t('craft.needFire')}</div>`;
+    const busy = g.craft ? `<div class="banner ok">${t('hud.crafting', { item: t('item.' + g.craft.r.id), s: Math.max(0, g.craft.total - g.craft.t).toFixed(1) })}</div>` : '';
+    let body = banner + busy + `<p class="muted small">${t('craft.exposed')}</p>`;
+    for (const cat of RECIPE_CATS) {
+      body += `<p class="label">${t('craft.cat.' + cat)}</p><div class="recipes">`;
+      for (const r of RECIPES.filter((x) => x.cat === cat)) {
+        let state, label;
+        if (r.later) { state = 'locked'; label = '🔒 ' + t('craft.later'); }
+        else if (!g.hasMaterials(r)) { state = 'locked'; label = '🔒 ' + t('craft.locked'); }
+        else if (!fire) { state = 'locked'; label = '🔒 ' + t('craft.noFire'); }
+        else { state = ''; label = t(r.cook ? 'craft.cook' : 'craft.make'); }
+        const out = r.out ? ` ×${r.out}` : '';
+        body += `<div class="recipe ${state}"><img src="${itemIcon(r.id)}" alt="" class="ri">
+          <div class="rinfo"><h3>${t('item.' + r.id)}${out}</h3><div>${need(r)}</div>
+          <p class="muted small">⏱ ${t('craft.time', { s: r.time })}${t('craftDesc.' + r.id) !== 'craftDesc.' + r.id ? ' · ' + t('craftDesc.' + r.id) : ''}</p></div>
+          <button class="btn ${state ? '' : 'primary'}" data-r="${r.id}" ${state || g.craft ? 'disabled' : ''}>${label}</button></div>`;
+      }
+      body += '</div>';
+    }
+    const panel = this.panel(t(fire && !g.peace ? 'craft.titleFire' : 'craft.title'), body, { wide: true, onBack: () => this.app.closePanel() });
     panel.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => {
       const r = RECIPES.find((x) => x.id === b.dataset.r);
       if (g.startCraft(r)) this.app.closePanel();
     });
+  }
+
+  r_gameover({ days }) {
+    this.root.innerHTML = `<div class="panel narrow center"><h2>${t('over.title')}</h2>
+      <p>${t('over.starved')}</p><p class="big">${t('over.days', { n: days })}</p>
+      <div class="menu"><button class="btn primary" id="gonew">${t('menu.new')}</button>
+      <button class="btn ghost" id="gomenu">${t('over.menu')}</button></div></div>`;
+    this.root.querySelector('#gonew').onclick = () => this.show('newgame');
+    this.root.querySelector('#gomenu').onclick = () => this.show('main');
   }
 
   r_loading() {

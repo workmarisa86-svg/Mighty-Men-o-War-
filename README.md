@@ -17,10 +17,16 @@ Then open `http://localhost:8080/`.
 ## Development stages
 
 1. **World, movement, digging, building, water, rafts, bridges, saving** (done)
-2. Animals, hunting, food, hunger, campfires, crafting
+2. **Animals, hunting, food, hunger, campfires, crafting** (done)
 3. Weapons, aiming, scope, TNT, enemies, looting
 4. Forts, capturing, surrender, allies, commands, callouts
 5. Play Alone cabin, Peace mode extras, war map, statistics, manual, PWA
+
+## Requirements saved for later stages
+
+- **Stage 4 – fort lighting:** every built-in fort must be fully lit inside at
+  all times, with warm light visible from outside at night through windows and
+  gaps, so forts can be spotted from far away.
 
 ## Code layout
 
@@ -32,6 +38,9 @@ Then open `http://localhost:8080/`.
 | `js/mesher.js` | Chunk meshes with ambient occlusion |
 | `js/player.js` | Walking, running, crouching, jumping, swimming, climbing, flying |
 | `js/sky.js` | Day/night cycle and rain |
+| `js/animals.js` | Herds and flocks, stealth detection, fleeing, respawning |
+| `js/weapons.js`, `js/viewmodel.js` | Knife and guns, tracers, the item held in hand |
+| `js/campfire.js`, `js/pickups.js` | Campfires (crafting, cooking, light) and items on the ground |
 | `js/textures.js`, `js/items.js` | Procedural textures and icons |
 | `js/audio.js` | Synthesized sound effects |
 | `js/hud.js`, `js/ui.js` | HUD and menus |
