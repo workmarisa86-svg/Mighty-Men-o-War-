@@ -22,6 +22,12 @@ Then open `http://localhost:8080/`.
 4. Forts, capturing, surrender, allies, commands, callouts
 5. Play Alone cabin, Peace mode extras, war map, statistics, manual, PWA
 
+## Requirements saved for later stages
+
+- **Stage 4 – fort lighting:** every built-in fort must be fully lit inside at
+  all times, with warm light visible from outside at night through windows and
+  gaps, so forts can be spotted from far away.
+
 ## Code layout
 
 | File | Purpose |

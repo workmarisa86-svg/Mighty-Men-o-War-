@@ -3,8 +3,9 @@
 import * as THREE from 'three';
 import { B, SOLID } from './blocks.js';
 import { sfx } from './audio.js';
+import { BODY } from './config.js';
 
-const HW = 0.3; // half width
+const HW = BODY.halfWidth;
 
 export class Player {
   constructor() {
@@ -16,10 +17,10 @@ export class Player {
     this.health = 100; this.hunger = 100;
     this.stepAcc = 0;
     this.raft = null;
-    this.eyeOffset = 1.62;
+    this.eyeOffset = BODY.eye;
   }
-  get height() { return this.crouch ? 1.5 : 1.8; }
-  get eyeTarget() { return this.crouch ? 1.27 : 1.62; }
+  get height() { return this.crouch ? BODY.crouchHeight : BODY.height; }
+  get eyeTarget() { return this.crouch ? BODY.crouchEye : BODY.eye; }
   eye(out = new THREE.Vector3()) { return out.set(this.pos.x, this.pos.y + this.eyeOffset, this.pos.z); }
   lookDir(out = new THREE.Vector3()) {
     const cp = Math.cos(this.pitch);
@@ -74,7 +75,7 @@ export class Player {
   }
 
   nearLog(world) {
-    const ys = [this.pos.y + 0.2, this.pos.y + 1.0];
+    const ys = [this.pos.y + 0.2, this.pos.y + 1.1];
     for (const y of ys) for (const [dx, dz] of [[HW + 0.15, 0], [-HW - 0.15, 0], [0, HW + 0.15], [0, -HW - 0.15]]) {
       if (world.get(Math.floor(this.pos.x + dx), Math.floor(y), Math.floor(this.pos.z + dz)) === B.LOG) return true;
     }
@@ -88,7 +89,7 @@ export class Player {
 
     // crouch toggling – only stand up if there is room
     if (it.crouch && !this.flying) this.crouch = true;
-    else if (this.crouch && !this.collides(world, rafts, p.x, p.y, p.z, 1.8)) this.crouch = false;
+    else if (this.crouch && !this.collides(world, rafts, p.x, p.y, p.z, BODY.height)) this.crouch = false;
 
     const feet = world.get(Math.floor(p.x), Math.floor(p.y + 0.1), Math.floor(p.z));
     const waist = world.get(Math.floor(p.x), Math.floor(p.y + 0.8), Math.floor(p.z));
@@ -104,11 +105,11 @@ export class Player {
     if (wl > 1) { wx /= wl; wz /= wl; }
     this.running = it.run && it.fwd > 0 && !this.crouch;
 
-    let speed = 4.3;
-    if (this.flying) speed = this.running ? 18 : 9;
-    else if (this.swimming) speed = env.rain > 0.3 ? 1.6 : 2.2;
-    else if (this.crouch) speed = 1.6;
-    else if (this.running) speed = env.rain > 0.3 ? 5.2 : 6.6;
+    let speed = BODY.walk;
+    if (this.flying) speed = this.running ? BODY.flyRun : BODY.fly;
+    else if (this.swimming) speed = env.rain > 0.3 ? BODY.swimRain : BODY.swim;
+    else if (this.crouch) speed = BODY.crouch;
+    else if (this.running) speed = env.rain > 0.3 ? BODY.runRain : BODY.run;
     if (!this.flying && !this.swimming && feet === B.WATER) speed *= 0.75;
     if (!this.flying && !this.swimming && world.get(Math.floor(p.x), Math.floor(p.y - 0.1), Math.floor(p.z)) === B.MUD) speed *= 0.9;
     speed *= env.speedMul || 1;
@@ -116,7 +117,7 @@ export class Player {
     // ---- raft: walking on a raft paddles it --------------------------------
     this.raft = this.standingRaft(rafts);
     if (this.raft && wl > 0.1 && !it.jump) {
-      const rs = 3.0 * dt;
+      const rs = BODY.raft * dt;
       if (this.raft.tryMove(world, wx * rs, wz * rs, this)) {
         p.x += wx * rs; p.z += wz * rs; v.x = v.z = 0;
         wx = wz = 0;
@@ -135,23 +136,23 @@ export class Player {
       const k = 1 - Math.exp(-(this.onGround ? 14 : this.swimming ? 6 : 2.5) * dt);
       v.x += (wx * speed - v.x) * k; v.z += (wz * speed - v.z) * k;
       if (nearLog && (it.fwd > 0 || it.jumpHeld) && !this.onGround) {
-        this.climbing = true; v.y = this.crouch ? 0 : 3.4;
+        this.climbing = true; v.y = this.crouch ? 0 : BODY.climb;
       } else if (nearLog && it.fwd > 0 && this.onGround && this.blockedH) {
-        this.climbing = true; v.y = 3.4;
+        this.climbing = true; v.y = BODY.climb;
       } else if (nearLog && this.crouch && !this.onGround) {
         this.climbing = true; v.y = 0;
       } else if (this.swimming) {
         // float at the surface; Space swims up, crouch dives
-        let target = this.headInWater ? 1.2 : 0;
-        if (it.jumpHeld) target = 3.2;
-        if (it.crouchHeld) target = -2.5;
+        let target = this.headInWater ? 1.35 : 0;
+        if (it.jumpHeld) target = 3.6;
+        if (it.crouchHeld) target = -2.8;
         v.y += (target - v.y) * Math.min(1, dt * 3);
-        if (it.jumpHeld && this.blockedH) v.y = 6.5; // climb out onto a bank
+        if (it.jumpHeld && this.blockedH) v.y = 7.2; // climb out onto a bank
       } else {
-        v.y -= 28 * dt;
-        if (v.y < -40) v.y = -40;
-        if (it.jumpHeld && this.onGround) v.y = 8.4;
-        if (nearLog && !this.crouch && v.y < -2) v.y = -2; // slide down trunks
+        v.y -= BODY.gravity * dt;
+        if (v.y < -BODY.terminal) v.y = -BODY.terminal;
+        if (it.jumpHeld && this.onGround) v.y = BODY.jump - BODY.gravity * dt * 0.5; // half-step: same height at any frame rate
+        if (nearLog && !this.crouch && v.y < -2.2) v.y = -2.2; // slide down trunks
       }
     }
 
@@ -178,7 +179,7 @@ export class Player {
 
     // landing damage
     let fallDamage = 0;
-    if (this.onGround && !wasGround && prevVy < -15 && !this.inWater) fallDamage = Math.round((-prevVy - 15) * 3.5);
+    if (this.onGround && !wasGround && prevVy < -BODY.safeFall && !this.inWater) fallDamage = Math.round((-prevVy - BODY.safeFall) * 3.3);
     if (!wasWater && this.inWater && prevVy < -5) sfx.splash();
 
     // eye height smoothing
@@ -188,7 +189,7 @@ export class Player {
     const hs = Math.hypot(v.x, v.z);
     if ((this.onGround || this.swimming) && hs > 0.5) {
       this.stepAcc += hs * dt;
-      const stride = this.swimming ? 1.6 : this.crouch ? 1.8 : 2.3;
+      const stride = BODY.stride * (this.swimming ? 0.7 : this.crouch ? 0.78 : 1);
       if (this.stepAcc > stride) {
         this.stepAcc = 0;
         if (this.swimming) sfx.swim();

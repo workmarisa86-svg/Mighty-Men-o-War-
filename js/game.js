@@ -1,6 +1,6 @@
 // One running world: owns the scene, world, player, rafts and per-frame logic.
 import * as THREE from 'three';
-import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H } from './config.js';
+import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './config.js';
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
@@ -15,7 +15,7 @@ import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
 
-const REACH = 5;
+const REACH = BODY.reach;
 
 export class Game {
   constructor(app, save) {
@@ -340,7 +340,7 @@ export class Game {
     if (!isFinite(def.hard) || this.world.isLocked(hit.x, hit.y, hit.z)) { this.hud.digProgress = 0; return; }
     const key = hit.x + ',' + hit.y + ',' + hit.z;
     if (this.dig.key !== key) { this.dig.key = key; this.dig.progress = 0; this.dig.tick = 0; }
-    let speed = 1 / def.hard;
+    let speed = BODY.digSpeed / def.hard;
     if (this.peace) speed *= 3;
     if (this.player.swimming) speed *= 0.5;
     this.dig.progress += dt * speed;
@@ -381,9 +381,9 @@ export class Game {
       const k = cx + ',' + cy + ',' + cz;
       if (seen.has(k)) continue;
       seen.add(k);
-      if (w.get(cx, cy, cz) !== B.LOG || cy < y) continue;
+      if (w.get(cx, cy, cz) !== B.LOG) continue;
       logs.push([cx, cy, cz]);
-      for (let dy = 0; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
         if (dx || dy || dz) stack.push([cx + dx, cy + dy, cz + dz]);
       }
     }
@@ -392,9 +392,9 @@ export class Game {
       this.particles.burst(lx + 0.5, ly + 0.5, lz + 0.5, BLOCKS[B.LOG].color, 5, 3, 0.8);
     }
     // the crown comes down with the trunk
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 0;
-    for (const [lx, ly, lz] of logs) { minX = Math.min(minX, lx); maxX = Math.max(maxX, lx); minZ = Math.min(minZ, lz); maxZ = Math.max(maxZ, lz); maxY = Math.max(maxY, ly); }
-    for (let yy = y; yy <= maxY + 3; yy++) for (let zz = minZ - 3; zz <= maxZ + 3; zz++) for (let xx = minX - 3; xx <= maxX + 3; xx++) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = 0;
+    for (const [lx, ly, lz] of logs) { minX = Math.min(minX, lx); maxX = Math.max(maxX, lx); minZ = Math.min(minZ, lz); maxZ = Math.max(maxZ, lz); minY = Math.min(minY, ly); maxY = Math.max(maxY, ly); }
+    for (let yy = minY; yy <= maxY + 3; yy++) for (let zz = minZ - 3; zz <= maxZ + 3; zz++) for (let xx = minX - 3; xx <= maxX + 3; xx++) {
       if (w.get(xx, yy, zz) === B.LEAVES) {
         w.set(xx, yy, zz, B.AIR);
         if (Math.random() < 0.15) this.particles.burst(xx + 0.5, yy + 0.5, zz + 0.5, BLOCKS[B.LEAVES].color, 3, 2, 1.2, 6);
@@ -406,7 +406,8 @@ export class Game {
 
   blockOverlapsBodies(x, y, z) {
     const p = this.player.pos, h = this.player.height;
-    if (x + 1 > p.x - 0.3 && x < p.x + 0.3 && z + 1 > p.z - 0.3 && z < p.z + 0.3 && y + 1 > p.y && y < p.y + h) return true;
+    const hw = BODY.halfWidth;
+    if (x + 1 > p.x - hw && x < p.x + hw && z + 1 > p.z - hw && z < p.z + hw && y + 1 > p.y && y < p.y + h) return true;
     for (const r of this.rafts) {
       const b = r.box();
       if (x + 1 > b.minX && x < b.maxX && z + 1 > b.minZ && z < b.maxZ && y + 1 > b.minY && y < b.maxY) return true;

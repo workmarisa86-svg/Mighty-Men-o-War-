@@ -10,61 +10,97 @@ const smooth = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 *
 export function generate(world) {
   const { seed, mode, sub } = world.cfg;
   const W = world.W, D = world.D, H = world.H;
-  const n1 = new Simplex2(seed), n2 = new Simplex2(seed + 1), n3 = new Simplex2(seed + 2);
+  const n1 = new Simplex2(seed), n3 = new Simplex2(seed + 2);
   const n4 = new Simplex2(seed + 3), n5 = new Simplex2(seed + 4);
   const rnd = mulberry32(seed + 99);
   const cxW = W / 2, czW = D / 2;
   const alone = mode === 'war' && sub === 'alone';
 
   // --- heightmap -----------------------------------------------------------
+  // An open battlefield: mostly level ground with only gentle, wide swells.
   const hm = new Float32Array(W * D);
   const crater = new Uint8Array(W * D);
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    let h = 30 + n1.fbm(x / 110, z / 110, 4) * 7 + n2.fbm(x / 26, z / 26, 3) * 1.6;
-    // winding rivers along a noise ridge
-    const rv = Math.abs(n3.fbm(x / 170, z / 170, 3));
-    const rw = 0.045;
-    if (rv < rw * 1.8) h = lerp(h, SEA - 3.5, smooth((1 - rv / (rw * 1.8)) * 1.7));
+    let h = SEA + 3 + n1.fbm(x / 220, z / 220, 3) * 3;
+    // winding rivers along a noise ridge, with wide sloping banks
+    const rv = Math.abs(n3.fbm(x / 190, z / 190, 2));
+    const rw = 0.05;
+    if (rv < rw * 2.6) h = lerp(h, SEA - 5, smooth((1 - rv / (rw * 2.6)) * 1.6));
     // lakes
-    const lk = n4.fbm(x / 85, z / 85, 2);
-    if (lk > 0.38) h = lerp(h, SEA - 4.5, smooth((lk - 0.38) / 0.14));
-    // keep the cabin clearing (Play Alone) dry and fairly flat
+    const lk = n4.fbm(x / 95, z / 95, 2);
+    if (lk > 0.36) h = lerp(h, SEA - 6, smooth((lk - 0.36) / 0.2));
+    // keep the cabin clearing (Play Alone) dry and level
     if (alone) {
       const d = Math.hypot(x - cxW, z - czW);
-      if (d < 18) h = lerp(h, SEA + 4, smooth(1 - d / 18));
+      if (d < 22) h = lerp(h, SEA + 3, smooth(1 - d / 22));
     }
     hm[x + z * W] = h;
   }
 
-  // shell craters
-  const nCraters = Math.floor(W * D / 700);
+  // soften everything (smooth river banks, no ragged edges)
+  const tmp = new Float32Array(W * D);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+      let sum = 0, n = 0;
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        const xx = x + dx, zz = z + dz;
+        if (xx < 0 || zz < 0 || xx >= W || zz >= D) continue;
+        sum += hm[xx + zz * W]; n++;
+      }
+      tmp[x + z * W] = sum / n;
+    }
+    hm.set(tmp);
+  }
+
+  // rare, shallow shell craters (at most ~1 block deep, easy to walk out of)
+  const nCraters = Math.floor(W * D / 5000);
   for (let i = 0; i < nCraters; i++) {
-    const cx = rnd() * W, cz = rnd() * D, r = 2 + rnd() * 4.5, depth = r * 0.5;
-    if (alone && Math.hypot(cx - cxW, cz - czW) < 20) continue;
-    const R = Math.ceil(r * 1.5);
+    const cx = rnd() * W, cz = rnd() * D, r = 2 + rnd() * 1.8;
+    if (alone && Math.hypot(cx - cxW, cz - czW) < 24) continue;
+    if (hm[Math.floor(cx) + Math.floor(cz) * W] < SEA + 1.5) continue; // not on banks
+    const R = Math.ceil(r);
     for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) {
       const x = Math.floor(cx + dx), z = Math.floor(cz + dz);
       if (x < 0 || z < 0 || x >= W || z >= D) continue;
       const d = Math.hypot(x + 0.5 - cx, z + 0.5 - cz) / r;
+      if (d < 1) { hm[x + z * W] -= 1.1 * (1 - d * d); crater[x + z * W] = 1; }
+    }
+  }
+
+  // integer tops, then limit every step between neighbours to 1 block
+  // (two sweeps of a chamfer pass: no cliffs, pits or walls anywhere)
+  const tops = new Int16Array(W * D);
+  for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 12, Math.round(hm[k])));
+  // remove isolated one-block bumps and dips
+  for (let z = 1; z < D - 1; z++) for (let x = 1; x < W - 1; x++) {
+    const k = x + z * W;
+    const n = [tops[k - 1], tops[k + 1], tops[k - W], tops[k + W]];
+    const mx = Math.max(...n), mn = Math.min(...n);
+    if (tops[k] > mx || tops[k] < mn) tops[k] = n.sort((p, q) => p - q)[1];
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
       const k = x + z * W;
-      if (d < 1) { hm[k] -= depth * (1 - d * d); crater[k] = 1; }
-      else if (d < 1.5) { hm[k] += 0.9 * (1.5 - d) * 2 * (r / 6); crater[k] = 2; }
+      if (x > 0) tops[k] = Math.min(tops[k], tops[k - 1] + 1);
+      if (z > 0) tops[k] = Math.min(tops[k], tops[k - W] + 1);
+    }
+    for (let z = D - 1; z >= 0; z--) for (let x = W - 1; x >= 0; x--) {
+      const k = x + z * W;
+      if (x < W - 1) tops[k] = Math.min(tops[k], tops[k + 1] + 1);
+      if (z < D - 1) tops[k] = Math.min(tops[k], tops[k + W] + 1);
     }
   }
 
   // --- columns -------------------------------------------------------------
-  const tops = new Int16Array(W * D);
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     const k = x + z * W;
-    const top = Math.max(4, Math.min(H - 12, Math.floor(hm[k])));
-    tops[k] = top;
+    const top = tops[k];
     let surf;
     const sn = n5.noise(x / 16, z / 16);
     if (top < SEA) surf = B.MUD;
     else if (top <= SEA) surf = (hash2(x, z, seed) < 0.6) ? B.MUD : B.DIRT;
     else if (crater[k] === 1) surf = hash2(x, z, seed + 5) < 0.45 ? B.RUBBLE : B.MUD;
-    else if (crater[k] === 2) surf = hash2(x, z, seed + 6) < 0.35 ? B.RUBBLE : B.DIRT;
-    else if (sn > 0.55) surf = B.RUBBLE;
+        else if (sn > 0.55) surf = B.RUBBLE;
     else if (sn < -0.5) surf = B.MUD;
     else surf = B.DIRT;
     for (let y = 0; y <= top; y++) {
@@ -81,7 +117,7 @@ export function generate(world) {
   // --- iron ----------------------------------------------------------------
   const vein = (x, y, z, len, replace) => {
     for (let i = 0; i < len; i++) {
-      if (world.inside(x, y, z) && replace.includes(world.data[world.idx(x, y, z)])) world.data[world.idx(x, y, z)] = B.IRON;
+      if (world.inside(x, y, z) && y < tops[x + z * W] && replace.includes(world.data[world.idx(x, y, z)])) world.data[world.idx(x, y, z)] = B.IRON;
       const r = rnd();
       if (r < 0.33) x += rnd() < 0.5 ? 1 : -1; else if (r < 0.66) z += rnd() < 0.5 ? 1 : -1; else y += rnd() < 0.5 ? 1 : -1;
     }
@@ -123,7 +159,7 @@ export function generate(world) {
 }
 
 export function plantTree(world, x, y, z, r) {
-  const h = 4 + Math.floor(r() * 4);
+  const h = 5 + Math.floor(r() * 4);   // ~13% taller in (smaller) blocks
   const dead = r() < 0.4;
   for (let i = 0; i < h; i++) if (world.get(x, y + i, z) === B.AIR) world.data[world.idx(x, y + i, z)] = B.LOG;
   const ty = y + h - 1;
@@ -140,8 +176,8 @@ export function plantTree(world, x, y, z, r) {
     }
     return;
   }
-  const rad = 2 + (r() < 0.4 ? 1 : 0);
-  for (let dy = -1; dy <= 2; dy++) for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) {
+  const rad = 2 + (r() < 0.55 ? 1 : 0);
+  for (let dy = -2; dy <= 2; dy++) for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) {
     const d = dx * dx + dz * dz + dy * dy * 1.5;
     if (d > rad * rad + 0.5 || r() < 0.3) continue;
     const X = x + dx, Y = ty + dy, Z = z + dz;
