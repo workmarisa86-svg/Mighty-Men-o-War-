@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Original emblem: a muddy earth block over a crossed entrenching shovel and bayonet on a riveted plate. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a5e44"/><stop offset="1" stop-color="#363a28"/>
+    </linearGradient>
+  </defs>
+  <path d="M76 12h104l64 64v104l-64 64H76L12 180V76z" fill="#1d1f16"/>
+  <path d="M80 22h96l58 58v96l-58 58H80l-58-58V80z" fill="url(#plate)" stroke="#8c8a62" stroke-width="4"/>
+  <g fill="#9a9a78">
+    <circle cx="84" cy="36" r="4"/><circle cx="172" cy="36" r="4"/><circle cx="220" cy="84" r="4"/><circle cx="220" cy="172" r="4"/>
+    <circle cx="172" cy="220" r="4"/><circle cx="84" cy="220" r="4"/><circle cx="36" cy="172" r="4"/><circle cx="36" cy="84" r="4"/>
+  </g>
+  <!-- shovel -->
+  <g transform="rotate(-40 128 128)">
+    <rect x="122" y="40" width="12" height="120" fill="#7a5b3a" stroke="#2a2018" stroke-width="3"/>
+    <path d="M114 40a14 14 0 0 1 28 0" fill="none" stroke="#2a2018" stroke-width="7"/>
+    <path d="M104 160h48l-4 36-20 18-20-18z" fill="#6c7258" stroke="#22241a" stroke-width="4"/>
+  </g>
+  <!-- bayonet -->
+  <g transform="rotate(40 128 128)">
+    <rect x="123" y="150" width="10" height="40" fill="#3a2e22" stroke="#1a1510" stroke-width="3"/>
+    <rect x="110" y="144" width="36" height="8" fill="#4c4c44" stroke="#1a1510" stroke-width="2"/>
+    <path d="M122 144V58l6-16 6 16v86z" fill="#b8bab0" stroke="#2a2a26" stroke-width="3"/>
+  </g>
+  <!-- earth block -->
+  <path d="M128 92l44 22-44 22-44-22z" fill="#6e5a3e" stroke="#1d1810" stroke-width="3"/>
+  <path d="M84 114l44 22v50l-44-22z" fill="#57422d" stroke="#1d1810" stroke-width="3"/>
+  <path d="M172 114l-44 22v50l44-22z" fill="#3f3022" stroke="#1d1810" stroke-width="3"/>
+  <g fill="#8c7a5c"><rect x="112" y="104" width="6" height="3"/><rect x="134" y="112" width="8" height="3"/><rect x="122" y="120" width="5" height="3"/></g>
+  <g fill="#2c2218"><rect x="96" y="134" width="5" height="5"/><rect x="108" y="152" width="6" height="5"/><rect x="146" y="146" width="6" height="6"/><rect x="156" y="132" width="5" height="4"/></g>
+</svg>
