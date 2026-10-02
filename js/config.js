@@ -1,7 +1,9 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.6.1';
+export const GAME_VERSION = '0.6.2';
 export const SAVE_FORMAT = 2;
-export const STORE_PREFIX = 'blocks-';
+// every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
+export const STORE_PREFIX = 'blocks-mmow-';
+export const OLD_PREFIX = 'blocks-';
 
 export const CHUNK = 16;          // chunk width/depth in blocks
 export const WORLD_H = 64;        // world height in blocks

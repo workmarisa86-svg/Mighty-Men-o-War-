@@ -1,18 +1,18 @@
 {
-  "id": "./",
+  "id": "/Mighty-Men-o-War-/",
   "name": "Mighty Man o' War",
-  "short_name": "Mighty Man o' War",
-  "description": "A 3D block-building war survival game.",
-  "start_url": "./",
-  "scope": "./",
+  "short_name": "Mighty Man",
+  "description": "Mighty Man o' War: a 3D block-building war survival game.",
+  "start_url": "/Mighty-Men-o-War-/",
+  "scope": "/Mighty-Men-o-War-/",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#1a1b14",
   "theme_color": "#23251b",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/Mighty-Men-o-War-/icons/mmow-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

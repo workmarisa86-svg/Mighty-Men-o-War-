@@ -1,6 +1,29 @@
 // All persistent data lives under the "blocks-" prefix so it never collides
 // with other apps on the same github.io origin.
-import { STORE_PREFIX } from './config.js';
+import { STORE_PREFIX, OLD_PREFIX } from './config.js';
+
+// One-time move of this game's data from the old shared "blocks-" keys.
+// Only data that is clearly this game's is moved (other apps on the same
+// origin may use the same old prefix); the old keys are left alone.
+(function migrate() {
+  try {
+    if (localStorage.getItem(STORE_PREFIX + 'migrated')) return;
+    const get = (k) => { try { return JSON.parse(localStorage.getItem(OLD_PREFIX + k)); } catch { return null; } };
+    const put = (k, v) => { if (localStorage.getItem(STORE_PREFIX + k) == null) localStorage.setItem(STORE_PREFIX + k, JSON.stringify(v)); };
+    const st = get('settings');
+    if (st && typeof st === 'object' && 'minimapSize' in st && 'renderDist' in st) put('settings', st);
+    const idx = get('saves');
+    if (Array.isArray(idx)) {
+      const ours = idx.filter((m) => m && m.id && (m.mode === 'war' || m.mode === 'peace'));
+      const keep = [];
+      for (const m of ours) { const d = get('save-' + m.id); if (d && d.cfg && d.cfg.seed != null && (d.cfg.mode === 'war' || d.cfg.mode === 'peace')) { put('save-' + m.id, d); keep.push(m); } }
+      if (keep.length) put('saves', keep);
+    }
+    const stats = get('stats');
+    if (stats && stats.total && stats.byDiff) put('stats', stats);
+    localStorage.setItem(STORE_PREFIX + 'migrated', '1');
+  } catch { /* storage unavailable */ }
+})();
 
 export function load(key, def) {
   try {
