@@ -1,4 +1,4 @@
-# Mighty Men o' War
+# Mighty Man o' War
 
 An original 3D block-building war survival game that runs in the browser
 (HTML, CSS, JavaScript and Three.js). Every texture, icon, sound and the logo

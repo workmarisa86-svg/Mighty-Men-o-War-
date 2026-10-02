@@ -196,3 +196,32 @@ class App {
 }
 
 window.app = new App();
+
+// Installable app / offline play. The worker's scope is this folder only.
+// When a new version has been downloaded, offer a reload.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+      const notify = (w) => {
+        if (!w || document.getElementById('update')) return;
+        const el = document.createElement('div'); el.id = 'update';
+        el.innerHTML = `<span>${t('app.update')}</span><button class="btn small primary">${t('app.reload')}</button>`;
+        el.querySelector('button').onclick = () => { w.postMessage('skipWaiting'); };
+        document.body.appendChild(el);
+      };
+      if (reg.waiting && navigator.serviceWorker.controller) notify(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) notify(w); });
+      });
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return; reloaded = true;
+        if (window.app && window.app.game) window.app.saveGame(true);
+        location.reload();
+      });
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+    } catch (e) { console.warn('service worker', e); }
+  });
+}

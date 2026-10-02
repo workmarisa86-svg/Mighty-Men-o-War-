@@ -9,6 +9,7 @@ import { MANUAL, MANUAL_CATS } from './manual.js';
 import { missionsFor, missionInfo } from './missions.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
+import { logoSvg } from './logo.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -56,8 +57,8 @@ export class UI {
   r_main() {
     const hasSaves = listSaves().length > 0;
     this.root.innerHTML = `<div class="title-wrap">
-      <img src="icons/logo.svg" class="logo" alt="">
-      <h1 class="game-title">MIGHTY MEN <span>O'</span> WAR</h1>
+      ${logoSvg('logo-art')}
+      <h1 class="sr-only">Mighty Man o' War</h1>
       <p class="tagline">${t('app.tagline')}</p>
       <div class="menu">
         <button class="btn" data-go="newgame">${t('menu.new')}</button>
@@ -499,7 +500,7 @@ export class UI {
   }
 
   r_loading() {
-    this.root.innerHTML = `<div class="title-wrap"><img src="icons/logo.svg" class="logo small" alt="">
+    this.root.innerHTML = `<div class="title-wrap">${logoSvg('logo-art small')}
       <p class="tagline">${t('hud.loading')}</p><div class="loadbar"><div class="fill"></div></div></div>`;
   }
   setLoading(f) { const el = this.root.querySelector('.loadbar .fill'); if (el) el.style.width = Math.round(f * 100) + '%'; }

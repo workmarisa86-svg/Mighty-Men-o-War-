@@ -444,3 +444,8 @@ body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 
 .speaker { position: absolute; right: 14px; bottom: 14px; width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--line); background: rgba(0,0,0,0.35); color: var(--khaki); padding: 8px; cursor: pointer; }
 .speaker svg { width: 100%; height: 100%; display: block; }
 .speaker .x { display: none; } .speaker.off .x { display: inline; } .speaker.off .w { display: none; }
+.logo-art { width: min(560px, 92vw); height: auto; max-height: 46vh; display: block; margin: 0 auto 6px; filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6)); border-radius: 6px; }
+.logo-art.small { width: min(360px, 80vw); max-height: 34vh; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#update { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px;
+  background: rgba(24, 26, 18, 0.95); border: 2px solid var(--khaki); border-radius: 6px; padding: 8px 12px; color: #f0e8cc; font-family: var(--body); box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
