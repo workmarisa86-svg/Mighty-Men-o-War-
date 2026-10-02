@@ -228,16 +228,21 @@ export class Forts {
     }
     return best;
   }
-  // players may not build up against a fort's walls (it can only be entered by its door)
+  // Built-in forts are off limits for building: nothing can be placed in a
+  // fort's footprint (walls, courtyard, ramparts, the air above them). Right
+  // outside the walls and in front of the door is free ground.
   protectedCell(x, y, z) {
     for (const f of this.list) {
-      if (Math.abs(x - f.cx) <= ZONE && Math.abs(z - f.cz) <= ZONE && y >= f.base - 1) {
-        const inner = Math.abs(x - f.cx) <= FORT_HALF - 2 && Math.abs(z - f.cz) <= FORT_HALF - 2;
-        if (inner && f.owner === 'ally') return false;   // your own courtyard
-        return true;
-      }
+      if (Math.abs(x - f.cx) <= FORT_HALF && Math.abs(z - f.cz) <= FORT_HALF && y >= f.base - 1) return true;
     }
     return false;
+  }
+  // the open courtyard / rooms inside a fort (a campfire may go here)
+  interiorCell(x, y, z) {
+    for (const f of this.list) {
+      if (Math.abs(x - f.cx) <= FORT_HALF - 1 && Math.abs(z - f.cz) <= FORT_HALF - 1 && y >= f.base && y <= f.base + 6) return f;
+    }
+    return null;
   }
 
   // -------------------------------------------------------------- door

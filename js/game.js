@@ -574,7 +574,8 @@ export class Game {
     if (!hit || hit.ny !== 1) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
     const x = hit.x, y = hit.y + 1, z = hit.z;
     if (this.world.get(x, y, z) !== B.AIR || hit.id === B.WATER || hit.id === B.WIRE) { this.hud.toast(t('hud.fireWhere')); sfx.error(); return; }
-    if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
+    // inside a fort the only thing you may place is a campfire (for crafting)
+    if (this.forts.protectedCell(x, y, z) && !this.forts.interiorCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     if (!this.has('wood', 3)) { this.hud.toast(t('hud.fireWood')); sfx.error(); return; }
     this.take('wood', 3);
     this.world.set(x, y, z, B.CAMPFIRE);
