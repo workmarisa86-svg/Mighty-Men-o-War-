@@ -354,6 +354,23 @@ export class UI {
     this.orderKeys = (code) => { const m = /^Digit(\d)$/.exec(code); if (m && acts[+m[1] - 1]) run(acts[+m[1] - 1][0]); };
   }
 
+  // Cabin storage chest: choose what to carry and what to leave behind.
+  r_chest() {
+    const g = this.app.game, C = g.cabin;
+    const ids = Object.keys(ITEMS).filter((id) => !ITEMS[id].tool && !ITEMS[id].gear && !ITEMS[id].armor);
+    const carry = ids.filter((id) => (g.inv.counts[id] || 0) > 0), kept = ids.filter((id) => (C.chest.counts[id] || 0) > 0);
+    const row = (id, n, act) => `<div class="chest-row"><img src="${itemIcon(id)}" alt=""><span>${t('item.' + id)}</span><b>${n}</b>
+      <button class="btn small" data-a="${act}" data-id="${id}" data-n="1">${act === 'in' ? '→' : '←'}</button>${n > 1 ? `<button class="btn small" data-a="${act}" data-id="${id}" data-n="${n}">${act === 'in' ? '⇉' : '⇇'}</button>` : ''}</div>`;
+    const body = `<p class="muted small">${t('chest.hint')}</p><div class="chest">
+      <div><p class="label">${t('chest.carry')}</p>${carry.map((id) => row(id, g.inv.counts[id], 'in')).join('') || `<p class="muted">—</p>`}</div>
+      <div><p class="label">${t('chest.stored')}</p>${kept.map((id) => row(id, C.chest.counts[id], 'out')).join('') || `<p class="muted">—</p>`}</div></div>`;
+    const panel = this.panel(t('chest.title'), body, { wide: true, onBack: () => this.app.closePanel() });
+    panel.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => {
+      if (b.dataset.a === 'in') C.store(b.dataset.id, +b.dataset.n); else C.takeOut(b.dataset.id, +b.dataset.n);
+      this.rerender();
+    });
+  }
+
   r_gameover({ days }) {
     this.root.innerHTML = `<div class="panel narrow center"><h2>${t('over.title')}</h2>
       <p>${t('over.starved')}</p><p class="big">${t('over.days', { n: days })}</p>

@@ -105,6 +105,7 @@ export class HUD {
     let hint = '';
     if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
+      else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
       else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');

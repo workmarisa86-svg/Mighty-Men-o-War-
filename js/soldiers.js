@@ -1205,6 +1205,7 @@ export class Enemies {
       const nx = s.pos.x - Math.sin(a) * step, nz = s.pos.z - Math.cos(a) * step;
       let gy = this.ground(nx, nz, s.pos.y), swim = false;
       if (gy == null && pass === 1) { const wv = this.water(nx, nz); if (wv) { gy = wv.y; swim = wv.swim; } }
+      if (s.faction === 'enemy' && this.game.cabin && this.game.cabin.covers(nx, nz)) continue;   // nobody gets into the cabin
       if (gy != null && gy - s.pos.y <= climb && gy - s.pos.y > -3) {
         if (gy - s.pos.y > 0.5) s.climbT = gy - s.pos.y > 1.2 ? 0.8 : 0.35;
         s.pos.x = nx; s.pos.z = nz; s.pos.y += (gy - s.pos.y) * Math.min(1, dt * 12);

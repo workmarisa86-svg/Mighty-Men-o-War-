@@ -22,6 +22,7 @@ import { Flashlight } from './flashlight.js';
 import { Forts } from './forts.js';
 import { ScopeView } from './scope.js';
 import { OrderWheel } from './orders.js';
+import { Cabin } from './cabin.js';
 import { setCharacterQuality } from './characters.js';
 import { sfx, setRain } from './audio.js';
 import { HUD } from './hud.js';
@@ -147,6 +148,7 @@ export class Game {
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
     this.forts = new Forts(this, save.forts);
+    this.cabin = new Cabin(this, save.cabin);
     this.enemies = new Enemies(this, { followers: save.followers });
     this.supplyT = 0;
     this.shake = 0;
@@ -667,7 +669,8 @@ export class Game {
       this.hud.toast(t('hud.regroup'), 'warn');
       return;
     }
-    const s = this.world.spawn;
+    // alone: wake up beside the cabin bed
+    const s = this.cabin.on ? this.cabin.bedSpot() : this.world.spawn;
     p.pos.set(s.x, s.y, s.z);
   }
 
@@ -676,6 +679,7 @@ export class Game {
     const { eye, dir } = this.aim();
     const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (!hit || hit.id !== B.SUPPLY) return false;
+    if (this.cabin.isChest(hit.x, hit.y, hit.z)) { this.app.openPanel('chest'); return true; }
     const f = this.forts.fortAt(new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5));
     if (!f || f.owner !== 'ally') { this.hud.toast(t('fort.notYours')); sfx.error(); return true; }
     if (this.supplyT > 0) { this.hud.toast(t('fort.rationsWait')); return true; }
@@ -802,7 +806,7 @@ export class Game {
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
-      edits: this.world.serializeEdits(),
+      edits: this.world.serializeEdits(), cabin: this.cabin.toSave(),
     };
   }
 
@@ -815,7 +819,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
-    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose();
+    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose();
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

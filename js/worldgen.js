@@ -179,7 +179,7 @@ export function generate(world) {
   world.spawn = startFort ? { x: startFort.cx + 0.5, y: startFort.base, z: startFort.cz + 0.5 } : findLand(world, cxW, czW);
   if (alone) {
     const c = buildCabin(world, Math.floor(world.spawn.x), Math.floor(world.spawn.y), Math.floor(world.spawn.z));
-    world.sites.push({ type: 'cabin', x: c.x, z: c.z, y: c.y });
+    world.sites.push({ type: 'cabin', x: c.x, z: c.z, y: c.y, r: c.r, bed: c.bed, chest: c.chest, fire: c.fire });
     world.spawn = { x: c.x + 0.5, y: c.y, z: c.z + 0.5 };
   }
 }
@@ -282,9 +282,13 @@ function buildCabin(world, cx, by, cz) {
   }
   put(cx, by, cz + R, B.AIR); put(cx, by + 1, cz + R, B.AIR);       // door
   put(cx - R, by + 1, cz, B.AIR); put(cx + R, by + 1, cz, B.AIR); put(cx, by + 1, cz - R, B.AIR); // windows
+  // an ever-burning campfire, a storage chest and a bed
+  const fire = { x: cx - 2, y: by, z: cz - 2 }, chest = { x: cx - 2, y: by, z: cz + 1 }, bed = { x: cx + 1.5, y: by, z: cz - 1.5 };
+  put(fire.x, fire.y, fire.z, B.CAMPFIRE);
+  put(chest.x, chest.y, chest.z, B.SUPPLY);
   for (let dz = -R - 1; dz <= R + 1; dz++) for (let dx = -R - 1; dx <= R + 1; dx++) {
     const k = cx + dx + (cz + dz) * world.W;
     if (world.tops && k >= 0 && k < world.tops.length) world.tops[k] = Math.max(world.tops[k], by + (Math.abs(dx) <= R && Math.abs(dz) <= R ? 4 : -1));
   }
-  return { x: cx, y: by, z: cz };
+  return { x: cx, y: by, z: cz, r: R, fire, chest, bed };
 }
