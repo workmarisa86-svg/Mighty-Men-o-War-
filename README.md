@@ -19,14 +19,16 @@ Then open `http://localhost:8080/`.
 1. **World, movement, digging, building, water, rafts, bridges, saving** (done)
 2. **Animals, hunting, food, hunger, campfires, crafting** (done)
 3. **Weapons, aiming, scope, TNT, enemies, looting** (done)
-4. Forts, capturing, surrender, allies, commands, callouts
+4. **Forts, capturing, surrender, allies, commands, callouts** (done)
 5. Play Alone cabin, Peace mode extras, war map, statistics, manual, PWA
 
 ## Requirements saved for later stages
 
-- **Stage 4 – fort lighting:** every built-in fort must be fully lit inside at
-  all times, with warm light visible from outside at night through windows and
-  gaps, so forts can be spotted from far away.
+- **Stage 4 – fort lighting** (done): every built-in fort is fully lit inside at
+  all times, with warm light visible from outside at night through windows,
+  gaps and tower lamps, so forts can be spotted from far away.
+- **Stage 5 – war map:** the full-screen war map stays separate from the
+  corner minimap.
 
 ## Code layout
 
@@ -40,7 +42,9 @@ Then open `http://localhost:8080/`.
 | `js/sky.js` | Day/night cycle and rain |
 | `js/animals.js` | Herds and flocks, stealth detection, fleeing, respawning |
 | `js/weapons.js`, `js/viewmodel.js` | Knife, guns, grenades, sniper scope, the item held in hand |
-| `js/soldiers.js` | Enemy soldiers (squads, senses, combat, looting, crafting) and the tank boss |
+| `js/soldiers.js` | Enemy and allied soldiers (squads, garrisons, orders, callouts, looting, crafting) and the tank boss |
+| `js/forts.js` | Built-in forts: generation, lighting, doors, capture and surrender, flags, alarms |
+| `js/minimap.js`, `js/flashlight.js` | Corner radar; flashlight beam and visible cone |
 | `js/explosives.js` | TNT, grenades, smoke, shells, blasts that spare built-in structures |
 | `js/campfire.js`, `js/pickups.js` | Campfires (crafting, cooking, light) and items on the ground |
 | `js/textures.js`, `js/items.js` | Procedural textures and icons |

@@ -6,7 +6,7 @@ const COLS = 8;
 const TILE_NAMES = [
   'dirt', 'dirt_top', 'mud', 'rubble', 'log_side', 'log_top', 'planks', 'leaves',
   'stone', 'iron', 'tnt_side', 'tnt_top', 'water', 'bedrock', 'sandbag', 'sandbag_top',
-  'wire',
+  'wire', 'fort_wall', 'fort_top', 'fort_door', 'fort_lamp', 'supply', 'supply_top',
 ];
 
 const clamp = (v) => Math.max(0, Math.min(255, v | 0));
@@ -218,6 +218,46 @@ const PAINT = {
     }
     p.rect(15, 0, 2, 32, [64, 50, 36]); // stake
   },
+  fort_wall(p) {
+    // weathered cast concrete in courses, streaked and chipped
+    p.fill([118, 116, 108], 12);
+    for (let y = 0; y < 32; y += 8) p.rect(0, y, 32, 1, [84, 82, 76]);
+    for (let y = 0; y < 32; y += 8) { const off = (y / 8) % 2 ? 0 : 16; p.rect(off, y, 1, 8, [88, 86, 80]); }
+    for (let i = 0; i < 5; i++) { // rain streaks
+      const x = p.r() * 32 | 0, len = 6 + (p.r() * 16 | 0), y0 = p.r() * 10 | 0;
+      for (let y = y0; y < Math.min(32, y0 + len); y++) p.px(x, y, [92, 90, 84], 0.7);
+    }
+    p.blobs(4, [98, 96, 90], 1.5, 6);
+    p.blobs(2, [70, 72, 62], 1.2, 6); // moss / soot
+  },
+  fort_top(p) { p.fill([108, 106, 100], 12); p.blobs(5, [92, 90, 84], 2, 6); },
+  fort_door(p) {
+    // riveted steel plate in dark olive with hinges
+    p.fill([66, 72, 56], 8);
+    p.rect(0, 0, 32, 2, [44, 48, 38]); p.rect(0, 30, 32, 2, [44, 48, 38]); p.rect(0, 0, 2, 32, [44, 48, 38]); p.rect(30, 0, 2, 32, [44, 48, 38]);
+    p.rect(0, 15, 32, 2, [48, 52, 42]);
+    for (const y of [4, 12, 19, 27]) for (let x = 5; x < 30; x += 6) { p.px(x, y, [110, 112, 100]); p.px(x + 1, y + 1, [34, 36, 30]); }
+    for (const y of [6, 24]) p.rect(1, y, 6, 3, [38, 40, 34]);
+    p.blobs(3, [96, 70, 44], 1.4, 10); // rust
+  },
+  fort_lamp(p) {
+    // caged lamp: dark frame, warm glowing glass
+    p.fill([60, 58, 52], 6);
+    for (let y = 5; y < 27; y++) for (let x = 7; x < 25; x++) {
+      const d = Math.hypot(x - 15.5, y - 15.5) / 12;
+      p.px(x, y, [255 - d * 40, 200 - d * 70, 110 - d * 60]);
+    }
+    for (let x = 7; x < 25; x += 5) p.rect(x, 5, 1, 22, [50, 44, 36]);
+    p.rect(7, 15, 18, 1, [50, 44, 36]);
+    p.rect(5, 3, 22, 2, [40, 38, 34]); p.rect(5, 27, 22, 2, [40, 38, 34]);
+  },
+  supply(p) {
+    PAINT.planks(p);
+    p.rect(0, 0, 32, 3, [70, 56, 38]); p.rect(0, 29, 32, 3, [70, 56, 38]);
+    p.rect(9, 11, 14, 10, [200, 186, 140]);           // stencilled ration label
+    p.rect(12, 14, 8, 1, [60, 50, 34]); p.rect(12, 17, 8, 1, [60, 50, 34]);
+  },
+  supply_top(p) { PAINT.planks(p); p.rect(13, 0, 6, 32, [64, 52, 36]); },
   bedrock(p) {
     p.fill([36, 35, 34], 14);
     p.blobs(8, [18, 18, 18], 2, 6);

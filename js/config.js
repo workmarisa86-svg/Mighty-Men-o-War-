@@ -11,11 +11,11 @@ export const DIFFICULTIES = ['beginner', 'easy', 'medium', 'hard', 'impossible']
 
 // Difficulty controls enemy count, food scarcity and fort spacing (via world size).
 export const DIFF = {
-  beginner:   { size: 192, enemies: 6,  animals: 1.6, animalRespawn: 60,  forts: 7 },
-  easy:       { size: 224, enemies: 10, animals: 1.3, animalRespawn: 90,  forts: 8 },
-  medium:     { size: 256, enemies: 16, animals: 1.0, animalRespawn: 130, forts: 9 },
-  hard:       { size: 320, enemies: 24, animals: 0.7, animalRespawn: 200, forts: 11 },
-  impossible: { size: 384, enemies: 34, animals: 0.45, animalRespawn: 300, forts: 13 },
+  beginner:   { size: 192, enemies: 10, allies: 16, animals: 1.6, animalRespawn: 60,  forts: 7 },
+  easy:       { size: 224, enemies: 14, allies: 14, animals: 1.3, animalRespawn: 90,  forts: 8 },
+  medium:     { size: 256, enemies: 20, allies: 12, animals: 1.0, animalRespawn: 130, forts: 9 },
+  hard:       { size: 320, enemies: 28, allies: 10, animals: 0.7, animalRespawn: 200, forts: 11 },
+  impossible: { size: 384, enemies: 38, allies: 9,  animals: 0.45, animalRespawn: 300, forts: 13 },
 };
 export const PEACE_SIZE = 256;
 

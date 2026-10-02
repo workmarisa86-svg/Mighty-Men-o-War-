@@ -271,6 +271,35 @@ export class UI {
     });
   }
 
+  // Orders for one allied soldier (aimed at), or for the whole squad.
+  r_orders({ soldier }) {
+    const g = this.app.game, E = g.enemies;
+    const n = E.followers().length;
+    let body, acts;
+    if (soldier && soldier.alive) {
+      const role = t('role.' + soldier.role);
+      body = `<div class="who"><b>${esc(soldier.name)}</b><span class="muted small">${t('type.' + soldier.type)} · ${role} · ${t('order.weapon')}: ${soldier.weapon ? t('item.' + soldier.weapon) : '—'}</span></div>`;
+      acts = [['follow', 'order.follow'], ['hold', 'order.hold'], ['defend', 'order.defend'], ['iron', 'order.iron'],
+        ['knife', 'order.knife'], ['rifle', 'order.rifle'], ['grenade', 'order.grenades']];
+    } else {
+      body = `<p class="muted">${t('order.squadInfo', { n })}</p>`;
+      acts = [['all-follow', 'order.allFollow'], ['all-hold', 'order.allHold'], ['all-defend', 'order.allDefend']];
+    }
+    body += `<div class="menu">${acts.map(([a, k], i) => `<button class="btn" data-a="${a}"><kbd>${i + 1}</kbd>${t(k)}</button>`).join('')}</div>
+      <p class="muted small">${t('order.hint')}</p>`;
+    const panel = this.panel(t(soldier ? 'order.title' : 'order.squad'), body, { onBack: () => this.app.closePanel() });
+    this.root.classList.add('orders');
+    const run = (a) => {
+      if (a === 'follow' || a === 'hold' || a === 'defend') E.order(soldier, a);
+      else if (a === 'iron') E.askIron(soldier);
+      else if (['knife', 'rifle', 'grenade'].includes(a)) E.askItem(soldier, a);
+      else { const k = E.orderAll(a.slice(4)); if (!k) g.hud.toast(t('order.nobody')); }
+      this.app.closePanel();
+    };
+    panel.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => run(b.dataset.a));
+    this.orderKeys = (code) => { const m = /^Digit(\d)$/.exec(code); if (m && acts[+m[1] - 1]) run(acts[+m[1] - 1][0]); };
+  }
+
   r_gameover({ days }) {
     this.root.innerHTML = `<div class="panel narrow center"><h2>${t('over.title')}</h2>
       <p>${t('over.starved')}</p><p class="big">${t('over.days', { n: days })}</p>

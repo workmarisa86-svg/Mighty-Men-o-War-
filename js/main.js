@@ -32,9 +32,9 @@ class App {
     addEventListener('keydown', (e) => {
       initAudio();
       if (!this.game) return;
-      if (this.game.overlay && (e.code === 'Escape' || (e.code === 'KeyI' && this.game.overlay === 'inventory') || (e.code === 'KeyK' && this.game.overlay === 'craft'))) {
+      if (this.game.overlay && (e.code === 'Escape' || (e.code === 'KeyI' && this.game.overlay === 'inventory') || (e.code === 'KeyK' && this.game.overlay === 'craft') || (e.code === 'KeyQ' && this.game.overlay === 'orders'))) {
         e.preventDefault(); this.closePanel();
-      }
+      } else if (this.game.overlay === 'orders' && this.ui.orderKeys) this.ui.orderKeys(e.code);
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.game) { this.saveGame(true); if (!this.game.paused) this.pause(); }
@@ -100,11 +100,11 @@ class App {
     this.game.paused = true;
     this.ui.show('pause');
   }
-  openPanel(name) {
+  openPanel(name, params = {}) {
     this.game.overlay = name;
     this.ui.invPick = null;
     this.input.exitLock();
-    this.ui.show(name);
+    this.ui.show(name, params);
   }
   closePanel() {
     if (!this.game) return;
