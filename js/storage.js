@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS = {
   minimap: true,
   minimapSize: 'm',
   formation: 'loose',
-  music: 0.5,
+  music: 0.45,
   musicMute: false,
   touchSize: 'm',
 };

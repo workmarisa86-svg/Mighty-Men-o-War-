@@ -16,7 +16,8 @@ html = html.replace(/src="js\/main\.js(\?v=[^"]*)?"/, `src="js/main.js?v=${v}"`)
 fs.writeFileSync(root + 'index.html', html);
 const icons = fs.readdirSync(root + 'icons').filter((f) => !f.includes('social')).map((f) => './icons/' + f);
 const imgs = fs.readdirSync(root + 'img').map((f) => './img/' + f);
-const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, './js/vendor/three.module.js?v=' + v, ...files.map((f) => './js/' + f + '?v=' + v), ...icons, ...imgs];
+const audio = fs.readdirSync(root + 'audio').filter((f) => !f.endsWith('.txt')).map((f) => './audio/' + f);
+const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, './js/vendor/three.module.js?v=' + v, ...files.map((f) => './js/' + f + '?v=' + v), ...icons, ...imgs, ...audio];
 let sw = fs.readFileSync(root + 'sw.js', 'utf8');
 sw = sw.replace(/const VERSION = '[^']*';/, `const VERSION = '${v}';`).replace(/const FILES = \[[\s\S]*?\];/, 'const FILES = ' + JSON.stringify(offline, null, 2) + ';');
 fs.writeFileSync(root + 'sw.js', sw);
