@@ -1,0 +1,152 @@
+<svg viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" font-family="Impact, 'Arial Narrow Bold', 'Arial Black', sans-serif">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d0a07"/>
+      <stop offset="45%" stop-color="#3a2a18"/>
+      <stop offset="80%" stop-color="#d98b2f"/>
+      <stop offset="100%" stop-color="#f3b45a"/>
+    </linearGradient>
+    <radialGradient id="boom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fffbe6"/>
+      <stop offset="22%" stop-color="#ffd36b"/>
+      <stop offset="50%" stop-color="#f08a24"/>
+      <stop offset="78%" stop-color="#a8430f" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#a8430f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="75%">
+      <stop offset="55%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.75"/>
+    </radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff1c9"/>
+      <stop offset="100%" stop-color="#c79a4a"/>
+    </linearGradient>
+    <filter id="blur6"><feGaussianBlur stdDeviation="6"/></filter>
+    <filter id="blur2"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="grunge" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="12"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.45 -0.1"/>
+    </filter>
+    <polygon id="star" points="760,270 700,284 748,330 686,310 706,372 664,326 650,392 636,326 594,372 614,310 552,330 600,284 540,270 600,256 552,210 614,230 594,168 636,214 650,148 664,214 706,168 686,230 748,210 700,256"/>
+  </defs>
+
+  <!-- sky -->
+  <rect width="900" height="560" fill="url(#sky)"/>
+  <!-- explosion -->
+  <circle cx="650" cy="270" r="260" fill="url(#boom)"/>
+  <ellipse cx="650" cy="150" rx="90" ry="70" fill="#1a130c" opacity="0.65" filter="url(#blur6)"/>
+  <ellipse cx="610" cy="96" rx="70" ry="44" fill="#1a130c" opacity="0.55" filter="url(#blur6)"/>
+  <use href="#star" fill="#ffb13b" opacity="0.95"/>
+  <g transform="translate(650 270) scale(0.6) translate(-650 -270)"><use href="#star" fill="#fff3b8"/></g>
+  <ellipse cx="650" cy="420" rx="270" ry="34" fill="none" stroke="#ffe3a0" stroke-width="4" opacity="0.5" filter="url(#blur2)"/>
+  <!-- flying debris -->
+  <g fill="#0b0907">
+    <polygon points="520,230 540,218 546,238"/><polygon points="800,250 826,238 822,262"/>
+    <polygon points="560,130 580,122 578,142"/><polygon points="760,120 784,134 764,148"/>
+    <polygon points="480,330 496,322 500,338"/><polygon points="842,340 862,334 858,352"/>
+    <polygon points="700,90 716,84 714,100"/><polygon points="610,352 626,346 626,362"/>
+  </g>
+
+  <!-- ground silhouette -->
+  <path d="M0 440 Q200 424 380 444 T900 436 L900 560 L0 560 Z" fill="#0b0805"/>
+  <ellipse cx="640" cy="446" rx="300" ry="26" fill="#8a5a24" opacity="0.5" filter="url(#blur6)"/>
+  <!-- wire -->
+  <g stroke="#0b0805" stroke-width="3" fill="none">
+    <path d="M470 400 V450 M560 400 V450"/>
+    <path d="M470 414 Q500 400 515 414 T560 414 M470 430 Q500 416 515 430 T560 430"/>
+  </g>
+
+  <!-- squad in trench (silhouettes) -->
+  <g fill="#0b0805">
+    <rect x="0" y="420" width="250" height="140"/>
+    <g>
+      <path d="M26 440 Q28 398 52 396 Q78 400 80 440 Z"/><rect x="34" y="438" width="40" height="30"/>
+      <path d="M36 450 L26 410" stroke="#0b0805" stroke-width="12" stroke-linecap="round"/>
+      <path d="M118 446 Q120 404 144 402 Q170 406 172 446 Z"/><rect x="126" y="444" width="40" height="30"/>
+      <path d="M128 456 L118 416" stroke="#0b0805" stroke-width="12" stroke-linecap="round"/>
+      <path d="M196 456 Q198 416 220 414 Q244 418 246 456 Z"/><rect x="204" y="454" width="38" height="30"/>
+    </g>
+  </g>
+  <!-- rim light on squad helmets -->
+  <g fill="none" stroke="#ffb347" stroke-width="2.5" stroke-linecap="round" opacity="0.85">
+    <path d="M58 399 Q76 402 79 424"/><path d="M150 405 Q168 408 171 430"/><path d="M226 417 Q242 420 245 438"/>
+  </g>
+  <!-- sandbags silhouette -->
+  <g fill="#0b0805" stroke="#2a1d10" stroke-width="2">
+    <rect x="0" y="456" width="62" height="28" rx="13"/><rect x="58" y="456" width="62" height="28" rx="13"/>
+    <rect x="116" y="456" width="62" height="28" rx="13"/><rect x="174" y="456" width="62" height="28" rx="13"/>
+    <rect x="-30" y="482" width="62" height="28" rx="13"/><rect x="28" y="482" width="62" height="28" rx="13"/>
+    <rect x="86" y="482" width="62" height="28" rx="13"/><rect x="144" y="482" width="62" height="28" rx="13"/>
+    <rect x="202" y="482" width="62" height="28" rx="13"/>
+  </g>
+
+  <!-- ground shadow under hero + dust from his push-off -->
+  <ellipse cx="338" cy="462" rx="90" ry="12" fill="#000" opacity="0.55" filter="url(#blur2)"/>
+  <ellipse cx="290" cy="452" rx="70" ry="20" fill="#a8803f" opacity="0.45" filter="url(#blur6)"/>
+  <ellipse cx="250" cy="446" rx="44" ry="14" fill="#c9a265" opacity="0.4" filter="url(#blur6)"/>
+
+  <!-- HERO: midair, backlit silhouette -->
+  <g id="hero" fill="#0b0907" stroke="#0b0907" stroke-linejoin="round" stroke-linecap="round">
+    <!-- trailing leg (bent, off the ground) -->
+    <path d="M296 338 L262 386" stroke-width="30" fill="none"/>
+    <path d="M262 386 L228 424" stroke-width="21" fill="none"/>
+    <ellipse cx="214" cy="432" rx="26" ry="10" transform="rotate(25 214 432)" stroke-width="2"/>
+    <!-- backpack -->
+    <path d="M292 226 Q258 232 254 270 Q254 306 276 316 L294 302 Z" stroke-width="2"/>
+    <path d="M254 252 L238 250 M254 280 L236 282" stroke-width="5" fill="none"/>
+    <!-- torso (leaning back) -->
+    <path d="M330 204 Q376 204 384 242 Q376 294 342 326 L290 330 Q274 280 296 226 Z" stroke-width="2"/>
+    <rect x="296" y="318" width="52" height="10" rx="4" stroke-width="1"/>
+    <rect x="352" y="300" width="16" height="22" rx="5" stroke-width="1" transform="rotate(14 360 311)"/>
+    <!-- rear arm flung back -->
+    <path d="M314 226 L264 204 L226 178" stroke-width="19" fill="none"/>
+    <circle cx="222" cy="174" r="10" stroke-width="1"/>
+    <!-- front arm out for balance -->
+    <path d="M350 228 L394 262 L430 258" stroke-width="19" fill="none"/>
+    <circle cx="436" cy="258" r="10" stroke-width="1"/>
+    <!-- kicking leg, fully extended -->
+    <path d="M302 336 L368 336" stroke-width="31" fill="none"/>
+    <path d="M368 336 L428 292" stroke-width="22" fill="none"/>
+    <path d="M426 292 L452 270 L468 276 L450 302 Z" stroke-width="2"/>
+    <!-- neck + human face profile (forehead, brow, nose, lips, chin, jaw) -->
+    <path d="M332 166 L374 166 L376 171 Q380 175 378 181 L391 192 Q392 196 386 197 L387 201 Q388 204 384 205 Q386 210 383 215 Q378 221 368 219 L366 234 L328 234 L336 208 Q329 188 332 166 Z" stroke-width="1"/>
+    <!-- ear -->
+    <ellipse cx="346" cy="192" rx="6" ry="9" stroke-width="1"/>
+    <!-- helmet: low dome, forward brim, flared rear -->
+    <path d="M310 170 Q310 128 350 124 Q390 128 392 166 L400 171 L400 176 L306 176 Z" stroke-width="2"/>
+    <!-- chin strap -->
+    <path d="M344 174 Q352 200 372 216" stroke-width="2.5" fill="none"/>
+  </g>
+  <!-- rim light: warm edges facing the blast -->
+  <g fill="none" stroke="#ffb347" stroke-width="3" stroke-linecap="round" opacity="0.95">
+    <path d="M384 244 Q376 294 342 326"/>
+    <path d="M372 322 L428 290 L452 268"/>
+    <path d="M394 260 L430 256"/>
+  </g>
+  <g fill="none" stroke="#ffb347" stroke-width="2.6" stroke-linecap="round" opacity="0.95">
+    <path d="M352 124 Q390 128 392 164 L400 171"/>
+    <path d="M376 172 Q380 176 378 181 L391 192 Q392 196 386 197 L387 201 Q388 204 384 205 Q386 210 383 215 Q378 221 368 219"/>
+  </g>
+  <!-- bright edge on the boot toe -->
+  <path d="M452 270 L468 276" stroke="#fff3b8" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- grenade just leaving the boot, glowing -->
+  <circle cx="486" cy="262" r="30" fill="#ffd36b" opacity="0.35" filter="url(#blur6)"/>
+  <g transform="translate(486 262) rotate(30)">
+    <ellipse cx="0" cy="0" rx="12" ry="16" fill="#1d241a" stroke="#ffcf7a" stroke-width="2"/>
+    <path d="M-11 -5 H11 M-12 3 H12 M-4 -15 V15 M4 -15 V15" stroke="#ffcf7a" stroke-width="1.2" opacity="0.8"/>
+    <rect x="-5" y="-23" width="10" height="8" fill="#ffcf7a"/>
+  </g>
+  <path d="M500 250 Q560 210 600 250" stroke="#fff1c9" stroke-width="3" fill="none" stroke-dasharray="3 12" stroke-linecap="round" opacity="0.8"/>
+  <!-- speed lines from the kick -->
+  <g stroke="#fff1c9" stroke-width="3" stroke-linecap="round" opacity="0.65" fill="none">
+    <path d="M404 354 Q430 330 452 316"/><path d="M414 336 Q438 314 458 302"/><path d="M380 372 Q412 346 440 332"/>
+  </g>
+
+  <!-- title -->
+  <text x="450" y="62" text-anchor="middle" font-size="64" letter-spacing="7" fill="url(#title)" stroke="#0b0805" stroke-width="3" paint-order="stroke">MIGHTY MAN O' WAR</text>
+  <text x="450" y="86" text-anchor="middle" font-size="18" letter-spacing="12" fill="#f0c36a">NO ONE LEFT BEHIND</text>
+
+  <rect width="900" height="560" fill="url(#vig)"/>
+  <rect width="900" height="560" filter="url(#grunge)" opacity="0.55"/>
+</svg>

@@ -1,18 +1,27 @@
 {
   "id": "/Mighty-Men-o-War-/",
   "name": "Mighty Man o' War",
-  "short_name": "Mighty Man",
-  "description": "Mighty Man o' War: a 3D block-building war survival game.",
+  "short_name": "Mighty Man o' War",
+  "description": "Mighty Man o' War: a 3D block-building war survival game. No one left behind.",
   "start_url": "/Mighty-Men-o-War-/",
   "scope": "/Mighty-Men-o-War-/",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#1a1b14",
-  "theme_color": "#23251b",
+  "background_color": "#100e0a",
+  "theme_color": "#100e0a",
+  "categories": ["games"],
   "icons": [
-    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/Mighty-Men-o-War-/icons/mmow-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/Mighty-Men-o-War-/icons/mmow-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-64.png", "sizes": "64x64", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/Mighty-Men-o-War-/icons/mightyman-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

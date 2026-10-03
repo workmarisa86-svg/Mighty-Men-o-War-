@@ -55,6 +55,17 @@ Then open `http://localhost:8080/`.
 | `js/i18n.js` | English / Spanish text |
 | `js/storage.js` | Save slots and settings (all keys prefixed `blocks-`) |
 
+## Artwork
+
+`art/logo-hero-cinematic.svg` (title art) and `art/logo-mix-badge-poster.svg`
+(app badge) are the editable sources. The game never draws them live (their
+grain and blur filters are slow on phones): `node tools/render-art.mjs`
+pre-renders them into `img/mightyman-hero-*.webp|jpg` (menu and splash, plus a
+tiny blurred placeholder) and `icons/mightyman-*` (app icons, maskable icons,
+favicon, Apple touch icon and the 1200×630 share image). Lettering is rendered
+with the Anton typeface (`art/fonts`, SIL OFL) so it looks the same everywhere.
+Run `node tools/stamp-version.mjs` afterwards.
+
 ## Third-party code
 
 `js/vendor/three.module.js` is three.js r160 (MIT licence, see `js/vendor/three.LICENSE.txt`), kept in this folder so the app works offline and never loads code from outside its own folder.
