@@ -458,3 +458,57 @@ body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 
   #squadlist .sq-row { grid-template-columns: 8px 1fr 26px; }
   #squadlist .sq-row span { display: none; }
 }
+
+/* ---- title art (splash, loading, main menu) ------------------------------
+   The pre-rendered hero art fills the screen. Wide screens: the art fits the
+   height on the right and the menu sits in the dark sky/trench area on the
+   left. Other shapes: the art spans the width at the top and the menu sits
+   below the ground line. Nothing is ever placed over the soldier, the
+   grenade or the explosion. A tiny blurred copy + dark gradient show first. */
+.screen.art-screen {
+  padding: 0; display: block; overflow: hidden;
+  background:
+    linear-gradient(rgba(10,8,5,0.35), rgba(10,8,5,0.75)),
+    url(data:image/webp;base64,UklGRq4AAABXRUJQVlA4IKIAAACwBACdASogABQAPpE6mUgloyKhKA1QsBIJZgCw7EKVQL0rzn90EVrFXECZvY8IAP7+caGSEDYhr7N5icZGV0QI0RgMCyWw1TqbpC3KtpDniPy2HxwcTLdAE1ljUNZj8s4z5I2sc1RrnqmeH0vYXbXkz4eiL5O6eWixNs1A+i2zC6/urAjV91Jsy5I2LnVn2rM2fNiaw56FGGPB6cSN8Zh2gAA=) center 30% / cover no-repeat,
+    linear-gradient(180deg, #0d0a07 0%, #2a1e12 55%, #120d08 100%);
+}
+.art-screen .art img { position: absolute; left: 0; top: 0; width: 100vw; height: auto; display: block; user-select: none; -webkit-user-drag: none; }
+.art-screen .menu-zone {
+  position: absolute; left: 0; right: 0; bottom: 0; top: calc(50vw + 6px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: linear-gradient(180deg, rgba(8,6,4,0) 0, rgba(8,6,4,0.72) 28px, rgba(8,6,4,0.86) 100%);
+  overflow-y: auto;
+}
+.art-screen .menu { margin: 0; width: min(640px, 100%); max-width: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.art-screen .menu .btn { margin: 0; padding: 10px 8px; font-size: 15px; }
+.art-screen .extras { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.art-screen .extras .lang { margin: 0; }
+.art-screen .speaker, .art-screen .installbtn { position: static; }
+.art-screen .installbtn { width: auto; height: 38px; border-radius: 19px; padding: 0 14px; border: 2px solid var(--line); background: rgba(0,0,0,0.45); color: var(--khaki); font: inherit; font-size: 14px; cursor: pointer; }
+.art-screen .ver { position: absolute; right: 10px; bottom: 6px; margin: 0; font-size: 11px; opacity: 0.5; }
+.art-screen .loading-text { margin: 0; color: var(--khaki); letter-spacing: 2px; text-transform: uppercase; font-size: 13px; text-shadow: 0 1px 3px #000; }
+.art-screen .loadbar { margin: 0; }
+.loadbar.busy .fill { width: 35%; animation: loadbusy 1.2s ease-in-out infinite alternate; }
+@keyframes loadbusy { from { margin-left: 0; } to { margin-left: 65%; } }
+/* phones held upright: one column */
+@media (max-aspect-ratio: 3/4) {
+  .art-screen .menu { grid-template-columns: 1fr; width: min(340px, 100%); }
+  .art-screen .menu-zone { justify-content: flex-start; padding-top: 22px; }
+}
+/* wide screens: art on the right at full height, menu column on the left */
+@media (min-aspect-ratio: 155/100) {
+  .art-screen .art img { left: auto; right: 0; width: auto; height: 100vh; }
+  .art-screen .menu-zone {
+    top: 0; bottom: 0; right: auto; left: 0;
+    width: clamp(190px, calc(100vw - 123.7vh), 340px); align-items: stretch;
+    padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    background: linear-gradient(90deg, rgba(8,6,4,0.82) 0, rgba(8,6,4,0.6) 75%, rgba(8,6,4,0) 100%);
+  }
+  .art-screen .menu { grid-template-columns: 1fr; width: 100%; gap: 7px; }
+  .art-screen .extras { justify-content: flex-start; }
+}
+@media (min-aspect-ratio: 155/100) and (max-height: 480px) {
+  .art-screen .menu .btn { padding: 6px 8px; font-size: 13px; }
+  .art-screen .menu { gap: 5px; }
+}

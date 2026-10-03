@@ -195,6 +195,29 @@ class App {
   }
 }
 
+// "Install app" on the main menu: the browser's own prompt where there is
+// one (Chrome, Edge, Android), otherwise a short how-to (Safari, Firefox).
+App.prototype.bindInstall = function (btn) {
+  if (!btn) return;
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const apple = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || (/Macintosh/.test(navigator.userAgent) && /Safari\//.test(navigator.userAgent) && !/Chrome|Chromium|Edg/.test(navigator.userAgent));
+  btn.hidden = standalone || !(this.installPrompt || apple) || location.protocol === 'file:';
+  btn.onclick = async () => {
+    if (this.installPrompt) {
+      const p = this.installPrompt; this.installPrompt = null;
+      p.prompt();
+      try { await p.userChoice; } catch { /* ignore */ }
+      btn.hidden = true;
+    } else this.ui.show('installHelp');
+  };
+};
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  App.prototype.installPrompt = e;          // also works before the app object exists
+  if (window.app) window.app.bindInstall(document.getElementById('installbtn'));
+});
+addEventListener('appinstalled', () => { const b = document.getElementById('installbtn'); if (b) b.hidden = true; });
+
 window.app = new App();
 
 // Installable app / offline play. The worker's scope is this folder only.

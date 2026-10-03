@@ -1,0 +1,71 @@
+<svg viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" font-family="Impact, 'Arial Narrow Bold', 'Arial Black', sans-serif">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="75%">
+      <stop offset="0%" stop-color="#3a3226"/>
+      <stop offset="100%" stop-color="#100e0a"/>
+    </radialGradient>
+    <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f1c46a"/>
+      <stop offset="70%" stop-color="#c98a35"/>
+      <stop offset="100%" stop-color="#8a5a24"/>
+    </radialGradient>
+    <filter id="grunge" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="4"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 -0.08"/>
+    </filter>
+    <clipPath id="inner"><circle cx="300" cy="300" r="190"/></clipPath>
+    <path id="arcTop" d="M 85 300 A 215 215 0 0 1 515 300"/>
+  </defs>
+  <rect width="600" height="600" fill="url(#bg)"/>
+
+  <!-- badge rings -->
+  <circle cx="300" cy="300" r="280" fill="#1a1712" stroke="#b08a3c" stroke-width="6"/>
+  <circle cx="300" cy="300" r="264" fill="none" stroke="#5b5a3a" stroke-width="3"/>
+  <circle cx="300" cy="300" r="194" fill="#241e15" stroke="#b08a3c" stroke-width="4"/>
+
+  <!-- scene inside the circle -->
+  <g clip-path="url(#inner)">
+    <circle cx="300" cy="300" r="300" fill="none" stroke="#3d3322" stroke-width="600" stroke-dasharray="58.9 58.9"/>
+    <circle cx="300" cy="292" r="128" fill="url(#sun)" opacity="0.88"/>
+    <path d="M100 420 Q200 404 300 416 T500 412 L500 520 L100 520 Z" fill="#17120b"/>
+    <polygon points="120,430 146,410 176,430" fill="#2a2216"/>
+    <polygon points="430,432 458,414 486,432" fill="#2a2216"/>
+    <!-- soldier silhouette -->
+    <g transform="translate(97.8 71.8) scale(0.6)" fill="#0e0c09">
+      <rect x="258" y="298" width="34" height="86" rx="8"/>
+      <path d="M285 292 L346 292 L362 402 L280 412 Z"/>
+      <path d="M300 300 L348 346 L336 360 L292 326 Z"/>
+      <circle cx="314" cy="266" r="27"/>
+      <path d="M280 258 Q282 214 318 211 Q352 214 354 256 L376 260 L352 266 L282 264 Z"/>
+      <path d="M330 406 L392 472 L382 562 L410 578 L370 584 L352 478 L316 420 Z"/>
+      <path d="M290 406 L270 482 L214 536 L204 562 L246 568 L292 522 L324 440 Z"/>
+      <path d="M240 428 L252 440 L432 302 L420 290 Z"/>
+      <path d="M426 296 L470 262 L466 270 L432 302 Z"/>
+    </g>
+  </g>
+
+  <!-- arc text -->
+  <text font-size="30" letter-spacing="9" fill="#e6d9b8">
+    <textPath href="#arcTop" startOffset="50%" text-anchor="middle">HOLD THE LINE</textPath>
+  </text>
+
+  <!-- laurel -->
+  <g fill="#5b5a3a" stroke="#2e2d1b" stroke-width="1.5">
+    <ellipse cx="260.4" cy="524.5" rx="9" ry="22" transform="rotate(100 260.4 524.5)"/>
+    <ellipse cx="203.6" cy="506.6" rx="9" ry="22" transform="rotate(115 203.6 506.6)"/>
+    <ellipse cx="153.4" cy="474.7" rx="9" ry="22" transform="rotate(130 153.4 474.7)"/>
+    <ellipse cx="113.2" cy="430.8" rx="9" ry="22" transform="rotate(145 113.2 430.8)"/>
+    <ellipse cx="85.7" cy="378" rx="9" ry="22" transform="rotate(160 85.7 378)"/>
+    <ellipse cx="339.6" cy="524.5" rx="9" ry="22" transform="rotate(80 339.6 524.5)"/>
+    <ellipse cx="396.4" cy="506.6" rx="9" ry="22" transform="rotate(65 396.4 506.6)"/>
+    <ellipse cx="446.6" cy="474.7" rx="9" ry="22" transform="rotate(50 446.6 474.7)"/>
+    <ellipse cx="486.8" cy="430.8" rx="9" ry="22" transform="rotate(35 486.8 430.8)"/>
+    <ellipse cx="514.3" cy="378" rx="9" ry="22" transform="rotate(20 514.3 378)"/>
+  </g>
+
+  <!-- banner -->
+  <path d="M82 462 L518 462 L542 496 L518 532 L82 532 L58 496 Z" fill="#454427" stroke="#b08a3c" stroke-width="4"/>
+  <text x="300" y="509" text-anchor="middle" font-size="38" letter-spacing="4" fill="#e6d9b8" stroke="#14110d" stroke-width="1">MIGHTY MAN O' WAR</text>
+
+  <rect width="600" height="600" filter="url(#grunge)" opacity="0.6"/>
+</svg>

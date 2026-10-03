@@ -9,9 +9,15 @@ import { MANUAL, MANUAL_CATS } from './manual.js';
 import { missionsFor, missionInfo } from './missions.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
-import { logoSvg } from './logo.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Pre-rendered title art (img/, made by tools/render-art.mjs from art/*.svg).
+export function heroArt() {
+  return `<picture class="art"><source type="image/webp" sizes="(min-aspect-ratio: 155/100) 161vh, 100vw"
+    srcset="img/mightyman-hero-640.webp 640w, img/mightyman-hero-1280.webp 1280w, img/mightyman-hero-1920.webp 1920w">
+    <img src="img/mightyman-hero-1280.jpg" width="1280" height="796" alt="Mighty Man o' War — No one left behind" decoding="async"></picture>`;
+}
 
 export class UI {
   constructor(app) {
@@ -25,6 +31,9 @@ export class UI {
   }
 
   show(name, params = {}) {
+    // the static splash (index.html) gives way to the first real screen
+    const sp = document.getElementById('splash');
+    if (sp) requestAnimationFrame(() => sp.remove());
     this.current = { name, params };
     this.root.hidden = false;
     this.root.className = 'screen ' + name;
@@ -56,10 +65,10 @@ export class UI {
   // ------------------------------------------------------------------ main
   r_main() {
     const hasSaves = listSaves().length > 0;
-    this.root.innerHTML = `<div class="title-wrap">
-      ${logoSvg('logo-art')}
+    this.root.classList.add('art-screen');
+    this.root.innerHTML = `${heroArt()}
       <h1 class="sr-only">Mighty Man o' War</h1>
-      <p class="tagline">${t('app.tagline')}</p>
+      <div class="menu-zone">
       <div class="menu">
         <button class="btn" data-go="newgame">${t('menu.new')}</button>
         <button class="btn" data-go="load" ${hasSaves ? '' : 'disabled'}>${t('menu.load')}</button>
@@ -67,10 +76,12 @@ export class UI {
         <button class="btn" data-go="manual">${t('menu.manual')}</button>
         <button class="btn" data-go="stats">${t('menu.stats')}</button>
       </div>
-      ${this.langSwitch()}
-      <button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button>
-      <p class="ver">v${this.app.version}</p>
-    </div>`;
+      <div class="extras">${this.langSwitch()}
+      <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
+      <button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button></div>
+      </div>
+      <p class="ver">v${this.app.version}</p>`;
+    this.app.bindInstall(this.root.querySelector('#installbtn'));
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go, { what: b.dataset.what, from: 'main' }));
     this.bindLang(this.root);
     const spk = this.root.querySelector('#spk');
@@ -121,6 +132,11 @@ export class UI {
     // remember the view if the language changes
     this.current.params = { from, get q() { return state.q; }, get sort() { return state.sort; }, get cat() { return state.cat; }, get open() { return [...state.open]; } };
     draw();
+  }
+
+  r_installHelp() {
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    this.panel(t('menu.install'), `<ol class="steps">${(ios ? ['install.ios1', 'install.ios2', 'install.ios3'] : ['install.mac1', 'install.mac2']).map((k) => `<li>${t(k)}</li>`).join('')}</ol>`, { onBack: () => this.show('main') });
   }
 
   r_soon({ what, from }) {
@@ -500,8 +516,8 @@ export class UI {
   }
 
   r_loading() {
-    this.root.innerHTML = `<div class="title-wrap">${logoSvg('logo-art small')}
-      <p class="tagline">${t('hud.loading')}</p><div class="loadbar"><div class="fill"></div></div></div>`;
+    this.root.classList.add('art-screen');
+    this.root.innerHTML = `${heroArt()}<div class="menu-zone"><p class="loading-text">${t('hud.loading')}</p><div class="loadbar"><div class="fill"></div></div></div>`;
   }
   setLoading(f) { const el = this.root.querySelector('.loadbar .fill'); if (el) el.style.width = Math.round(f * 100) + '%'; }
 
