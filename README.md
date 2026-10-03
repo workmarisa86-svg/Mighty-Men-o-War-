@@ -66,6 +66,13 @@ favicon, Apple touch icon and the 1200×630 share image). Lettering is rendered
 with the Anton typeface (`art/fonts`, SIL OFL) so it looks the same everywhere.
 Run `node tools/stamp-version.mjs` afterwards.
 
+## Music
+
+The main-menu music is "Marines' Hymn", composition by Jacques Offenbach (public
+domain), performed by the United States Marine Band; the recording is a work of
+the U.S. federal government and is in the public domain. Source: Internet
+Archive, item "MarinesHymn". Files: `audio/` (see `audio/CREDITS.txt`).
+
 ## Third-party code
 
 `js/vendor/three.module.js` is three.js r160 (MIT licence, see `js/vendor/three.LICENSE.txt`), kept in this folder so the app works offline and never loads code from outside its own folder.

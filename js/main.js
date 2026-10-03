@@ -7,7 +7,7 @@ import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
 import { initAudio, setVolume, sfx } from './audio.js';
-import { startMusic, stopMusic, setMusic } from './music.js';
+import { startMusic, stopMusic, setMusic, preloadMusic } from './music.js';
 
 class App {
   constructor() {
@@ -30,6 +30,8 @@ class App {
     this.ui.show('main');
 
     addEventListener('resize', () => this.resize());
+    // the menu music downloads after the page (and the splash art) have loaded
+    addEventListener('load', () => setTimeout(() => preloadMusic(), 300));
     // audio may only start after the first tap or click; menu music then fades in
     addEventListener('pointerdown', () => { initAudio(); setMusic(this.settings.music, this.settings.musicMute); if (!this.game) startMusic(); }, { capture: true });
     addEventListener('keydown', (e) => {
