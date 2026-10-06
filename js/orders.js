@@ -10,7 +10,7 @@ import { sfx } from './audio.js';
 import { FORMATIONS } from './soldiers.js';
 
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack'];
-export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'formation'];
+export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack'];
 const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', formation: '&#8942;' };
 
 export class OrderWheel {

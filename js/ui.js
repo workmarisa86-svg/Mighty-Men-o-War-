@@ -258,8 +258,7 @@ export class UI {
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
-      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
-      <div class="field"><span>${t('set.formation')}</span>${seg('formation', [['loose', t('form.loose')], ['line', t('form.line')], ['column', t('form.column')]])}</div>`;
+      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => from === 'pause' ? this.show('pause') : this.show('main') });
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;

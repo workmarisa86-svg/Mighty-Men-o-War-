@@ -427,7 +427,16 @@ export class Enemies {
     let i = 0;
     for (const s of group) {
       if (!s.alive) continue;
-      if (cmd === 'spread') { s.spread = spreadOn; if (s.role === 'hold' && s.holdPos) s.holdPos = this.spreadAround(s.holdPos, i, group.length, 4); }
+      if (cmd === 'spread') {
+        // break the file and spread out around where the group is, a few metres apart
+        const c = group.reduce((acc, m) => ({ x: acc.x + m.pos.x / group.length, z: acc.z + m.pos.z / group.length }), { x: 0, z: 0 });
+        s.spread = spreadOn;
+        if (s.role === 'follow' || s.role === 'hold') {
+          const sp = this.spreadAround({ x: c.x, y: s.pos.y, z: c.z }, i, group.length, 4);
+          const gy = this.ground(sp.x, sp.z, s.pos.y + 1);
+          s.setRole('hold'); s.holdPos = new THREE.Vector3(sp.x, gy ?? s.pos.y, sp.z);
+        }
+      }
       else {
         this.toPlayerSquad(s);
         s.spread = false;
@@ -564,6 +573,16 @@ export class Enemies {
   // up or down a ladder (a quick climb)
   climbTo(s, p) { s.pos.set(p.x, p.y, p.z); s.climbT = 0.8; s.steerO = 0; }
   goTo(s, gx, gz, speed, dt, gy) {
+    // a planned route (from findPath) is followed first, while the goal stays put
+    if (s.path && s.path.length) {
+      if (!s.pathGoal || Math.hypot(s.pathGoal.x - gx, s.pathGoal.z - gz) > 4) s.path = null;
+      else {
+        const q = s.path[0];
+        if (Math.hypot(q.x - s.pos.x, q.z - s.pos.z) < 0.6 && Math.abs(q.y - s.pos.y) < 1.4) s.path.shift();
+        if (s.path.length) { this.watchProgress(s, gx, gz, gy, dt); return this.moveToward(s, s.path[0].x, s.path[0].z, speed, dt); }
+        s.path = null;
+      }
+    }
     let r = this.route(s, gx, gz, gy);
     if (s.queued) { const d = Math.hypot(r.x - s.pos.x, r.z - s.pos.z); if (d < 0.8) { s.speed = 0; this.settle(s, dt); return false; } }
     this.watchProgress(s, gx, gz, gy, dt);
@@ -579,6 +598,51 @@ export class Enemies {
     }
     return this.moveToward(s, r.x, r.z, speed, dt);
   }
+  // Lightweight grid pathfinding (A*) over standable cells, used only when the
+  // direct way is blocked: finds routes through tunnels, around pits and
+  // walls. At most one search per frame across all soldiers, capped in size.
+  findPath(s, gx, gy, gz) {
+    if (this.pathBusy === this.frame) return null;
+    this.pathBusy = this.frame;
+    const w = this.game.world, W = w.W, D = w.D;
+    const stand = (x, y, z) => x > 0 && z > 0 && x < W - 1 && z < D - 1 && SOLID[w.get(x, y - 1, z)] && !SOLID[w.get(x, y, z)] && !SOLID[w.get(x, y + 1, z)] && w.get(x, y, z) !== B.WATER;
+    const sx = Math.floor(s.pos.x), sy = Math.floor(s.pos.y + 0.2), sz = Math.floor(s.pos.z);
+    const tx = Math.floor(gx), tz = Math.floor(gz);
+    let ty = gy != null ? Math.floor(gy + 0.2) : null;
+    const key = (x, y, z) => (y * D + z) * W + x;
+    const open = [], came = new Map(), cost = new Map();
+    const push = (n) => { open.push(n); let i = open.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (open[p].f <= n.f) break; open[i] = open[p]; open[p] = n; i = p; } };
+    const pop = () => { const top = open[0], last = open.pop(); if (open.length) { open[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < open.length && open[l].f < open[m].f) m = l; if (r < open.length && open[r].f < open[m].f) m = r; if (m === i) break; [open[i], open[m]] = [open[m], open[i]]; i = m; } } return top; };
+    const h = (x, y, z) => Math.abs(x - tx) + Math.abs(z - tz) + (ty != null ? Math.abs(y - ty) : 0);
+    const k0 = key(sx, sy, sz);
+    cost.set(k0, 0); push({ x: sx, y: sy, z: sz, k: k0, f: h(sx, sy, sz) });
+    let found = null, n = 0, best = null, bh = 1e9;
+    while (open.length && n < 2500) {
+      const c = pop(); n++;
+      const hc = h(c.x, c.y, c.z);
+      if (hc < bh) { bh = hc; best = c; }
+      if (c.x === tx && c.z === tz && (ty == null || Math.abs(c.y - ty) <= 1)) { found = c; break; }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = c.x + dx, z = c.z + dz;
+        for (const dy of [0, 1, -1, -2, -3]) {
+          const y = c.y + dy;
+          if (dy === 1 && SOLID[w.get(c.x, c.y + 2, c.z)]) continue;     // no head room to step up
+          if (!stand(x, y, z)) continue;
+          const k = key(x, y, z), nc = cost.get(c.k) + 1 + (dy < 0 ? 0.3 : dy > 0 ? 0.5 : 0);
+          if (nc < (cost.get(k) ?? 1e9)) { cost.set(k, nc); came.set(k, c); push({ x, y, z, k, f: nc + h(x, y, z) }); }
+          break;
+        }
+      }
+    }
+    const end = found || (best && bh < h(sx, sy, sz) - 3 ? best : null);   // partial route if it gets us closer
+    if (!end) return null;
+    const path = [];
+    for (let c = end; c && c.k !== k0; c = came.get(c.k)) path.push({ x: c.x + 0.5, y: c.y, z: c.z + 0.5 });
+    path.reverse();
+    // keep every second cell (and every change of height) to save steps
+    return path.filter((q, i) => i === path.length - 1 || i % 2 === 1 || (path[i + 1] && path[i + 1].y !== q.y));
+  }
+
   // No progress toward the goal for a few seconds: re-plan (other side of
   // the fort, fresh detour). Still stuck: put him on the ground at the
   // nearest fort door (inside if he is heading in), never left shaking.
@@ -591,7 +655,12 @@ export class Enemies {
     const moved = s.progD == null || s.progD - d > 0.4 || went > 1.2 || d < 1.5 || s.queued;
     s.progD = d; s.progP = { x: s.pos.x, z: s.pos.z };
     s.noProg = moved ? 0 : (s.noProg || 0) + 1;
-    if (s.noProg === 3 || s.noProg === 5) { s.navSide = -(s.navSide || 1); s.detour = null; s.crossT = 0; s.steerO = 0; s.routing = null; }
+    if (s.noProg === 3 || s.noProg === 5) {
+      s.navSide = -(s.navSide || 1); s.detour = null; s.crossT = 0; s.steerO = 0; s.routing = null;
+      // the direct way does not work: plan a route over the blocks (tunnels too)
+      const p = this.findPath(s, gx, gy, gz);
+      if (p && p.length) { s.path = p; s.pathGoal = { x: gx, z: gz }; }
+    }
     if (s.noProg >= 7) {
       const inS = this.fortXZ(s.pos.x, s.pos.z), inG = this.fortXZ(gx, gz), f = inG || inS || this.game.forts.nearest(s.pos);
       if (!f || Math.hypot(f.cx - s.pos.x, f.cz - s.pos.z) > 30) return;    // open ground: the hole rule handles it
@@ -625,6 +694,7 @@ export class Enemies {
   // -------------------------------------------------------------- update
   update(dt) {
     if (!this.enabled) return;
+    this.frame = (this.frame || 0) + 1;
     const g = this.game;
     this.dispatch(dt);
     for (const sq of this.squads) this.updateSquad(sq, dt);
@@ -900,51 +970,117 @@ export class Enemies {
 
   // ------------------------------------------------- the player's squad
   // Formation slots around the player, recomputed a few times a second.
+  // "Follow me": a trail of the player's own recent positions (3D, so it
+  // runs through tunnels, holes and water). Followers walk it in single file,
+  // a steady distance apart, never ahead of the player.
   updateFormation(dt) {
-    const g = this.game, pl = g.player;
-    // breadcrumb trail for the column
-    const last = this.trail[0];
-    if (!last || Math.hypot(last.x - pl.pos.x, last.z - pl.pos.z) > 1.2) { this.trail.unshift({ x: pl.pos.x, y: pl.pos.y, z: pl.pos.z }); if (this.trail.length > 160) this.trail.pop(); }
-    const mv = Math.hypot(pl.vel.x, pl.vel.z);
-    const heading = mv > 1 ? Math.atan2(-pl.vel.x, -pl.vel.z) : pl.yaw;
-    this.formYaw = this.turn(this.formYaw, heading, dt * (mv > 1 ? 2.5 : 0.8));
+    const g = this.game, pl = g.player, T = this.trail;
+    const last = T[T.length - 1];
+    if (!last || Math.hypot(last.x - pl.pos.x, last.z - pl.pos.z) > 0.6 || Math.abs(last.y - pl.pos.y) > 0.8) {
+      T.push({ x: pl.pos.x, y: pl.pos.y, z: pl.pos.z, seq: this.trailSeq = (this.trailSeq || 0) + 1, crouch: pl.crouch, water: pl.headInWater || pl.swimming });
+      if (T.length > 260) T.shift();
+    }
     this.contactT += dt;
     this.slotT -= dt;
     if (this.slotT > 0) return;
-    this.slotT = 0.4;
+    this.slotT = 0.25;
     const fol = this.followers();
     // under fire: anyone in the squad sees an enemy or was just hit
     for (const s of fol) if (s.target || s.hurtT < 3) { this.contactT = 0; this.contactPos = s.target ? s.target.pos.clone() : this.contactPos; }
-    const narrow = this.narrowAt(pl.pos);
-    const mode = narrow ? 'column' : (g.settings.formation || 'loose');
-    this.formMode = mode; this.narrow = narrow;
-    const fx = -Math.sin(this.formYaw), fz = -Math.cos(this.formYaw), rx = -fz, rz = fx;
+    this.formMode = 'column';
+    this.underground = g.eyeSky != null && g.eyeSky < 0.45;
     fol.sort((a, b) => a.idx - b.idx);
-    fol.forEach((s, i) => {
-      const k = s.spread ? 1.6 : 1;
-      let back, side;
-      if (mode === 'column') {
-        // single file along the player's own path
-        const want = (8 + i * 2.6) * k;
-        let acc = 0, prev = pl.pos, pt = null;
-        for (const q of this.trail) { acc += Math.hypot(q.x - prev.x, q.z - prev.z); prev = q; if (acc >= want) { pt = q; break; } }
-        if (pt) { s.slot = this.clearOfDoor({ x: pt.x, y: pt.y, z: pt.z }); return; }
-        back = want; side = 0;
-      } else if (mode === 'line') {
-        const sgn = i % 2 ? 1 : -1;
-        back = 9 + Math.floor(i / 12) * 3.5; side = sgn * (2.5 + Math.floor(i / 2) % 6 * 3.2) * k;
-      } else {
-        const sgn = i % 2 ? 1 : -1, j = Math.floor(i / 2);
-        back = (8 + (j % 4) * 2.3 + (s.jit || 0)) * k; side = sgn * (3 + (j % 2) * 2 + Math.floor(j / 4) * 3.5) * k;
-      }
-      back = Math.min(back, 15 * k + Math.floor(i / 12) * 3);
-      let x = pl.pos.x - fx * back + rx * side, z = pl.pos.z - fz * back + rz * side;
-      // never stand in the player's line of fire
-      const lx = -Math.sin(pl.yaw), lz = -Math.cos(pl.yaw);
-      const dx = x - pl.pos.x, dz = z - pl.pos.z, dl = Math.hypot(dx, dz) || 1;
-      if ((dx * lx + dz * lz) / dl > 0.82) { x += -lz * 6 * (side >= 0 ? 1 : -1); z += lx * 6 * (side >= 0 ? 1 : -1); }
-      s.slot = this.clearOfDoor({ x, y: pl.pos.y, z });
-    });
+    // where along the trail each follower belongs: 3.2 m, 5.4 m, 7.6 m ... behind
+    const marks = fol.map((_, i) => 3.2 + i * 2.2);
+    let acc = 0, prev = pl.pos, mi = 0;
+    for (let k = T.length - 1; k >= 0 && mi < marks.length; k--) {
+      const q = T[k];
+      acc += Math.hypot(q.x - prev.x, q.z - prev.z) + Math.abs(q.y - prev.y) * 0.5; prev = q;
+      while (mi < marks.length && acc >= marks[mi]) { fol[mi].slotSeq = q.seq; fol[mi].slot = q; mi++; }
+    }
+    for (; mi < fol.length; mi++) { const q = T[0] || { x: pl.pos.x, y: pl.pos.y, z: pl.pos.z, seq: 0 }; fol[mi].slotSeq = q.seq; fol[mi].slot = q; }
+  }
+  trailAt(seq) {
+    const T = this.trail;
+    if (!T.length) return null;
+    const i = seq - T[0].seq;
+    return i >= 0 && i < T.length ? T[i] : null;
+  }
+  // Walk along the trail toward this follower's place in the file.
+  followTrail(s, dt, pdist) {
+    const g = this.game, pl = g.player, T = this.trail, P = s.plan;
+    if (!T.length || !s.slot) return false;
+    // join the trail at the nearest point (once, or after falling behind)
+    if (s.onSeq == null || !this.trailAt(s.onSeq) || s.rejoin) {
+      let best = null, bd = 1e9;
+      for (let k = T.length - 1; k >= 0; k--) { const q = T[k]; const d = Math.hypot(q.x - s.pos.x, q.z - s.pos.z) + Math.abs(q.y - s.pos.y) * 2; if (d < bd) { bd = d; best = q; } }
+      if (bd > 14) return false;                   // too far from the path: walk there normally
+      s.onSeq = Math.min(best.seq, s.slotSeq); s.rejoin = false;
+    }
+    if (s.onSeq > s.slotSeq) s.onSeq = s.slotSeq;  // the player went back toward us: just stop
+    let wp = this.trailAt(s.onSeq);
+    // reached this crumb? move on to the next one (never past our place)
+    while (wp && s.onSeq < s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.7 && Math.abs(wp.y - s.pos.y) < 1.3) { s.onSeq++; wp = this.trailAt(s.onSeq) || wp; }
+    if (!wp) return false;
+    const atSlot = s.onSeq >= s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.9;
+    s.crouch = !!pl.crouch;                                     // they copy you
+    P.crouch = !!pl.crouch;
+    if (atSlot && !(s.swimming && wp.water)) { s.speed = 0; return true; }
+    const behind = s.slotSeq - s.onSeq;
+    const speed = behind > 12 || pdist > 18 ? 6.4 : behind > 4 ? 4.8 : pl.crouch ? 1.8 : 3.4;
+    this.trailStep(s, wp, speed, dt);
+    P.goal = null; P.moved = true;                              // movement already done
+    return true;
+  }
+  // one step toward a trail crumb: walks, drops into holes, climbs out, swims
+  // and dives (followers never drown)
+  trailStep(s, wp, speed, dt) {
+    const w = this.game.world;
+    const dx = wp.x - s.pos.x, dz = wp.z - s.pos.z, dy = wp.y - s.pos.y, dh = Math.hypot(dx, dz);
+    const inWater = w.get(Math.floor(s.pos.x), Math.floor(s.pos.y + 0.8), Math.floor(s.pos.z)) === B.WATER;
+    if (wp.water || inWater) {
+      // 3D swimming along the path, like the player
+      const d = Math.hypot(dx, dy, dz) || 1, st = Math.min(d, Math.min(speed, 2.6) * dt);
+      const nx = s.pos.x + dx / d * st, ny = s.pos.y + dy / d * st, nz = s.pos.z + dz / d * st;
+      if (this.bodyFree(nx, ny, nz, 0.22)) { s.pos.set(nx, ny, nz); s.speed = Math.min(speed, 2.6); }
+      else s.speed = 0;
+      s.swimming = w.get(Math.floor(s.pos.x), Math.floor(s.pos.y + 0.8), Math.floor(s.pos.z)) === B.WATER;
+      if (dh > 0.05) s.yaw = this.turn(s.yaw, Math.atan2(-dx, -dz), dt * 6);
+      return;
+    }
+    s.swimming = false;
+    if (dh < 1.3 && dy < -1.1) {
+      // down into a hole after the player
+      const gy = this.ground(wp.x, wp.z, wp.y + 0.5);
+      s.pos.x += dx * Math.min(1, dt * 6); s.pos.z += dz * Math.min(1, dt * 6);
+      s.pos.y = Math.max(gy ?? wp.y, s.pos.y - dt * 9);
+      s.speed = 1; return;
+    }
+    if (dh < 1.6 && dy > 1.1 && dy < 3.2) {
+      // climbing out the way the player did
+      s.climbT = 0.8;
+      s.pos.y = Math.min(wp.y, s.pos.y + dt * 3.2);
+      if (s.pos.y >= wp.y - 0.05) { s.pos.x += dx * Math.min(1, dt * 6); s.pos.z += dz * Math.min(1, dt * 6); }
+      s.speed = 1; return;
+    }
+    this.moveToward(s, wp.x, wp.z, speed, dt);
+  }
+
+  // put a follower at his place on the trail, preferably where the player
+  // is not looking
+  behindPlayer(s) {
+    const pl = this.game.player, T = this.trail;
+    const fx = -Math.sin(pl.yaw), fz = -Math.cos(pl.yaw);
+    const cands = [s.slot, ...T.slice(0, Math.max(1, T.length - 4)).reverse()].filter(Boolean);
+    for (const q of cands) {
+      const dx = q.x - pl.pos.x, dz = q.z - pl.pos.z, d = Math.hypot(dx, dz) || 1;
+      if ((dx * fx + dz * fz) / d > 0.2 && d > 2) continue;     // in front of the player: would be seen
+      const y = q.water ? q.y : (this.ground(q.x, q.z, q.y + 0.5) ?? q.y);
+      if (!q.water && !this.bodyFree(q.x, y, q.z)) continue;
+      s.pos.set(q.x, y, q.z); s.onSeq = q.seq; s.rejoin = false; s.raft = null;
+      return true;
+    }
+    return false;
   }
   // walls or water close on both sides of the player: go single file
   narrowAt(p) {
@@ -967,11 +1103,20 @@ export class Enemies {
     s.fired = false;
     if (!s.alive) {
       s.deadT += dt;
+      // the body drops onto the nearest open surface
+      if (s.deadT < 1.5 && !s.raft) {
+        const gy = this.ground(s.pos.x, s.pos.z, s.pos.y + 0.5);
+        if (gy != null && gy < s.pos.y) s.pos.y = Math.max(gy, s.pos.y - dt * 9);
+        else if (gy != null) s.pos.y = gy;
+        if (!s.bodyChecked) { s.bodyChecked = true; this.unstick(s); }
+      }
       this.animate(s, dt);
       if (s.deadT > 0.8 && !s.looted) { s.looted = true; this.dropLoot(s); }
       if (s.deadT > 12) this.remove(s);
       return;
     }
+    s.blockT = (s.blockT || 0) - dt;
+    if (s.blockT <= 0 && !s.raft && !s.swimming && !(s.climbT > 0)) { s.blockT = 0.5; this.unstick(s); }
     s.hurtT += dt; s.reloadT = Math.max(0, s.reloadT - dt); s.throwT = Math.max(0, s.throwT - dt); s.climbT = Math.max(0, s.climbT - dt);
     s.markPop = Math.max(0, s.markPop - dt * 2);
     if (s.reloadT === 0 && s.ammo <= 0) s.ammo = s.T.mag;
@@ -1018,8 +1163,8 @@ export class Enemies {
     else this.squadBehaviour(s, dt);
     const P = s.plan;
     // nobody idles in a doorway
-    if (!P.goal && !s.routing) { const d = this.inDoorway(s.pos.x, s.pos.z); if (d) { P.goal = this.clearOfDoor(s.pos); P.speed = 2.5; } }
-    if (P.goal && P.speed > 0) {
+    if (!P.goal && !s.routing && !P.moved) { const d = this.inDoorway(s.pos.x, s.pos.z); if (d) { P.goal = this.clearOfDoor(s.pos); P.speed = 2.5; } }
+    if (P.moved) { /* walked the trail already */ } else if (P.goal && P.speed > 0) {
       const arrived = this.goTo(s, P.goal.x, P.goal.z, P.speed * slow, dt, P.goal.y);
       if (arrived) s.speed = 0;
     } else { s.speed = 0; this.settle(s, dt); }
@@ -1111,21 +1256,28 @@ export class Enemies {
     s.idx = s.idx ?? this.list.indexOf(s);
     const role = s.role;
     if (role === 'follow') {
-      const slot = s.slot || { x: pl.pos.x, z: pl.pos.z + 8 };
       if (pl.raft && pl.raft.box && pl.raft.t !== undefined && pdist < 7) this.boardRaft(s, pl.raft);
-      const contact = this.contactT < 10;
-      if (tgt) { this.fieldCombat(s, dt, slot, 12); return; }
-      if (contact && this.contactPos) {
-        // disperse to cover near our slot and keep our heads down
-        if (!s.cover || s.coverT <= 0) { s.cover = this.findCover(s, this.contactPos, slot, 9) || slot; s.coverT = 6; }
+      const contact = this.contactT < 8;
+      const slot = s.slot || pl.pos;
+      if (tgt) {
+        // shoot back; in the open take cover briefly, in tunnels stay in the file
+        if (this.underground || s.swimming) { if (this.followTrail(s, dt, pdist)) { P.face = tgt.pos; return; } }
+        this.fieldCombat(s, dt, slot, 8); s.rejoin = true; return;
+      }
+      if (contact && this.contactPos && !this.underground && !s.swimming) {
+        if (!s.cover || s.coverT <= 0) { s.cover = this.findCover(s, this.contactPos, slot, 7) || slot; s.coverT = 5; }
         s.coverT -= dt;
-        P.goal = s.cover; P.speed = 4.6; P.crouch = true; P.face = this.contactPos;
+        P.goal = s.cover; P.speed = 4.6; P.crouch = true; P.face = this.contactPos; s.rejoin = true;
         return;
       }
       s.cover = null;
+      // stuck or far behind: rejoin the trail; as a last resort appear behind
+      // the player, out of sight
+      if ((s.followStuck = s.speed < 0.2 && s.onSeq != null && s.onSeq < s.slotSeq - 2 ? (s.followStuck || 0) + dt : 0) > 4) { s.rejoin = true; }
+      if (pdist > 70 || s.followStuck > 8) { this.behindPlayer(s); s.followStuck = 0; return; }
+      if (this.followTrail(s, dt, pdist)) return;
       const dp = Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z);
-      if (dp > 1.5) { P.goal = slot; P.speed = pdist > 22 ? 7 : dp > 5 ? 4.8 : 2.6; }
-      if (pdist > 90) { const at = this.ground(slot.x, slot.z, pl.pos.y + 1); if (at != null) s.pos.set(slot.x, at, slot.z); }
+      if (dp > 1.5) { P.goal = slot; P.speed = pdist > 22 ? 7 : 4.8; }
       return;
     }
     if (role === 'hold') {
@@ -1264,7 +1416,30 @@ export class Enemies {
   nudge(s, dx, dz) {
     const nx = s.pos.x + dx, nz = s.pos.z + dz;
     const gy = this.ground(nx, nz, s.pos.y);
-    if (gy != null && Math.abs(gy - s.pos.y) < 0.6 && this.fortXZ(nx, nz) === this.fortXZ(s.pos.x, s.pos.z)) { s.pos.x = nx; s.pos.z = nz; }
+    if (gy != null && Math.abs(gy - s.pos.y) < 0.6 && this.fortXZ(nx, nz) === this.fortXZ(s.pos.x, s.pos.z) && this.bodyFree(nx, gy, nz)) { s.pos.x = nx; s.pos.z = nz; }
+  }
+  // Simple capsule test: a soldier is a 0.3-radius upright column, 1.8 tall.
+  // True when none of the blocks it would overlap is solid.
+  bodyFree(x, y, z, r = 0.28) {
+    const w = this.game.world;
+    const y0 = Math.floor(y + 0.15), y1 = Math.floor(y + 1.75);
+    for (let yy = y0; yy <= y1; yy++) for (const [ox, oz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+      if (SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) return false;
+    }
+    return true;
+  }
+  // If a soldier (or a body) ends up overlapping blocks, move him to the
+  // nearest free spot on the ground.
+  unstick(s) {
+    if (this.bodyFree(s.pos.x, s.pos.y, s.pos.z)) return false;
+    for (let r = 0.4; r <= 3; r += 0.4) for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2, x = s.pos.x + Math.cos(a) * r, z = s.pos.z + Math.sin(a) * r;
+      for (const dy of [0, 1, -1, 2]) {
+        const gy = this.ground(x, z, s.pos.y + dy);
+        if (gy != null && this.bodyFree(x, gy, z)) { s.pos.set(x, gy, z); return true; }
+      }
+    }
+    return false;
   }
 
   combat(s, dt) {
@@ -1401,6 +1576,14 @@ export class Enemies {
       let gy = this.ground(nx, nz, s.pos.y), swim = false;
       if (gy == null && pass === 1) { const wv = this.water(nx, nz); if (wv) { gy = wv.y; swim = wv.swim; } }
       if (s.faction === 'enemy' && this.game.cabin && this.game.cabin.covers(nx, nz)) continue;   // nobody gets into the cabin
+      if (gy != null && !swim && !this.bodyFree(nx, gy, nz)) {
+        // blocked: slide along the wall on one axis instead
+        const sx = s.pos.x - Math.sin(a) * step, sz = s.pos.z - Math.cos(a) * step;
+        const gx = this.ground(sx, s.pos.z, s.pos.y), gz = this.ground(s.pos.x, sz, s.pos.y);
+        if (gx != null && Math.abs(gx - s.pos.y) <= climb && this.bodyFree(sx, gx, s.pos.z)) { s.pos.x = sx; s.pos.y += (gx - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
+        if (gz != null && Math.abs(gz - s.pos.y) <= climb && this.bodyFree(s.pos.x, gz, sz)) { s.pos.z = sz; s.pos.y += (gz - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
+        continue;
+      }
       if (gy != null && gy - s.pos.y <= climb && gy - s.pos.y > -3) {
         if (gy - s.pos.y > 0.5) s.climbT = gy - s.pos.y > 1.2 ? 0.8 : 0.35;
         s.pos.x = nx; s.pos.z = nz; s.pos.y += (gy - s.pos.y) * Math.min(1, dt * 12);
@@ -1623,7 +1806,18 @@ export class Enemies {
   }
   kill(s, by, silent = false) {
     s.alive = false; s.deadT = 0; s.speed = 0; s.raft = null; s.crouch = false;
-    s.fallDir = Math.random() < 0.6 ? 1 : -1;
+    this.unstick(s);
+    // fall where there is room for the body: backward, forward, or to a side
+    const w = this.game.world, y = Math.floor(s.pos.y + 0.4);
+    const open = (dx, dz) => [0.7, 1.4].every((d) => !SOLID[w.get(Math.floor(s.pos.x + dx * d), y, Math.floor(s.pos.z + dz * d))]);
+    const bx = Math.sin(s.yaw), bz = Math.cos(s.yaw);            // "backward" in the world
+    const pref = Math.random() < 0.6 ? [1, -1] : [-1, 1];
+    s.fallDir = 0.25;                                              // no room at all: slump where he stands
+    for (const f of pref) if (open(bx * f, bz * f)) { s.fallDir = f; break; }
+    if (s.fallDir === 0.25) for (const turn of [Math.PI / 2, -Math.PI / 2]) {
+      const a = s.yaw + turn;
+      if (open(Math.sin(a), Math.cos(a))) { s.yaw = a; s.fallDir = 1; break; }
+    }
     if (s.mark) s.mark.visible = false;
     if (s.selected) s.selected = false;
     const g = this.game;
