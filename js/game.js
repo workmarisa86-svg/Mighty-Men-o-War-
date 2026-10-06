@@ -27,11 +27,12 @@ import { ContextBar } from './context.js';
 import { Mission } from './missions.js';
 import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
-import { sfx, setRain } from './audio.js';
+import { sfx, setRain, setMuffled } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
 
 const REACH = BODY.reach;
+const AIR = 20;                       // seconds of air under water without scuba gear
 const HUNGER_DAYS = 4;              // a full stomach empties in about 4 in-game days
 const CRAFT_RANGE = 4.5;            // walk further than this from the fire and crafting stops
 
@@ -124,7 +125,7 @@ export class Game {
       const s = this.world.spawn;
       this.player.pos.set(s.x, s.y, s.z);
     }
-    this.breath = 15;
+    this.breath = AIR;
 
     // inventory
     this.inv = save.inv ? JSON.parse(JSON.stringify(save.inv)) : this.defaultInventory();
@@ -272,14 +273,18 @@ export class Game {
 
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
     const env = { rain: this.peace ? 0 : this.weather.rain, speedMul: inWire ? 0.4 : 1 };
+    const wasDiving = p.diving;
     const res = p.update(dt, this.world, this.obstacles(), it, env);
+    if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
-    // breath underwater
-    if (p.headInWater) {
-      this.breath -= dt;
-      if (this.breath <= 0) { this.breath = 1; this.damage(8); }
-    } else this.breath = Math.min(15, this.breath + dt * 4);
+    // air under water: about 20 s without scuba gear, unlimited with it;
+    // when it runs out, health drains until you surface
+    if (p.headInWater && !this.has('scuba')) {
+      this.breath = Math.max(0, this.breath - dt);
+      if (this.breath <= 0) { this.drownT = (this.drownT || 0) - dt; if (this.drownT <= 0) { this.drownT = 1; this.damage(8, 'drown'); } }
+    } else this.breath = Math.min(AIR, this.breath + dt * 5);
+    this.underwaterFx(dt, p.headInWater);
 
     if (playing) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
@@ -371,11 +376,21 @@ export class Game {
       document.querySelector('[data-btn=run]').classList.toggle('on', !!this.touchRun);
       document.querySelector('[data-btn=crouch]').classList.toggle('on', !!this.touchCrouch);
     }
-    const crouch = k('KeyC') || k('ControlLeft') || !!this.touchCrouch;
+    const swim = this.player.swimming;
+    // in the water the CROUCH toggle is ignored on phones (DIVE is held instead)
+    const crouch = k('KeyC') || k('ControlLeft') || (!!this.touchCrouch && !swim);
     const jumpHeld = k('Space') || input.tdown('jump');
+    // double-tap Space / JUMP in deep water: dive under or swim at the surface
+    let toggleDive = false;
+    if (swim) {
+      if (input.doubleSpace) toggleDive = true;
+      if (input.thit('jump')) { const now = performance.now(); if (now - (this.jumpTapT || 0) < 320) { toggleDive = true; this.jumpTapT = 0; } else this.jumpTapT = now; }
+    }
+    if (input.touch && swim !== this.swimUi) { this.swimUi = swim; document.body.classList.toggle('swimming', swim); }
     return {
       fwd, strafe, run: k('ShiftLeft') || k('ShiftRight') || !!this.touchRun,
       crouch: crouch && !this.player.flying, crouchHeld: crouch, jump: jumpHeld, jumpHeld,
+      dive: input.tdown('dive'), toggleDive,
     };
   }
 
@@ -791,6 +806,7 @@ export class Game {
     if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
     if (this.mission) this.mission.playerDied();
     this.stats.aloneSince = this.time;
+    this.inv.counts.scuba = 0;          // scuba gear is lost every time you are defeated
     const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
     let lost = [];
     if (cause === 'starve') {
@@ -801,7 +817,7 @@ export class Game {
       lost = carried;
     }
     this.respawn();
-    this.player.health = 100; this.breath = 15;
+    this.player.health = 100; this.breath = AIR;
     this.scopeView.close();
     this.enemies.playerDied();
     this.craft = null;
@@ -811,6 +827,26 @@ export class Game {
   }
 
   // ----------------------------------------------------------------- saving
+  // Under water: blue tint (HUD), short murky view, bubbles, muffled sound.
+  underwaterFx(dt, under) {
+    if (!this.scene.fog) this.scene.fog = new THREE.Fog(0x1d4656, 1e5, 2e5);   // invisible until you dive
+    const f = this.scene.fog;
+    if (under !== this.wasUnder) {
+      this.wasUnder = under;
+      setMuffled(under);
+      if (under) { f.near = 0.5; f.far = 20; } else { f.near = 1e5; f.far = 2e5; }
+    }
+    if (under) {
+      f.color.setRGB(0.07 + 0.08 * this.sky.daylight, 0.18 + 0.14 * this.sky.daylight, 0.24 + 0.16 * this.sky.daylight);
+      this.bubbleT = (this.bubbleT || 0) - dt;
+      if (this.bubbleT <= 0) {
+        this.bubbleT = this.has('scuba') ? 0.35 : 0.8;
+        const e = this.player.eye(this.tmpV.clone()), d = this.player.lookDir(this.tmpD.clone());
+        this.particles.burst(e.x + d.x * 0.8, e.y - 0.25, e.z + d.z * 0.8, [0.75, 0.88, 0.95], 3, 0.4, 0.9, -6);
+      }
+    }
+  }
+
   // push this world's progress into the lifetime statistics
   flushStats() {
     if (this.peace && !this.mission) { this.statsFlushed = { ...this.stats, time: this.time }; return; }

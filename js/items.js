@@ -22,6 +22,7 @@ export const ITEMS = {
   medkit: { heal: 50 },
   helmet: { armor: 0.15 },
   vest: { armor: 0.25 },
+  scuba: { armor: 0, worn: true },     // unlimited air under water; lost when you are defeated
   // standard gear (always carried in War mode, not on the hotbar)
   flashlight: { gear: true }, compass: { gear: true }, binoculars: { gear: true },
 };
@@ -49,6 +50,7 @@ export const RECIPES = [
   { id: 'helmet', cat: 'gear', needs: { iron: 3 }, time: 8 },
   { id: 'vest', cat: 'gear', needs: { iron: 5 }, time: 10 },
   { id: 'medkit', cat: 'gear', needs: { iron: 1, wood: 1 }, time: 6 },
+  { id: 'scuba', cat: 'gear', needs: { iron: 4, wood: 1 }, time: 12 },
   { id: 'raft', cat: 'transport', needs: { wood: 6 }, time: 7 },
   { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
 ];
@@ -159,6 +161,14 @@ const ICON_DRAW = {
     c.lineTo(40, 42); c.lineTo(8, 42); c.closePath(); c.fill();
     c.fillStyle = '#3c422a'; c.fillRect(12, 26, 8, 8); c.fillRect(28, 26, 8, 8);
     c.fillStyle = '#626a48'; c.fillRect(23, 18, 2, 24);
+  },
+  scuba(c) {
+    c.fillStyle = '#5a6a72'; c.fillRect(30, 8, 9, 30); c.beginPath(); c.arc(34.5, 8, 4.5, Math.PI, 0); c.fill();
+    c.fillStyle = '#2a3236'; c.fillRect(32, 4, 5, 4);
+    c.strokeStyle = '#1e2224'; c.lineWidth = 2; c.beginPath(); c.moveTo(34, 6); c.quadraticCurveTo(24, 2, 20, 18); c.stroke();
+    c.fillStyle = '#2c3438'; c.beginPath(); c.ellipse(16, 26, 11, 8, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#8ab8c8'; c.beginPath(); c.ellipse(16, 26, 8, 5, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#d0eef6'; c.fillRect(11, 23, 4, 2);
   },
   flashlight(c) {
     c.fillStyle = '#4b5240'; c.fillRect(10, 18, 22, 12);

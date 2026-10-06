@@ -70,9 +70,9 @@ export class HUD {
 
     this.hp.style.width = p.health + '%';
     this.food.style.width = p.hunger + '%';
-    const showBreath = g.breath < 15;
+    const showBreath = g.breath < 19.9 && !g.has('scuba');
     this.breath.hidden = !showBreath;
-    if (showBreath) this.breathFill.style.width = (g.breath / 15 * 100) + '%';
+    if (showBreath) this.breathFill.style.width = (g.breath / 20 * 100) + '%';
 
     this.statusTimer -= dt;
     if (this.statusTimer <= 0) {
@@ -106,6 +106,7 @@ export class HUD {
     let hint = '';
     if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
+      else if (p.swimming) hint = t('hint.dive');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
       else if (g.campfires.near(p.pos) && !g.peace) hint = t('hint.fire');
       else if (this.rationsAimed()) hint = t('hint.rations');

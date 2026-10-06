@@ -526,3 +526,7 @@ body.scoped .tb { background: rgba(20, 22, 14, 0.85); border-color: #f0dc9a; col
 body.scoped .tb[data-btn=zoom] { background: rgba(120, 40, 26, 0.9); }
 body.scoped .tbtns.top .tb:not([data-btn=pause]):not([data-btn=light]) { visibility: hidden; }
 body.scoped .stick { border-color: rgba(240,220,154,0.7); }
+/* phones: the DIVE button only while swimming; CROUCH hides then */
+[data-btn=dive] { display: none; }
+body.swimming [data-btn=dive] { display: inline-block; }
+body.swimming [data-btn=crouch] { display: none; }

@@ -13,6 +13,7 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.yaw = 0; this.pitch = 0;
     this.onGround = false; this.inWater = false; this.swimming = false; this.headInWater = false;
+    this.diving = true;      // in deep water: true = go under, false = swim at the surface
     this.crouch = false; this.running = false; this.flying = false; this.climbing = false;
     this.health = 100; this.hunger = 100;
     this.stepAcc = 0;
@@ -109,7 +110,10 @@ export class Player {
     const feet = world.get(Math.floor(p.x), Math.floor(p.y + 0.1), Math.floor(p.z));
     const waist = world.get(Math.floor(p.x), Math.floor(p.y + 0.8), Math.floor(p.z));
     this.inWater = feet === B.WATER || waist === B.WATER;
+    const wasSwimming = this.swimming;
     this.swimming = waist === B.WATER && !this.flying;
+    if (this.swimming && !wasSwimming) this.diving = true;    // entering deep water: you sink in
+    if (this.swimming && it.toggleDive) this.diving = !this.diving;
     this.headInWater = world.get(Math.floor(p.x), Math.floor(p.y + this.eyeOffset), Math.floor(p.z)) === B.WATER;
 
     // wish direction
@@ -156,11 +160,19 @@ export class Player {
         this.climbing = true; v.y = BODY.climb;
       } else if (nearLog && this.crouch && !this.onGround) {
         this.climbing = true; v.y = 0;
+      } else if (this.swimming && this.diving) {
+        // under water: swim where you look; Space / JUMP up, crouch / DIVE down;
+        // you slowly sink when doing nothing
+        let target = -0.55 + Math.sin(this.pitch) * Math.max(0, it.fwd) * speed * 0.9;
+        if (it.jumpHeld) target = 3.2;
+        if (it.crouchHeld || it.dive) target = -3.0;
+        v.y += (target - v.y) * Math.min(1, dt * 3);
+        if (it.jumpHeld && this.blockedH && !this.headInWater) v.y = 7.2; // climb out onto a bank
       } else if (this.swimming) {
         // float at the surface; Space swims up, crouch dives
         let target = this.headInWater ? 1.35 : 0;
         if (it.jumpHeld) target = 3.6;
-        if (it.crouchHeld) target = -2.8;
+        if (it.crouchHeld || it.dive) target = -2.8;
         v.y += (target - v.y) * Math.min(1, dt * 3);
         if (it.jumpHeld && this.blockedH) v.y = 7.2; // climb out onto a bank
       } else {

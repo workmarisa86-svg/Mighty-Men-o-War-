@@ -309,7 +309,7 @@ export class UI {
       if (d.gear || d.armor) return false;
       return d.tool || g.count(id) > 0 || MATERIALS.includes(id);
     });
-    const gear = (g.peace ? [] : ['flashlight', 'compass', 'binoculars']).concat(['helmet', 'vest'].filter((id) => g.has(id)));
+    const gear = (g.peace ? [] : ['flashlight', 'compass', 'binoculars']).concat(['helmet', 'vest', 'scuba'].filter((id) => g.has(id)));
     const cell = (id, cls = '') => {
       const d = ITEMS[id];
       const c = g.count(id);
