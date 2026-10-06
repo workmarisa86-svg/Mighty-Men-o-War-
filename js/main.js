@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, DIFF, PEACE_SIZE, QUALITY } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave } from './storage.js';
-import { setLang, t, applyI18n, onLang } from './i18n.js';
+import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
@@ -14,6 +14,8 @@ class App {
     this.version = GAME_VERSION;
     this.settings = loadSettings();
     onLang(() => applyI18n());
+    // phones/tablets and computers get their own control descriptions
+    setDevice(matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ? 'touch' : 'pc');
     setLang(this.settings.lang);
     document.body.classList.add('tb-' + (this.settings.touchSize || 'm'));
     this.canvas = document.getElementById('game');

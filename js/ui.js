@@ -5,7 +5,8 @@ import { DIFFICULTIES, SAVE_FORMAT, SEA } from './config.js';
 import { listSaves, deleteSave, deleteAllSaves } from './storage.js';
 import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
-import { MANUAL, MANUAL_CATS } from './manual.js';
+import { MANUAL, MANUAL_CATS, MANUAL_DEVICE } from './manual.js';
+import { getDevice } from './i18n.js';
 import { missionsFor, missionInfo } from './missions.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
@@ -106,7 +107,11 @@ export class UI {
     const norm = (x) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const draw = () => {
       const words = norm(state.q).split(/\s+/).filter(Boolean);
-      let items = MANUAL.filter((m) => state.cat === 'all' || m.cat === state.cat).map((m) => ({ m, x: m[L] || m.en }))
+      const dev = MANUAL_DEVICE[getDevice()] || {};
+      let items = MANUAL.filter((m) => state.cat === 'all' || m.cat === state.cat).map((m) => {
+        const base = m[L] || m.en, o = dev[m.id];
+        return { m, x: o ? { title: base.title, text: o[L] || o.en } : base };
+      })
         .filter(({ x }) => words.every((w) => norm(x.title + ' ' + x.text).includes(w)));
       if (state.sort === 'cat') items.sort((a, b) => cats.indexOf(a.m.cat) - cats.indexOf(b.m.cat));
       else items.sort((a, b) => a.x.title.localeCompare(b.x.title, L) * (state.sort === 'za' ? -1 : 1));
@@ -285,7 +290,7 @@ export class UI {
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t('menu.quit')}</button></div>
-      <p class="muted small keys">${this.app.input.touch ? '' : t('help.keys')}</p></div>`;
+      <p class="muted small keys">${t('help.keys')}</p></div>`;
     const $ = (s) => this.root.querySelector(s);
     $('#presume').onclick = () => this.app.resume();
     $('#psave').onclick = () => this.app.saveGame(false);
@@ -467,8 +472,15 @@ export class UI {
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend"><span><i style="background:${OWNER_COLORS.ally}"></i>${t('map.ally')}</span><span><i style="background:${OWNER_COLORS.enemy}"></i>${t('map.enemy')}</span>
       <span><i style="background:${OWNER_COLORS.none}"></i>${t('map.none')}</span><span><i class="you"></i>${t('map.you')}</span>${g.mission ? `<span><i class="obj"></i>${t('map.objective')}</span>` : ''}</div>`;
-    const panel = this.panel(t('menu.map'), body, { wide: true, onBack: () => from === 'pause' ? this.show('pause') : this.app.closePanel() });
+    const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
+    const panel = this.panel(t('menu.map'), body, { wide: true, onBack: close });
+    panel.classList.add('mappanel');
+    // a clear Close button; on phones tapping the map itself closes it too
+    const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
+    x.onclick = close; panel.appendChild(x);
+    const back = panel.querySelector('[data-act=back]'); if (back) back.textContent = t('map.close');
     const cv = panel.querySelector('#wmap'), w = g.world;
+    if (this.app.input.touch) cv.addEventListener('click', close);
     const S = Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';

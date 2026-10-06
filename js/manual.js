@@ -202,3 +202,108 @@ export const MANUAL = [
   E('m_demo', 'missions', 'Demolition', "Demolition: blow open the marked fort's door with TNT (3 charges) or grenades (12) before the timer ends.", 'Demolición', 'Demolición: vuela la puerta del fuerte marcado con TNT (3 cargas) o granadas (12) antes de que acabe el tiempo.'),
   E('m_all', 'missions', 'Capture Every Fort', 'Capture Every Fort: take every enemy fort. A long, very hard mission for Hard and Impossible.', 'Capturar todos los fuertes', 'Capturar todos los fuertes: toma todos los fuertes enemigos. Una misión larga y muy dura, para Difícil e Imposible.'),
 ];
+
+// Device-specific wording for the entries that mention controls. Phones never
+// read about keys or the mouse; computers never read about taps or buttons.
+export const MANUAL_DEVICE = {
+  pc: {
+    controls: {
+      en: 'WASD move, Shift run, C crouch, Space jump (double-tap Space in deep water: dive or swim on the surface; hold Space to swim up, C to swim down), left click dig / attack, right click place / use / scope, 1-9 or the mouse wheel: hotbar, E campfire crafting / ration crates / chest, Q order wheel, G select soldier, T follow me, Y ask for iron, U ask for a weapon, F flashlight, Z scope or binoculars (Shift steadies your aim), M war map, I or Tab inventory, K crafting, Esc pause.',
+      es: 'WASD moverse, Mayús correr, C agacharse, Espacio saltar (doble toque de Espacio en agua profunda: bucear o nadar en la superficie; mantén Espacio para subir y C para bajar), clic izquierdo cavar / atacar, clic derecho colocar / usar / mira, 1-9 o la rueda del ratón: barra rápida, E fabricar en la hoguera / cajas de raciones / baúl, Q rueda de órdenes, G elegir soldado, T sígueme, Y pedir hierro, U pedir un arma, F linterna, Z mira o prismáticos (Mayús estabiliza), M mapa de guerra, I o Tab inventario, K fabricar, Esc pausa.',
+    },
+    wheel: {
+      en: 'Q opens the order wheel. Move the mouse toward an order and click, or press its number. Orders: Follow me, Hold position, Defend the base, Take cover, Spread out, Advance here, Attack this fort, and the squad formation.',
+      es: 'Q abre la rueda de órdenes. Mueve el ratón hacia una orden y haz clic, o pulsa su número. Órdenes: Seguidme, Mantened la posición, Defended la base, A cubierto, Dispersaos, Avanzad aquí, Atacad este fuerte y la formación.',
+    },
+    squadphone: {
+      en: 'Beside an allied soldier, small hints appear: T makes him and the allies close to you follow you (it also calls back soldiers who are holding or guarding), Y asks for iron and U asks for a weapon. Q opens the order wheel for the rest.',
+      es: 'Junto a un soldado aliado aparecen pequeñas indicaciones: T hace que te sigan él y los aliados cercanos (también llama a los que mantienen posición o hacen guardia), Y pide hierro y U pide un arma. Q abre la rueda de órdenes para lo demás.',
+    },
+    warmap: {
+      en: 'M (or War map in the pause menu) opens the war map: every fort in its owner\'s colour (allied, enemy, unclaimed), your position, the cabin when playing alone and the current mission objective. M or Close shuts it.',
+      es: 'M (o Mapa de guerra en el menú de pausa) abre el mapa de guerra: todos los fuertes con el color de su dueño (aliado, enemigo, sin dueño), tu posición, la cabaña si juegas solo y el objetivo de la misión. M o Cerrar lo cierran.',
+    },
+    music: {
+      en: '"Marines\' Hymn", played by the United States Marine Band, plays quietly on the splash screen and the main menu (after your first click or key press), loops smoothly and stops during play. Change its volume or mute it in Settings, or click the speaker icon on the main menu. Your choice is remembered.',
+      es: 'En la pantalla de inicio y en el menú principal suena en voz baja el "Marines\' Hymn" interpretado por la Banda de la Infantería de Marina de los Estados Unidos (tras tu primer clic o tecla); se repite sin cortes y se detiene al jugar. Cambia su volumen o siléncialo en Ajustes, o haz clic en el icono del altavoz del menú principal. Se recuerda tu elección.',
+    },
+    settings: {
+      en: 'Language, graphics quality, render distance, sound volume, music volume and mute, mouse sensitivity and invert, blood on/off, minimap on/off and size and squad formation.',
+      es: 'Idioma, calidad gráfica, distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión del ratón, sangre sí/no, minimapa sí/no y tamaño, y formación de la escuadra.',
+    },
+  },
+  touch: {
+    move: {
+      en: 'Put your left thumb anywhere on the left side and drag to walk; drag on the right side to look around. RUN and CROUCH switch on and off (crouching is quieter and harder to spot). JUMP jumps. Logs and ladders can be climbed by walking into them.',
+      es: 'Pon el pulgar izquierdo en cualquier punto de la mitad izquierda y arrastra para caminar; arrastra en la mitad derecha para mirar. CORRER y AGACHAR se activan y desactivan (agachado haces menos ruido y cuesta más verte). SALTAR salta. Los troncos y escaleras se trepan caminando hacia ellos.',
+    },
+    dig: {
+      en: 'Hold ACTION to dig the block in the middle of the screen; harder blocks take longer. Tap or hold USE to place the selected block. Built-in fort walls and the cabin cannot be dug.',
+      es: 'Mantén ACCIÓN para cavar el bloque del centro de la pantalla; los bloques duros tardan más. Toca o mantén USAR para colocar el bloque elegido. Los muros de los fuertes y la cabaña no se pueden cavar.',
+    },
+    hotbar: {
+      en: 'Tap a slot in the hotbar to pick an item. BAG opens the inventory: tap an item, then a hotbar slot, to arrange the hotbar.',
+      es: 'Toca una casilla de la barra rápida para elegir un objeto. BOLSA abre el inventario: toca un objeto y luego una casilla para ordenar la barra.',
+    },
+    water: {
+      en: 'You can swim, but not for ever: watch the air bar under water. Craft a raft to cross lakes; place it on open water with USE and tap USE on it to board. Blocks placed from the water build a bridge.',
+      es: 'Puedes nadar, pero no eternamente: vigila la barra de aire bajo el agua. Fabrica una balsa para cruzar lagos; colócala en agua abierta con USAR y toca USAR sobre ella para subir. Los bloques colocados desde el agua forman un puente.',
+    },
+    flashlight: {
+      en: 'LIGHT turns the flashlight on and off. It lights tunnels and the night, but enemies can see you much farther away while it is on.',
+      es: 'LUZ enciende y apaga la linterna. Ilumina túneles y la noche, pero el enemigo te ve desde mucho más lejos mientras está encendida.',
+    },
+    hunger: {
+      en: 'Hunger slowly drops. Hunt animals, cook the meat on a campfire and eat it (select it and hold USE). Starving makes you sick and, in the end, kills you. Your own forts feed you while you are inside, and their ration crates give food (aim at one and tap USE).',
+      es: 'El hambre baja poco a poco. Caza animales, cocina la carne en una hoguera y cómela (elígela y mantén USAR). Pasar hambre te enferma y al final te mata. Tus fuertes te alimentan mientras estás dentro y sus cajas de raciones dan comida (apunta a una y toca USAR).',
+    },
+    campfire: {
+      en: 'Light a campfire with flint and steel (aim at the ground and tap USE). Next to a campfire, CRAFT opens campfire crafting: weapons, ammunition, TNT, grenades, rafts and more. Away from a fire, CRAFT opens simple crafting.',
+      es: 'Enciende una hoguera con el pedernal y eslabón (apunta al suelo y toca USAR). Junto a una hoguera, FABRICAR abre la fabricación de la hoguera: armas, munición, TNT, granadas, balsas y más. Lejos del fuego, FABRICAR abre la fabricación sencilla.',
+    },
+    scope: {
+      en: 'ZOOM (or USE with the sniper rifle) brings the scope up: a circular view with a fine reticle and a blurred dark surround, zooming smoothly. Without the sniper rifle, ZOOM uses binoculars. Your aim sways with your breathing. While zoomed, the buttons stay on top of the scope edge: ACTION fires and EXIT ZOOM lowers the scope. Ordinary guns keep the normal crosshair and the knife a dot.',
+      es: 'ZOOM (o USAR con el fusil de francotirador) sube la mira: una vista circular con retícula fina y el borde oscuro y borroso, con zoom suave. Sin el fusil de francotirador, ZOOM usa los prismáticos. La puntería se mueve con la respiración. Con el zoom puesto los botones siguen visibles sobre el borde: ACCIÓN dispara y SALIR ZOOM baja la mira. Las demás armas usan la mira normal y el cuchillo un punto.',
+    },
+    grenades: {
+      en: 'Tap ACTION to throw. Grenades explode after a short fuse; smoke grenades hide you from enemy eyes.',
+      es: 'Toca ACCIÓN para lanzar. Las granadas explotan tras una mecha corta; las de humo te ocultan de los ojos enemigos.',
+    },
+    wheel: {
+      en: 'While you have a squad, an ORDERS button appears: it opens a short list of orders (Hold position, Defend the base, Spread out, Take cover, Attack this fort). Tap one to give it. Orders use what is in the middle of the screen when you open the list.',
+      es: 'Mientras tengas escuadra aparece el botón ÓRDENES: abre una lista corta de órdenes (Mantened la posición, Defended la base, Dispersaos, A cubierto, Atacad este fuerte). Toca una para darla. Las órdenes usan lo que hay en el centro de la pantalla al abrir la lista.',
+    },
+    recipients: {
+      en: 'Orders from the ORDERS list go to your whole squad. To give an order to one soldier only, stand beside him and use the buttons that appear (FOLLOW ME, ASK FOR IRON, ASK FOR A WEAPON).',
+      es: 'Las órdenes de la lista ÓRDENES van a toda la escuadra. Para hablar con un solo soldado, ponte a su lado y usa los botones que aparecen (SÍGUEME, PEDIR HIERRO, PEDIR UN ARMA).',
+    },
+    formation: {
+      en: 'Loose (default), Line or Column, chosen in Settings. When following you, your squad walks in single file behind you along your own path, keeping a steady distance. Nobody stands in a doorway.',
+      es: 'Abierta (por defecto), En línea o En columna, desde Ajustes. Cuando te siguen, tus soldados van en fila india detrás de ti por tu mismo camino y a distancia constante. Nadie se queda en una puerta.',
+    },
+    controls: {
+      en: 'Left thumb (drag on the left side): move. Drag on the right side: look. ACTION: dig or attack (hold to keep digging or firing). USE: place, use, eat (hold), scope. JUMP: jump; in deep water double-tap JUMP to dive or swim on the surface, hold JUMP to swim up and DIVE to swim down. RUN and CROUCH switch on and off. ZOOM: binoculars or scope. LIGHT: flashlight. BAG: inventory. CRAFT: crafting. Tap a hotbar slot to pick an item. Tap the radar for the war map. II: pause. Squad buttons appear only when they make sense.',
+      es: 'Pulgar izquierdo (arrastra en la mitad izquierda): moverse. Arrastra en la mitad derecha: mirar. ACCIÓN: cavar o atacar (mantén para seguir). USAR: colocar, usar, comer (mantén), mira. SALTAR: saltar; en agua profunda, doble toque de SALTAR para bucear o nadar en la superficie, mantén SALTAR para subir y BUCEAR para bajar. CORRER y AGACHAR se activan y desactivan. ZOOM: prismáticos o mira. LUZ: linterna. BOLSA: inventario. FABRICAR: fabricar. Toca una casilla de la barra para elegir objeto. Toca el radar para ver el mapa de guerra. II: pausa. Los botones de escuadra solo aparecen cuando tienen sentido.',
+    },
+    squadphone: {
+      en: 'There are no permanent squad buttons. Stand beside an allied soldier and a FOLLOW ME button appears: it recruits him and the allies close to you, and also calls back soldiers who are holding or guarding. While you have a squad, a small ORDERS button opens a short list: Hold position, Defend the base, Spread out, Take cover, Attack this fort. ASK FOR IRON and ASK FOR A WEAPON appear beside a soldier.',
+      es: 'No hay botones de escuadra fijos. Ponte junto a un soldado aliado y aparece SÍGUEME: lo recluta a él y a los aliados cercanos, y también llama a los que mantienen posición o hacen guardia. Mientras tengas escuadra, un pequeño botón ÓRDENES abre una lista corta: Mantened la posición, Defended la base, Dispersaos, A cubierto, Atacad este fuerte. PEDIR HIERRO y PEDIR UN ARMA aparecen junto a un soldado.',
+    },
+    warmap: {
+      en: 'Tap the radar in the top-left corner (or War map in the pause menu) to open the war map: every fort in its owner\'s colour (allied, enemy, unclaimed), your position, the cabin when playing alone and the current mission objective. Tap the map or Close to shut it.',
+      es: 'Toca el radar de la esquina superior izquierda (o Mapa de guerra en el menú de pausa) para abrir el mapa de guerra: todos los fuertes con el color de su dueño (aliado, enemigo, sin dueño), tu posición, la cabaña si juegas solo y el objetivo de la misión. Toca el mapa o Cerrar para cerrarlo.',
+    },
+    music: {
+      en: '"Marines\' Hymn", played by the United States Marine Band, plays quietly on the splash screen and the main menu (after your first tap), loops smoothly and stops during play. Change its volume or mute it in Settings, or tap the speaker icon on the main menu. Your choice is remembered.',
+      es: 'En la pantalla de inicio y en el menú principal suena en voz baja el "Marines\' Hymn" interpretado por la Banda de la Infantería de Marina de los Estados Unidos (tras tu primer toque); se repite sin cortes y se detiene al jugar. Cambia su volumen o siléncialo en Ajustes, o toca el icono del altavoz del menú principal. Se recuerda tu elección.',
+    },
+    settings: {
+      en: 'Language, graphics quality, render distance, sound volume, music volume and mute, look sensitivity and invert, blood on/off, minimap on/off and size, squad formation and touch button size.',
+      es: 'Idioma, calidad gráfica, distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión de la vista, sangre sí/no, minimapa sí/no y tamaño, formación de la escuadra y tamaño de los botones táctiles.',
+    },
+    m_hold: {
+      en: 'Hold the Fort: a surprisingly large force tries to blow your door with TNT. Shoot the charges or walk up to them to pull the wires. You lose if the fort is taken.',
+      es: 'Resistir en el fuerte: una fuerza sorprendentemente grande intenta volar tu puerta con TNT. Dispara a las cargas o acércate para arrancarles los cables. Pierdes si toman el fuerte.',
+    },
+  },
+};

@@ -125,7 +125,7 @@ export class OrderWheel {
     const who = sel.length ? t('order.toSelected', { n: sel.length }) : one ? one.name : t('order.toSquad', { n: E.squadMembers().length });
     const tgt = this.at && this.at.fort ? this.at.fort.name : '';
     this.center.innerHTML = `<b>${t('order.title2')}</b><span>${who}</span>${tgt ? `<span class="muted">${tgt}</span>` : ''}` +
-      (one && !sel.length ? `<span class="muted small"><kbd>9</kbd> ${t('order.talk')}</span>` : '');
+      (one && !sel.length && !this.game.app.input.touch ? `<span class="muted small"><kbd>9</kbd> ${t('order.talk')}</span>` : '');
     this.items.forEach((b, i) => {
       const cmd = ORDERS[i];
       const label = cmd === 'formation' ? t('ord.formation', { f: t('form.' + (g.settings.formation || 'loose')) }) : t('ord.' + cmd);

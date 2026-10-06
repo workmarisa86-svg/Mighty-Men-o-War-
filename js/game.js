@@ -392,7 +392,7 @@ export class Game {
       this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
-    if (input.hit('KeyM') || input.thit('map')) this.app.openPanel('map', { from: 'game' });
+    if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
@@ -537,6 +537,8 @@ export class Game {
     const want = input.mouse.rightPressed || input.thit('place') || ((input.mouse.right || input.tdown('place')) && this.placeCooldown <= 0);
     if (!want) return;
     this.placeCooldown = 0.25;
+    // a ration crate or the cabin chest: right-click / USE works like E
+    if ((input.mouse.rightPressed || input.thit('place')) && this.useSupply()) return;
     const item = this.selected();
     if (!item) return;
     const def = ITEMS[item];
@@ -849,7 +851,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
-    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose();
+    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose(); document.body.classList.remove('scoped');
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

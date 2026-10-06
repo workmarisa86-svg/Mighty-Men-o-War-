@@ -512,3 +512,17 @@ body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 
   .art-screen .menu .btn { padding: 6px 8px; font-size: 13px; }
   .art-screen .menu { gap: 5px; }
 }
+
+/* phones: the radar is the map button (bigger touch area than the drawing) */
+#minimap.tappable { pointer-events: auto; cursor: pointer; }
+#minimap.tappable::after { content: ''; position: absolute; inset: -12px; border-radius: 50%; }
+.mappanel { position: relative; }
+.mappanel .icon-close { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; padding: 0; font-size: 20px; line-height: 1; border-radius: 50%; }
+
+/* phones in the scope / binoculars: keep the buttons on top of the dark scope
+   edge, with strong outlines, so Fire and Exit zoom stay visible and tappable */
+body.scoped #touch { z-index: 7; }
+body.scoped .tb { background: rgba(20, 22, 14, 0.85); border-color: #f0dc9a; color: #fff6d8; box-shadow: 0 0 0 2px rgba(0,0,0,0.85), 0 0 10px rgba(240,220,154,0.35); }
+body.scoped .tb[data-btn=zoom] { background: rgba(120, 40, 26, 0.9); }
+body.scoped .tbtns.top .tb:not([data-btn=pause]):not([data-btn=light]) { visibility: hidden; }
+body.scoped .stick { border-color: rgba(240,220,154,0.7); }

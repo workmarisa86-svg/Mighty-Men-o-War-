@@ -43,7 +43,7 @@ export class HUD {
       const s = e.target.closest('.slot');
       if (s) { game.inv.sel = +s.dataset.i; this.dirtyHotbar = true; }
     };
-    this.keyhint.textContent = game.app.input.touch ? '' : t('help.keys');
+    this.keyhint.textContent = game.app.input.touch ? '' : t('help.keys');   // phones: the pause menu lists the buttons
     this.keyhint.classList.remove('fade');
     clearTimeout(HUD.hintTimer);
     HUD.hintTimer = setTimeout(() => this.keyhint.classList.add('fade'), 12000);
@@ -107,7 +107,8 @@ export class HUD {
     if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
-      else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
+      else if (g.campfires.near(p.pos) && !g.peace) hint = t('hint.fire');
+      else if (this.rationsAimed()) hint = t('hint.rations');
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');
       else if (g.selected() === 'flint') hint = t('hint.flint');
@@ -218,6 +219,17 @@ export class HUD {
     this.root.hidden = true;
     this.toasts.innerHTML = '';
     this.radioEl.innerHTML = '';
+  }
+
+  // looking at one of your forts' ration crates (checked a few times a second)
+  rationsAimed() {
+    const g = this.game, now = performance.now();
+    if (now - (this.rationT || 0) < 250) return this.rationHit;
+    this.rationT = now;
+    const { eye, dir } = g.aim();
+    const hit = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 5.6);
+    this.rationHit = !!hit && hit.id === 18 && !(g.cabin && g.cabin.isChest(hit.x, hit.y, hit.z));
+    return this.rationHit;
   }
 
   // current mission: name, objective, time left

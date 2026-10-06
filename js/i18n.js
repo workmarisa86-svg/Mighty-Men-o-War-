@@ -138,6 +138,19 @@ const STR = {
     'menu.install': 'Install app',
     'install.ios1': 'Tap the Share button in Safari.', 'install.ios2': 'Choose "Add to Home Screen".', 'install.ios3': 'Tap "Add". Mighty Man o\' War appears on your home screen.',
     'install.mac1': 'In Safari, open the File menu (or the Share button).', 'install.mac2': 'Choose "Add to Dock".',
+    'touch.zoomOut': 'EXIT ZOOM', 'map.close': 'Close',
+    'inv.hint@touch': 'Tap an item, then a hotbar slot to assign it.',
+    'hint.flint@touch': 'Aim at the ground and tap USE to light a campfire (3 wood)', 'hint.eat@touch': 'Hold USE to eat or use it',
+    'craft.needFire@touch': 'Crafting needs a lit campfire. Select flint and steel, aim at the ground and tap USE (uses 3 wood), then stand next to it.',
+    'hint.scope@touch': 'ZOOM or USE: scope on/off', 'hint.throw@touch': 'Tap ACTION to throw',
+    'hint.fire@touch': 'CRAFT: campfire crafting and cooking', 'hint.chest@touch': 'Tap CHEST to open the storage chest',
+    'order.squadInfo@touch': '{n} soldiers are following you. Tap ORDERS for commands.',
+    'craftDesc.rifle@touch': 'loud, long range, bayonet (USE)',
+    'ms.scout.goal@touch': 'Use the binoculars (ZOOM) to count the soldiers in an enemy fort and find the officer, then return alive.',
+    'ms.scout.s1@touch': 'Watch {fort} through the binoculars (ZOOM)',
+    'set.sens@touch': 'Look sensitivity', 'set.invert@touch': 'Invert look up/down',
+    'help.keys@touch': 'Left thumb: move · drag on the right: look · ACTION: dig / attack · USE: place / use / scope · JUMP: jump · swim up · CROUCH and RUN switch on/off · ZOOM: binoculars or scope · LIGHT: flashlight · BAG: inventory · CRAFT: crafting · tap the radar: war map · II: pause',
+    'hint.rations': 'Ration crate: [E] or right-click', 'hint.rations@touch': 'Ration crate: tap USE',
     'man.search': 'Search the manual…', 'man.byCat': 'By topic', 'man.all': 'All', 'man.expand': 'Open all', 'man.collapse': 'Close all', 'man.none': 'Nothing found.',
     'ord.follow': 'Follow me', 'ord.hold': 'Hold position', 'ord.defend': 'Defend the base', 'ord.cover': 'Take cover',
     'ord.spread': 'Spread out', 'ord.advance': 'Advance here', 'ord.attack': 'Attack this fort', 'ord.formation': 'Formation: {f}',
@@ -291,6 +304,19 @@ const STR = {
     'menu.install': 'Instalar app',
     'install.ios1': 'Toca el botón Compartir en Safari.', 'install.ios2': 'Elige "Añadir a pantalla de inicio".', 'install.ios3': 'Toca "Añadir". Mighty Man o\' War aparecerá en tu pantalla de inicio.',
     'install.mac1': 'En Safari, abre el menú Archivo (o el botón Compartir).', 'install.mac2': 'Elige "Añadir al Dock".',
+    'touch.zoomOut': 'SALIR ZOOM', 'map.close': 'Cerrar',
+    'inv.hint@touch': 'Toca un objeto y luego una casilla de la barra para asignarlo.',
+    'hint.flint@touch': 'Apunta al suelo y toca USAR para encender una hoguera (3 de madera)', 'hint.eat@touch': 'Mantén USAR para comer o usarlo',
+    'craft.needFire@touch': 'Para fabricar hace falta una hoguera encendida. Elige el pedernal y eslabón, apunta al suelo y toca USAR (gasta 3 de madera); luego quédate a su lado.',
+    'hint.scope@touch': 'ZOOM o USAR: mira telescópica sí/no', 'hint.throw@touch': 'Toca ACCIÓN para lanzar',
+    'hint.fire@touch': 'FABRICAR: fabricar y cocinar en la hoguera', 'hint.chest@touch': 'Toca BAÚL para abrir el baúl',
+    'order.squadInfo@touch': '{n} soldados te siguen. Toca ÓRDENES para dar órdenes.',
+    'craftDesc.rifle@touch': 'ruidoso, largo alcance, bayoneta (USAR)',
+    'ms.scout.goal@touch': 'Usa los prismáticos (ZOOM) para contar los soldados de un fuerte enemigo y encontrar al oficial; después vuelve con vida.',
+    'ms.scout.s1@touch': 'Observa {fort} con los prismáticos (ZOOM)',
+    'set.sens@touch': 'Sensibilidad de la vista', 'set.invert@touch': 'Invertir la vista arriba/abajo',
+    'help.keys@touch': 'Pulgar izquierdo: moverse · arrastra a la derecha: mirar · ACCIÓN: cavar / atacar · USAR: colocar / usar / mira · SALTAR: saltar · subir nadando · AGACHAR y CORRER se activan y desactivan · ZOOM: prismáticos o mira · LUZ: linterna · BOLSA: inventario · FABRICAR: fabricar · toca el radar: mapa de guerra · II: pausa',
+    'hint.rations': 'Caja de raciones: [E] o clic derecho', 'hint.rations@touch': 'Caja de raciones: toca USAR',
     'man.search': 'Buscar en el manual…', 'man.byCat': 'Por tema', 'man.all': 'Todo', 'man.expand': 'Abrir todo', 'man.collapse': 'Cerrar todo', 'man.none': 'No se encontró nada.',
     'ord.follow': 'Seguidme', 'ord.hold': 'Mantened la posición', 'ord.defend': 'Defended la base', 'ord.cover': 'A cubierto',
     'ord.spread': 'Dispersaos', 'ord.advance': 'Avanzad aquí', 'ord.attack': 'Atacad este fuerte', 'ord.formation': 'Formación: {f}',
@@ -313,8 +339,15 @@ const listeners = [];
 export function setLang(l) { lang = STR[l] ? l : 'en'; document.documentElement.lang = lang; listeners.forEach((f) => f(lang)); }
 export function getLang() { return lang; }
 export function onLang(f) { listeners.push(f); }
+// Device-specific wording: a "key@touch" or "key@pc" entry wins on that
+// device, so phones never read about keys or mouse buttons and computers
+// never read about taps or on-screen buttons.
+let device = 'pc';
+export function setDevice(d) { device = d === 'touch' ? 'touch' : 'pc'; }
+export function getDevice() { return device; }
 export function t(key, params) {
-  let s = (STR[lang] && STR[lang][key]) ?? STR.en[key] ?? key;
+  const dk = key + '@' + device;
+  let s = (STR[lang] && STR[lang][dk]) ?? STR.en[dk] ?? (STR[lang] && STR[lang][key]) ?? STR.en[key] ?? key;
   if (params) for (const k in params) s = s.replaceAll('{' + k + '}', params[k]);
   return s;
 }
