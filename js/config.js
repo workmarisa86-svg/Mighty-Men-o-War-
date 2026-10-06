@@ -1,5 +1,5 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.6.4';
+export const GAME_VERSION = '0.7.0';
 export const SAVE_FORMAT = 2;
 // every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
 export const STORE_PREFIX = 'blocks-mmow-';
@@ -19,7 +19,6 @@ export const DIFF = {
   hard:       { size: 320, enemies: 28, allies: 10, animals: 0.7, animalRespawn: 200, forts: 11 },
   impossible: { size: 384, enemies: 38, allies: 9,  animals: 0.45, animalRespawn: 300, forts: 13 },
 };
-export const PEACE_SIZE = 256;
 
 export const DAY_SECONDS = 20 * 60;   // real seconds per in-game day (War mode)
 

@@ -81,8 +81,8 @@ export class HUD {
       const tod = g.dayOnly ? 0.45 : g.time % 1;
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : g.dayOnly ? t('hud.daylight') : clock];
-      if (!g.peace && g.weather.rain > 0.15) parts.push(t('hud.rain'));
+      const parts = [t('hud.day', { n: day }), g.dayOnly ? t('hud.daylight') : clock];
+      if (g.weather.rain > 0.15) parts.push(t('hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
 
@@ -108,7 +108,7 @@ export class HUD {
       if (g.defusing) hint = t('hint.defusing');
       else if (p.swimming) hint = t('hint.dive');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
-      else if (g.campfires.near(p.pos) && !g.peace) hint = t('hint.fire');
+      else if (g.campfires.near(p.pos)) hint = t('hint.fire');
       else if (this.rationsAimed()) hint = t('hint.rations');
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');
@@ -116,7 +116,7 @@ export class HUD {
       else if (ITEMS[g.selected()] && (ITEMS[g.selected()].food || ITEMS[g.selected()].heal)) hint = t('hint.eat');
     }
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
-    const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
+    const hs = p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.updateMarkers();
     this.updateSquadList(dt);
@@ -254,7 +254,7 @@ export class HUD {
     this.squadT -= dt;
     if (this.squadT > 0) return;
     this.squadT = 0.3;
-    const members = g.cfg.sub === 'allies' && !g.peace && E ? E.squadMembers() : [];
+    const members = g.cfg.sub === 'allies' && E ? E.squadMembers() : [];
     if (!members.length) { this.squadEl.hidden = true; return; }
     this.squadEl.hidden = false;
     const MAX = 8;

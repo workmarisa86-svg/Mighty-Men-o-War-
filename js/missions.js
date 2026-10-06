@@ -1,6 +1,6 @@
 // Missions: short, repeatable scenarios set up in a fresh world. War
 // missions scale with the chosen difficulty (enemy numbers, squad size, time
-// limits, supplies); Peace missions have no enemies and no time pressure.
+// limits, supplies).
 import * as THREE from 'three';
 import { DIFFICULTIES, SEA } from './config.js';
 import { B, SOLID } from './blocks.js';
@@ -20,14 +20,10 @@ export const MISSIONS = [
   { id: 'supply', mode: 'war', subs: ['allies'] },
   { id: 'demo', mode: 'war', subs: ['alone', 'allies'] },
   { id: 'all', mode: 'war', subs: ['alone', 'allies'], minDiff: 3 },
-  { id: 'shack', mode: 'peace' },
-  { id: 'hunter', mode: 'peace' },
-  { id: 'explore', mode: 'peace' },
-  { id: 'bridgeb', mode: 'peace' },
 ];
 export function missionsFor(mode, sub, diff) {
   const k = DIFFICULTIES.indexOf(diff);
-  return MISSIONS.filter((m) => m.mode === mode && (mode === 'peace' || (m.subs.includes(sub) && k >= (m.minDiff || 0))));
+  return MISSIONS.filter((m) => m.mode === mode && m.subs.includes(sub) && k >= (m.minDiff || 0));
 }
 // numbers shown on the mission screen (and used by the mission)
 export function missionInfo(id, sub, diff) {
@@ -43,10 +39,6 @@ export function missionInfo(id, sub, diff) {
     supply: { limit: 0, size: [3, 4, 5, 5, 6][k] },
     demo: { limit: [8, 7, 6, 5, 4][k] * 60, tnt: [4, 3, 3, 3, 3][k], grenades: [8, 6, 5, 4, 3][k] },
     all: { limit: 0 },
-    shack: { limit: 0, size: 3 },
-    hunter: { limit: 0, n: 6 },
-    explore: { limit: 0, pct: 35 },
-    bridgeb: { limit: 0, len: 6 },
   };
   return I[id] || { limit: 0 };
 }
@@ -175,12 +167,6 @@ export class Mission {
         const en = this.enemyForts().sort((a, b) => Math.hypot(a.cx - start.x, a.cz - start.z) - Math.hypot(b.cx - start.x, b.cz - start.z));
         for (const f of en.slice(3)) { this.trimGarrison(f, 0); F.setOwnerQuiet(f, 'none'); }
       }
-    } else if (this.id === 'hunter') {
-      D.base = g.stats.animals || 0;
-    } else if (this.id === 'explore') {
-      D.seen = {};
-    } else if (this.id === 'bridgeb') {
-      D.run = 0;
     }
   }
   restore() {
@@ -309,80 +295,13 @@ export class Mission {
         const days = this.t / 1200;
         return this.win(days < 2 ? 0.9 : days < 4 ? 0.5 : 0.1);
       }
-    } else if (id === 'hunter') {
-      D.got = (g.stats.animals || 0) - D.base;
-      if (D.got >= I.n) return this.win(this.t < 900 ? 0.9 : this.t < 1800 ? 0.5 : 0.1);
-    } else if (id === 'explore') {
-      const k = (Math.floor(pl.pos.x / 16)) + ',' + (Math.floor(pl.pos.z / 16));
-      if (!D.seen[k]) { D.seen[k] = 1; }
-      const total = Math.ceil(g.world.W / 16) * Math.ceil(g.world.D / 16);
-      D.pct = Math.round(Object.keys(D.seen).length / total * 100);
-      if (D.pct >= I.pct) return this.win(this.t < 1200 ? 0.9 : this.t < 2400 ? 0.5 : 0.1);
-    } else if (id === 'shack') {
-      this.uiT -= dt;
-      if (this.uiT <= 0) { this.uiT = 1; if (this.checkShack()) return this.win(0.9); }
-    } else if (id === 'bridgeb') {
-      // walk from one bank to the other on blocks you placed over water
-      const w = g.world, x = Math.floor(pl.pos.x), z = Math.floor(pl.pos.z), y = Math.floor(pl.pos.y);
-      const under = w.get(x, y - 1, z), deeper = w.get(x, y - 2, z);
-      if (pl.swimming || pl.flying) D.run = 0;
-      else if (SOLID[under] && (deeper === B.WATER || w.get(x, SEA - 1, z) === B.WATER) && y >= SEA) { D.onBridge = true; D.cells = D.cells || {}; D.cells[x + ',' + z] = 1; D.run = Object.keys(D.cells).length; }
-      else if (pl.onGround && w.get(x, SEA - 1, z) !== B.WATER) {
-        if (D.onBridge && D.run >= I.len) return this.win(0.9);
-        D.onBridge = false; D.cells = {}; D.run = 0;
-      }
     }
   }
-
-  // A closed room: walls all around at foot level, a roof, at least 3x3
-  // inside, and a doorway (a 1-2 wide gap at least 2 blocks high).
-  checkShack() {
-    const g = this.game, w = g.world, p = g.player.pos;
-    const y = Math.floor(p.y), sx = Math.floor(p.x), sz = Math.floor(p.z);
-    const open = (x, z) => !SOLID[w.get(x, y, z)] && !SOLID[w.get(x, y + 1, z)];
-    const doorway = (x, z) => open(x, z) && SOLID[w.get(x, y + 2, z)] &&
-      ((SOLID[w.get(x - 1, y, z)] && SOLID[w.get(x + 1, y, z)]) || (SOLID[w.get(x, y, z - 1)] && SOLID[w.get(x, y, z + 1)]));
-    const seen = new Set([sx + ',' + sz]), q = [[sx, sz]];
-    let doors = 0;
-    while (q.length) {
-      const [x, z] = q.pop();
-      // a roof somewhere within 4 blocks overhead
-      let roof = false; for (let h = 2; h <= 4; h++) if (SOLID[w.get(x, y + h, z)]) { roof = true; break; }
-      if (!roof) return false;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, nz = z + dz, key = nx + ',' + nz;
-        if (seen.has(key) || !open(nx, nz)) continue;
-        if (doorway(nx, nz) && !doorway(x, z)) { seen.add(key); doors++; continue; }
-        seen.add(key); q.push([nx, nz]);
-        if (seen.size > 80) return false;
-      }
-    }
-    const inside = seen.size - doors;
-    return doors >= 1 && inside >= this.info.size * this.info.size;
-  }
-
-  // ---------------------------------------------------------- end states
-  playerDied() { if (this.failOnDeath && !this.done) this.fail('died'); }
-  win(score) {
-    if (this.done) return;
-    const medal = score >= 0.66 ? 'gold' : score >= 0.33 ? 'silver' : 'bronze';
-    this.done = true; this.result = { ok: true, medal };
-    this.game.missionEnded(this.result);
-  }
-  fail(why) {
-    if (this.done) return;
-    this.done = true; this.result = { ok: false, why };
-    this.game.missionEnded(this.result);
-  }
-
   // objective text for the HUD
   status() {
     const D = this.data, I = this.info, id = this.id;
     let s = t('ms.' + id + '.obj');
     if (id === 'scout') s = !D.counted ? t('ms.scout.s1') : !D.officer ? t('ms.scout.s2') : t('ms.scout.s3');
-    if (id === 'hunter') s += ` ${Math.max(0, D.got || 0)}/${I.n}`;
-    if (id === 'explore') s += ` ${D.pct || 0}% / ${I.pct}%`;
-    if (id === 'bridgeb' && D.run) s += ` (${D.run}/${I.len})`;
     if (id === 'trench' && this.t < I.prep) s = t('ms.trench.prep', { s: Math.ceil(I.prep - this.t) });
     if (id === 'supply') s += ` (${D.alive ?? 3}/3)`;
     if (id === 'take' || id === 'demo' || id === 'hold' || id === 'scout') { const f = this.fort(); if (f) s = s.replace('{fort}', f.name); }

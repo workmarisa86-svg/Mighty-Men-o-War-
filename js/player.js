@@ -1,5 +1,5 @@
 // First-person body: walking, running, crouching (sneaking), jumping,
-// swimming, climbing tree trunks, flying (Peace mode) and raft riding.
+// swimming, climbing tree trunks, and raft riding.
 import * as THREE from 'three';
 import { B, SOLID } from './blocks.js';
 import { sfx } from './audio.js';

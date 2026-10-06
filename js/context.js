@@ -27,7 +27,7 @@ export class ContextBar {
     this.timer -= dt;
     if (this.timer <= 0) {
       this.timer = 0.2;
-      const p = g.player.pos, allies = g.cfg.sub === 'allies' && !g.peace && E;
+      const p = g.player.pos, allies = g.cfg.sub === 'allies' && E;
       let near = null, nd = 3.6;
       if (allies) for (const s of E.list) {
         if (!s.alive || s.surrender || s.faction !== 'ally') continue;

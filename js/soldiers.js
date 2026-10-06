@@ -125,7 +125,7 @@ export class Enemies {
     this.tank = null;
     this.tankT = 60;
     this.callT = 0; this.callCd = {};
-    this.enabled = !game.peace;
+    this.enabled = true;
     this.diff = game.cfg.difficulty || 'medium';
     this.allies = game.cfg.sub === 'allies';
     this.dispatchT = { enemy: 40 + Math.random() * 30, ally: 60 + Math.random() * 40 };
@@ -243,6 +243,16 @@ export class Enemies {
     return s;
   }
 
+  // first floor with head room below y (deep: holes the player jumped into)
+  floorBelow(x, z, y, depth = 14) {
+    const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
+    for (let yy = Math.floor(y); yy >= Math.floor(y) - depth; yy--) {
+      const b = w.get(bx, yy, bz);
+      if (b === B.WATER) return null;
+      if (SOLID[b]) return !SOLID[w.get(bx, yy + 1, bz)] && !SOLID[w.get(bx, yy + 2, bz)] ? yy + 1 : null;
+    }
+    return null;
+  }
   ground(x, z, y) {
     const w = this.game.world;
     const bx = Math.floor(x), bz = Math.floor(z);
@@ -1020,7 +1030,14 @@ export class Enemies {
     if (s.onSeq > s.slotSeq) s.onSeq = s.slotSeq;  // the player went back toward us: just stop
     let wp = this.trailAt(s.onSeq);
     // reached this crumb? move on to the next one (never past our place)
-    while (wp && s.onSeq < s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.7 && Math.abs(wp.y - s.pos.y) < 1.3) { s.onSeq++; wp = this.trailAt(s.onSeq) || wp; }
+    // (a crumb in mid-air above us, left while the player dropped down here, counts too)
+    const reached = (q) => {
+      if (Math.hypot(q.x - s.pos.x, q.z - s.pos.z) >= 0.7) return false;
+      if (Math.abs(q.y - s.pos.y) < 1.3) return true;
+      const nx = this.trailAt(q.seq + 1);
+      return q.y > s.pos.y && !q.water && (!nx || nx.y <= q.y + 0.2) && Math.abs((this.floorBelow(q.x, q.z, q.y + 0.5) ?? -99) - s.pos.y) < 0.6;
+    };
+    while (wp && s.onSeq < s.slotSeq && reached(wp)) { s.onSeq++; wp = this.trailAt(s.onSeq) || wp; }
     if (!wp) return false;
     const atSlot = s.onSeq >= s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.9;
     s.crouch = !!pl.crouch;                                     // they copy you
@@ -1049,9 +1066,11 @@ export class Enemies {
       return;
     }
     s.swimming = false;
-    if (dh < 1.3 && dy < -1.1) {
-      // down into a hole after the player
-      const gy = this.ground(wp.x, wp.z, wp.y + 0.5);
+    // the ground under the crumb (the player may have been in mid-fall there)
+    const gw = dh < 1.6 ? this.floorBelow(wp.x, wp.z, Math.max(wp.y, s.pos.y) + 0.5) : null;
+    if ((dh < 1.3 && dy < -1.1) || (gw != null && gw < s.pos.y - 1.1)) {
+      // down into a hole after the player, however deep he jumped
+      const gy = gw;
       s.pos.x += dx * Math.min(1, dt * 6); s.pos.z += dz * Math.min(1, dt * 6);
       s.pos.y = Math.max(gy ?? wp.y, s.pos.y - dt * 9);
       s.speed = 1; return;
@@ -1273,8 +1292,16 @@ export class Enemies {
       s.cover = null;
       // stuck or far behind: rejoin the trail; as a last resort appear behind
       // the player, out of sight
-      if ((s.followStuck = s.speed < 0.2 && s.onSeq != null && s.onSeq < s.slotSeq - 2 ? (s.followStuck || 0) + dt : 0) > 4) { s.rejoin = true; }
-      if (pdist > 70 || s.followStuck > 8) { this.behindPlayer(s); s.followStuck = 0; return; }
+      // (stuck = no progress along the trail while behind his place)
+      if (s.onSeq !== s.fsSeq || s.onSeq == null || s.onSeq >= s.slotSeq - 2) { s.fsSeq = s.onSeq; s.followStuck = 0; s.fsPath = false; }
+      else s.followStuck = (s.followStuck || 0) + dt;
+      if (pdist > 70 || s.followStuck > 8) { this.behindPlayer(s); s.followStuck = 0; s.path = null; return; }
+      if (s.followStuck > 4) {
+        // re-plan: a route over the blocks to his place, then back on the trail
+        if (!s.fsPath) { const pth = this.findPath(s, slot.x, slot.y, slot.z); if (pth && pth.length) { s.path = pth; s.pathGoal = { x: slot.x, z: slot.z }; s.fsPath = true; } }
+        if (s.fsPath && s.path && s.path.length) { P.goal = slot; P.speed = 4.8; s.rejoin = true; return; }
+        s.rejoin = true;
+      }
       if (this.followTrail(s, dt, pdist)) return;
       const dp = Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z);
       if (dp > 1.5) { P.goal = slot; P.speed = pdist > 22 ? 7 : 4.8; }

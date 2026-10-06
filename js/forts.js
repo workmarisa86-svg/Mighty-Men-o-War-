@@ -353,7 +353,7 @@ export class Forts {
     }
     // the player's own forts feed them (unlimited food for the owning side)
     const here = this.fortAt(pp);
-    if (here && here.owner === 'ally' && !g.peace) g.player.hunger = Math.min(100, g.player.hunger + 3 * dt);
+    if (here && here.owner === 'ally') g.player.hunger = Math.min(100, g.player.hunger + 3 * dt);
     // flags, halos, lights
     for (const f of this.list) {
       const d = Math.hypot(f.cx - pp.x, f.cz - pp.z);
@@ -430,4 +430,4 @@ export function assignOwners(forts, mode, sub, rnd, startFort) {
     f.id = i;
   });
 }
-export function fortCount(cfg) { return cfg.mode === 'peace' ? 0 : (DIFF[cfg.difficulty] || DIFF.medium).forts; }
+export function fortCount(cfg) { return (DIFF[cfg.difficulty] || DIFF.medium).forts; }

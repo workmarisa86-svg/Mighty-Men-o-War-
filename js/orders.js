@@ -37,7 +37,7 @@ export class OrderWheel {
     this.closeBtn.addEventListener('touchend', (e) => { e.preventDefault(); this.close(); });
     this.el.appendChild(this.closeBtn);
   }
-  get enabled() { const g = this.game; return g.cfg.sub === 'allies' && !g.peace; }
+  get enabled() { const g = this.game; return g.cfg.sub === 'allies'; }
 
   // What the player is aiming at: a soldier, a spot on the ground, a fort.
   aimInfo() {

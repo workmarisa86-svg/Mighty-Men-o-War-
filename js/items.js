@@ -27,8 +27,6 @@ export const ITEMS = {
   flashlight: { gear: true }, compass: { gear: true }, binoculars: { gear: true },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
-// Peace mode never runs out of these
-export const UNLIMITED = [...MATERIALS, 'raft', 'watchtower'];
 export const WEAPON_IDS = ['knife', 'pistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
 export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 

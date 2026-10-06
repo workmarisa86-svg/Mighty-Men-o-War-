@@ -65,7 +65,7 @@
 
   <!-- banner -->
   <path d="M82 462 L518 462 L542 496 L518 532 L82 532 L58 496 Z" fill="#454427" stroke="#b08a3c" stroke-width="4"/>
-  <text x="300" y="509" text-anchor="middle" font-size="38" letter-spacing="4" fill="#e6d9b8" stroke="#14110d" stroke-width="1">MIGHTY MAN O' WAR</text>
+  <text x="300" y="509" text-anchor="middle" font-size="38" letter-spacing="4" fill="#e6d9b8" stroke="#14110d" stroke-width="1">MIGHTY MEN O' WAR</text>
 
   <rect width="600" height="600" filter="url(#grunge)" opacity="0.6"/>
 </svg>
