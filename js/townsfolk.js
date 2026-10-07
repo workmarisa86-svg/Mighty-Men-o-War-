@@ -87,7 +87,7 @@ export class Townsfolk {
     const r = mulberry32(g.cfg.seed * 31 + i * 977 + gen * 7919);
     const name = (female ? FIRST_F : FIRST_M)[Math.floor(r() * 14)] + ' ' + (gen ? LAST[Math.floor(r() * LAST.length)] : sp.last);
     const look = female
-      ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, hat: r() < 0.4 ? 'scarf' : 'none', hatColor: [0x8a3a3a, 0x3a5a7a, 0x6a6a3a][Math.floor(r() * 3)] }
+      ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, style: ['long', 'bun', 'braid'][Math.floor(r() * 3)], hat: r() < 0.2 ? 'scarf' : 'none', hatColor: [0x8a3a3a, 0x3a5a7a, 0x6a6a3a][Math.floor(r() * 3)] }
       : { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], trousers: DARK[Math.floor(r() * DARK.length)], hair: HAIR[Math.floor(r() * HAIR.length)], vest: r() < 0.45 ? DARK[Math.floor(r() * DARK.length)] : null, hat: r() < 0.5 ? 'cap' : r() < 0.6 ? 'felt' : 'none', moustache: r() < 0.35, rolled: r() < 0.4, braces: r() < 0.3 ? 0x3a2a1c : null };
     if (status === 'mansion' && !female) { look.vest = 0x2e2a26; look.hat = 'felt'; look.hatColor = 0x2a2420; }
     if (shop === 'butcher') look.apron = 0xe8e4dc;

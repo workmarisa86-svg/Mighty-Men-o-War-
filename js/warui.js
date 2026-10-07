@@ -7,6 +7,7 @@ import { flagURL } from './nations.js';
 import { OWNER_COLORS } from './minimap.js';
 import { battlesDone } from './battle.js';
 import { sfx } from './audio.js';
+import { prepareTravel } from './travel.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ring = (str) => { const n = str.split(',').map(Number); let d = ''; for (let i = 0; i < n.length; i += 2) d += (i ? 'L' : 'M') + n[i] + ',' + n[i + 1]; return d + 'Z'; };
@@ -35,6 +36,7 @@ export function installWarUI(UI) {
     const g = this.app.game, C = g.campaign;
     if (!C) { this.app.closePanel(); return; }
     const me = C.side, here = C.id;
+    prepareTravel(me, g.enemies.followers().map((f) => f.nation));      // build the travel scene's textures ahead
     const sel = focus || this.mapSel || here;
     this.mapSel = sel;
     const eu = (view || this.mapView || (EUROPE.includes(sel) ? 'eu' : 'world')) === 'eu';

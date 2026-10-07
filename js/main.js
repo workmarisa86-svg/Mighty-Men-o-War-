@@ -4,8 +4,8 @@ import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
 import { TOWN_SIZE, TOWN_LAYOUT } from './towngen.js';
 import { startCountry } from './campaign.js';
-import { BATTLE } from './countries.js';
-import { playTravel } from './travel.js';
+import { BATTLE, COUNTRY, WEATHER, LANDS } from './countries.js';
+import { playTravel, warDate } from './travel.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
 import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
@@ -107,6 +107,15 @@ class App {
     const size = WAR_SIZE, mode = 'war', sub = 'allies', timeMode = 'cycle', mission = null;
     const now = Date.now(), seed = (Math.random() * 2 ** 31) | 0;
     if (gameType === 'battle' && BATTLE[battle]) {
+      const b = BATTLE[battle];
+      if (side === b.att && (b.by === 'boat' || b.by === 'plane')) {
+        // the attacker arrives by boat or plane: the scene plays first, in the battle's own opening weather
+        this.ui.hide();
+        this.travelScene({ by: b.by, to: b.c, side, n: 14, tod: 0.3, dateText: t('battle.' + battle) + ' · ' + b.date, weather: WEATHER[b.w[0][1]], normandy: battle === 'dday' })
+          .then(() => this.startGame({ v: SAVE_FORMAT, id: 'battle', name: t('battle.' + battle), created: now, updated: now,
+            cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'battle', battle, country: b.c, mission } }));
+        return;
+      }
       this.startGame({ v: SAVE_FORMAT, id: 'battle', name: t('battle.' + battle), created: now, updated: now,
         cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'battle', battle, country: BATTLE[battle].c, mission } });
       return;
@@ -127,11 +136,11 @@ class App {
     const worlds = Object.assign({}, s.worlds);
     worlds[g.cfg.country] = { edits: s.edits, forts: s.forts, pickups: s.pickups, rafts: s.rafts };
     const take = Math.max(0, Math.min(n, C.here.gar[side] || 0));
+    const followerNations = g.enemies.followers().map((f) => f.nation).filter(Boolean);
     C.here.gar[side] -= take;
     C.rec(to).gar[side] = (C.rec(to).gar[side] || 0) + take;
     const W = worlds[to] || {};
     delete worlds[to];
-    const night = (g.time % 1) < 0.22 || (g.time % 1) > 0.8;
     const next = Object.assign({}, s, {
       cfg: Object.assign({}, s.cfg, { country: to }), edits: W.edits || null, forts: W.forts || null, pickups: W.pickups || [], rafts: W.rafts || [],
       player: null, followers: Math.min(take, 16), arrival: { by }, worlds, campaign: C.state, weather: null,
@@ -141,8 +150,25 @@ class App {
     document.body.classList.remove('ingame');
     this.input.enabled = false; this.input.exitLock();
     this.ui.hide();
-    await playTravel(by, night, t('cname.' + to), this.input.touch);
+    await this.travelScene({ by, to, side, n: take + 1, tod: g.time % 1, dateText: warDate(g.time), weather: WEATHER[COUNTRY[to].climate], nations: followerNations });
     this.startGame(next);
+  }
+  // the boat or plane scene (travel.js), with the squad's nations, the
+  // destination's weather and time of day, and its WWII name and date
+  travelScene({ by, to, side, n, tod, dateText, weather, nations = [], normandy = false }) {
+    stopMusic();
+    const C = COUNTRY[to], pac = ['cn', 'au', 'in', 'us'].includes(to);
+    // who rides along: the soldiers following you, else the side's nations that fought there
+    const fill = side === 'axis' ? (pac ? ['jp'] : to === 'gr' || to === 'it' ? ['de', 'it'] : ['de'])
+      : to === 'jp' ? ['us'] : to === 'su' ? ['su'] : to === 'cn' ? ['cn', 'us'] : ['us', 'uk', 'ca', 'uk'];
+    if (side === 'axis' && pac) nations = nations.filter((x) => x === 'jp');
+    if (!nations.length) nations = fill;
+    const GROUND = { grass: 0x55663e, snow: 0xc8ccc8, lush: 0x4a6a34, red: 0x8a5a3a, jungle: 0x3a5a2a, dry: 0x8a8050, ash: 0x4a4640 };
+    const land = LANDS[C.land] || {};
+    this.inTravel = true;
+    return playTravel({ by, renderer: this.renderer, toName: t('cname.' + to), dateText, tod, weather, nations, n, side,
+      touch: this.input.touch, quality: this.settings.quality, normandy, groundColor: GROUND[land.ground] })
+      .catch((e) => console.error(e)).finally(() => { this.inTravel = false; });
   }
   loadGame(id) {
     const s = readSave(id);
@@ -243,7 +269,7 @@ class App {
         if (this.input.thit('pause') && !this.game.paused) this.pause();
         this.game.update(dt);
         if (this.game) this.game.render(this.renderer); // the run may have just ended
-      } else {
+      } else if (!this.inTravel) {
         this.renderer.clear();
       }
     } catch (e) {
