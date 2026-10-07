@@ -159,7 +159,13 @@ export class Enemies {
     if (!this.enabled) return;
     // the campaign or a battle decides how many are in the field here
     const plan = game.campaign ? game.campaign.plan(saved.followers) : game.battle ? game.battle.plan() : null;
-    if (plan) { this.populate('enemy', plan.enemy); this.populate('ally', plan.ally, plan.followers); this.noDispatch = !!plan.noDispatch; }
+    if (plan) {
+      // the soldiers resting, on guard and on patrol come out of the same numbers
+      const D = DIFF[this.diff], forts = (f) => (game.forts ? game.forts.list.filter((x) => x.owner === f).length : 0);
+      this.budget = { enemy: Math.min(plan.enemy, forts('enemy') * (D.camp + D.guards + D.patrol)), ally: Math.min(Math.max(0, plan.ally - plan.followers), forts('ally') * 3) };
+      this.populate('enemy', plan.enemy - this.budget.enemy); this.populate('ally', plan.ally - this.budget.ally, plan.followers);
+      this.noDispatch = !!plan.noDispatch;
+    }
     else {
       this.populate('enemy', DIFF[this.diff].enemies);
       if (this.allies) this.populate('ally', DIFF[this.diff].allies, saved.followers ?? 4);
@@ -210,6 +216,7 @@ export class Enemies {
         for (let i = 0; i < k.camp; i++) {
           const a = i / k.camp * Math.PI * 2, sx = camp.x + 0.5 + Math.cos(a) * 1.6, sz = camp.z + 0.5 + Math.sin(a) * 1.6;
           const sy = this.ground(sx, sz, camp.y + 1) ?? camp.y;
+          if (this.budget && this.budget[faction]-- <= 0) break;
           const s = this.add(faction, i === 0 ? 'gunner' : 'rifleman', sx, sy, sz, this.newSquad({ x: sx, z: sz }, faction), true);
           s.setRole('rest'); s.home = f; s.spot = { x: sx, y: sy, z: sz }; s.face = { x: camp.x + 0.5, z: camp.z + 0.5 };
         }
@@ -217,6 +224,7 @@ export class Enemies {
       for (let i = 0; i < k.guards; i++) {
         const p = i === 0 ? { x: f.doorOut.x + ox / L * 2.2, z: f.doorOut.z + oz / L * 2.2 } : (f.posts.find((q) => q.y > f.base + 1) || f.doorOut);
         const y = p.y ?? this.ground(p.x, p.z, f.base + 2) ?? f.base;
+        if (this.budget && this.budget[faction]-- <= 0) break;
         const s = this.add(faction, 'rifleman', p.x, y, p.z, this.newSquad(p, faction), true);
         s.setRole('guard'); s.home = f; s.spot = { x: p.x, y, z: p.z }; s.face = { x: p.x + (p.x - f.cx), z: p.z + (p.z - f.cz) };
       }
@@ -225,6 +233,7 @@ export class Enemies {
         for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, x = f.cx + 0.5 + Math.cos(a) * R, z = f.cz + 0.5 + Math.sin(a) * R; const y = this.ground(x, z, f.base + 3); if (y != null) route.push({ x, y, z }); }
         if (route.length >= 3) for (let i = 0; i < k.patrol; i++) {
           const q = route[(i * 3) % route.length];
+          if (this.budget && this.budget[faction]-- <= 0) break;
           const s = this.add(faction, 'rifleman', q.x, q.y, q.z, this.newSquad(q, faction), true);
           s.setRole('fpatrol'); s.home = f; s.route = route; s.wpI = (i * 3) % route.length;
         }

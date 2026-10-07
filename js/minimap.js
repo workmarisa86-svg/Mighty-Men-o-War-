@@ -125,7 +125,9 @@ export class Minimap {
       c.fillStyle = '#fff'; c.fillRect(x - 0.75, y - 3, 1.5, 3.5); c.fillRect(x - 0.75, y + 1.5, 1.5, 1.5);
     }
     // soldiers: small dots, smaller when the area is crowded
-    const units = g.enemies ? g.enemies.list.filter((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < RADAR_RANGE) : [];
+    // a night parachute drop: the radar shows no enemies until they are close
+    const dropDark = g.player.chute && g.sky.daylight < 0.5;
+    const units = g.enemies ? g.enemies.list.filter((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < (dropDark && s.faction === 'enemy' ? 18 : RADAR_RANGE)) : [];
     const dot = units.length > 18 ? 2 : units.length > 9 ? 2.5 : 3;
     for (const s of units) {
       const [x, y] = toRadar(s.pos.x, s.pos.z);
