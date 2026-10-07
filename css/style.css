@@ -580,7 +580,7 @@ body.townlife #squadlist, body.townlife #mission { display: none !important; }
 @media (max-width: 760px) { #townbar { top: 48px; font-size: 11px; max-width: 92vw; } #townctx { bottom: 108px; } .bubble { font-size: 11px; max-width: 160px; } }
 /* War: things in the world are used by aiming at them (no Craft button) */
 body:not(.townlife) [data-btn=craft] { display: none !important; }
-#aimprompt { position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); pointer-events: auto; font-family: var(--body); font-size: 14px;
+#aimprompt { position: absolute; left: 50%; top: calc(50% - 74px); transform: translateX(-50%); pointer-events: auto; z-index: 3; min-height: 40px; padding-top: 9px !important; padding-bottom: 9px !important; font-family: var(--body); font-size: 14px;
   color: #f0e8cc; background: rgba(24, 26, 18, 0.8); border: 2px solid rgba(214, 190, 110, 0.9); border-radius: 18px; padding: 5px 14px; white-space: nowrap; }
 #aimprompt kbd { font-family: var(--body); font-size: 11px; opacity: 0.8; margin-right: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; padding: 0 4px; }
 /* stealth awareness eye over enemies (fills, then turns red with "!") */
@@ -657,3 +657,26 @@ body.binoc .zbtn { display: inline-block; min-width: 46px; font-size: 22px; font
   .wmap { max-height: 62vh; }
   .wview button { padding: 2px 10px; }
 }
+
+/* ---- phones: the scope / binocular layout (B2) ----
+   Exit is the zoom button itself, big and alone in the top-left corner; the
+   binocular zoom +/- sit on the opposite side; only ACTION (fire) stays
+   with them; the flashlight and every other button are hidden. */
+body.touchui.scoped #minimap, body.touchui.scoped .ctx, body.touchui.scoped #townctx, body.touchui.scoped #aimprompt, body.touchui.scoped #squadlist { visibility: hidden; }
+body.scoped #touch .tbtns.top { display: none; }
+body.scoped #touch .tb:not([data-btn=zoom]):not([data-btn=zin]):not([data-btn=zout]):not([data-btn=dig]) { display: none; }
+body.scoped #touch .tb[data-btn=zoom] {
+  position: fixed; left: calc(16px + env(safe-area-inset-left)); top: calc(16px + env(safe-area-inset-top));
+  min-width: 96px; min-height: 64px; font-size: 16px; font-weight: bold; letter-spacing: 0.5px;
+  background: rgba(130, 36, 24, 0.95); border: 3px solid #ffe8b0; border-radius: 14px; z-index: 9;
+}
+body.scoped #touch .tb[data-btn=zin], body.scoped #touch .tb[data-btn=zout] {
+  position: fixed; right: calc(16px + env(safe-area-inset-right)); width: 60px; height: 60px; min-width: 60px; font-size: 28px; z-index: 9;
+}
+body.scoped #touch .tb[data-btn=zin] { top: calc(16px + env(safe-area-inset-top)); }
+body.scoped #touch .tb[data-btn=zout] { top: calc(100px + env(safe-area-inset-top)); }
+body.scoped #touch .tb[data-btn=dig] { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 76px; height: 76px; z-index: 9; }
+body:not(.binoc) .zbtn { display: none !important; }
+/* Town Life: the horse's stamina while riding */
+#stamina { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: 160px; height: 8px; border: 1px solid rgba(240,232,204,0.7); background: rgba(20,20,14,0.6); border-radius: 4px; overflow: hidden; }
+#stamina i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #b88a3a, #e8c870); }

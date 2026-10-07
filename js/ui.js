@@ -41,7 +41,12 @@ export class UI {
     this.root.hidden = false;
     this.root.className = 'screen ' + name;
     this.root.innerHTML = '';
-    this['r_' + name](params);
+    try { this['r_' + name](params); }
+    catch (e) {
+      // a screen that fails to build never leaves the game stuck behind it
+      console.error('screen ' + name, e);
+      if (this.app.game) { this.app.game.overlay = null; this.hide(); }
+    }
     if (!this.app.game && (name === 'start' || name === 'main') && this.app.menuMusic) this.app.menuMusic();
   }
   hide() { this.root.hidden = true; this.root.innerHTML = ''; this.current = null; }

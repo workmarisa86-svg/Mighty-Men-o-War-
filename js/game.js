@@ -5,6 +5,8 @@ import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate, landFor, hasCoast, COAST } from './worldgen.js';
 import { Campaign } from './campaign.js';
+import { Horses } from './horses.js';
+import { Collide } from './collide.js';
 import { Battle } from './battle.js';
 import { Paratroops, DROP_Y } from './paratroops.js';
 import { COUNTRY, WEATHER } from './countries.js';
@@ -184,13 +186,15 @@ export class Game {
     this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
     this.bubbles = new Bubbles(this);
-    this.aimUse = this.townMode ? null : new AimUse(this);
+    this.aimUse = new AimUse(this);
     this.mission = null;      // the old missions are gone (replaced by Battles)
     // arriving in a country: by boat (beach landing), by plane (parachute),
     // overland (battles) or straight into one of your headquarters
     if (!this.townMode && (save.arrival || !save.player) && (this.campaign || this.battle)) this.arrive(save.arrival || this.defaultArrival());
     if (this.campaign) this.campaign.arrived();
+    this.horses = this.townMode ? new Horses(this, (save.town && save.town.horses) || {}) : null;
     this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
+    this.collide = new Collide(this);
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
 
@@ -293,7 +297,8 @@ export class Game {
 
     if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
     this.ctx.update(dt, input, playing);
-    this.townKey = this.town ? this.town.updateContext(dt, input) : this.aimUse.update(dt, input, playing);
+    // what you aim at takes E and taps first; Town Life's nearby actions use the other keys
+    this.townKey = this.aimUse.update(dt, input, playing) || (this.town ? this.town.updateContext(dt, input) : false);
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -301,7 +306,8 @@ export class Game {
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
     const env = { rain: this.weather.rain, speedMul: inWire ? 0.4 : 1 };
     const wasDiving = p.diving;
-    const res = p.update(dt, this.world, this.obstacles(), it, env);
+    // on horseback the horse moves (and carries you); otherwise you walk
+    const res = p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
     if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
@@ -313,7 +319,7 @@ export class Game {
     } else this.breath = Math.min(AIR, this.breath + dt * 5);
     this.underwaterFx(dt, p.headInWater);
 
-    if (playing) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
+    if (playing && !p.riding) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
     this.combat.update(dt, input, playing);
     this.updateCraft(dt);
@@ -328,6 +334,8 @@ export class Game {
       if (this.campaign) this.campaign.update(dt);
       if (this.battle) this.battle.update(dt);
       if (this.paratroops) this.paratroops.update(dt);
+      if (this.horses) this.horses.update(dt);
+      this.collide.update();
       if (this.town) this.town.update(dt);
       this.supplyT -= dt;
       this.updateDefuse(dt);
@@ -694,6 +702,7 @@ export class Game {
 
   handlePlace(dt, input) {
     this.placeCooldown -= dt;
+    if (this.townKey) return;              // that press used what you aim at
     const want = input.mouse.rightPressed || input.thit('place') || ((input.mouse.right || input.tdown('place')) && this.placeCooldown <= 0);
     if (!want) return;
     this.placeCooldown = 0.25;
@@ -883,9 +892,9 @@ export class Game {
   }
 
   // Ration crates in the player's own forts: unlimited food.
-  useSupply() {
+  useSupply(at = null) {
     const { eye, dir } = this.aim();
-    const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+    const hit = at || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (!hit || hit.id !== B.SUPPLY) return false;
     if (this.cabin.isChest(hit.x, hit.y, hit.z)) { this.app.openPanel('chest'); return true; }
     const f = this.forts.fortAt(new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5));
@@ -1072,6 +1081,7 @@ export class Game {
   dispose() {
     setRain(0);
     paintLand(null); this.scene.fog = null;
+    if (this.horses) this.horses.dispose();
     if (this.paratroops) this.paratroops.dispose();
     if (this.campaign) this.campaign.dispose();
     if (this.town) this.town.dispose();

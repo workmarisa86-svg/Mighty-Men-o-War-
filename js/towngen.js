@@ -11,9 +11,11 @@ import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
 
 export const TOWN_SIZE = 256;
+// half-size of each kind of home
+export const HOME_HALF = { mansion: 6, house: 4, cottage: 3 };
 // the town's layout version (a save from an older layout keeps the player's
 // coins, honor, belongings and stats, but the world itself is made anew)
-export const TOWN_LAYOUT = 2;
+export const TOWN_LAYOUT = 3;
 
 export function generateTown(world) {
   const { seed } = world.cfg;
@@ -22,7 +24,7 @@ export function generateTown(world) {
   const n4 = new Simplex2(seed + 3), n5 = new Simplex2(seed + 4), n6 = new Simplex2(seed + 5);
   const rnd = mulberry32(seed + 99);
   const cx = Math.floor(W / 2), cz = Math.floor(D / 2);
-  const VR = 30, VB = 40, ARM = 28;             // town center: flat radius, blend radius, road length
+  const VR = 34, VB = 44, ARM = 30;             // town center: flat radius, blend radius, road length
 
   // --- water mask: a winding river and a couple of lakes, never in the village
   const water = new Uint8Array(W * D);
@@ -59,18 +61,22 @@ export function generateTown(world) {
   }
   for (let dz = -22; dz <= 22; dz++) for (let dx = -22; dx <= 22; dx++) if (Math.hypot(dx, dz) < 22) water[(cot.x + dx) + (cot.z + dz) * W] = 0;
   // --- homes: spread far apart over the countryside, each on dry ground
-  const HOMES = 10, homes = [];
+  // social status decides the home: mansions for the wealthy, houses for
+  // the middle class, cottages for the poor (each home: a household of four adults)
+  const STATUS = ['mansion', 'mansion', 'mansion', ...Array(8).fill('house'), ...Array(8).fill('cottage')];
+  const HOMES = STATUS.length, homes = [];
   const wetness = (x, z, r) => { let n = 0; for (let dz = -r; dz <= r; dz += 2) for (let dx = -r; dx <= r; dx += 2) n += water[(x + dx) + (z + dz) * W] || 0; return n; };
   const a0 = rnd() * Math.PI * 2;
   for (let k = 0; k < HOMES; k++) {
+    const status = STATUS[k], half = HOME_HALF[status], flat = half + 11;
     let best = null;
-    for (let tries = 0; tries < 40; tries++) {
-      const a = a0 + (k + (rnd() - 0.5) * (tries < 16 ? 0.7 : 1.4)) * Math.PI * 2 / HOMES, r = 52 + rnd() * 58;
+    for (let tries = 0; tries < 60; tries++) {
+      const a = a0 + (k * 2.399) + (rnd() - 0.5) * (tries < 20 ? 0.6 : 2.4), r = 50 + rnd() * 64;
       const x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
-      if (x < 22 || z < 22 || x >= W - 22 || z >= D - 22) continue;
-      if (Math.hypot(x - cot.x, z - cot.z) < 40 || homes.some((h) => Math.hypot(h.x - x, h.z - z) < 34)) continue;
-      const wet = wetness(x, z, 14);
-      if (!best || wet < best.wet) best = { x, z, wet };
+      if (x < flat + 4 || z < flat + 4 || x >= W - flat - 4 || z >= D - flat - 4) continue;
+      if (Math.hypot(x - cot.x, z - cot.z) < 36 + half || homes.some((h) => Math.hypot(h.x - x, h.z - z) < h.flat + flat + 2)) continue;
+      const wet = wetness(x, z, flat);
+      if (!best || wet < best.wet) best = { x, z, wet, status, half, flat };
     }
     if (best) homes.push(best);
   }
@@ -86,7 +92,8 @@ export function generateTown(world) {
   };
   for (const h of homes) {
     h.arm = armFor(h.x, h.z);
-    for (let dz = -20; dz <= 20; dz++) for (let dx = -20; dx <= 20; dx++) if (Math.hypot(dx, dz) < 20) water[(h.x + dx) + (h.z + dz) * W] = 0;
+    const rr = h.flat + 5;
+    for (let dz = -rr; dz <= rr; dz++) for (let dx = -rr; dx <= rr; dx++) if (Math.hypot(dx, dz) < rr && h.x + dx > 0 && h.z + dz > 0 && h.x + dx < W && h.z + dz < D) water[(h.x + dx) + (h.z + dz) * W] = 0;
     dryLine(h.arm, h);
   }
   dryLine(armFor(cot.x, cot.z), cot);
@@ -108,7 +115,7 @@ export function generateTown(world) {
     if (dv < VB) { const t = dv < VR ? 0 : smooth((dv - VR) / (VB - VR)); h = hv + (h - hv) * t; }
     const dc = Math.hypot(x - cot.x, z - cot.z);
     if (dc < 22) { const t = dc < 16 ? 0 : smooth((dc - 16) / 6); h = hc + (h - hc) * t; }
-    for (const o of homes) { const dh = Math.hypot(x - o.x, z - o.z); if (dh < 20) { const t = dh < 15 ? 0 : smooth((dh - 15) / 5); h = o.y + (h - o.y) * t; } }
+    for (const o of homes) { const dh = Math.hypot(x - o.x, z - o.z); if (dh < o.flat + 5) { const t = dh < o.flat ? 0 : smooth((dh - o.flat) / 5); h = o.y + (h - o.y) * t; } }
     tops[k] = Math.max(SEA - 1, Math.round(h));
   }
   // no cliffs: neighbours differ by one block at most
@@ -129,7 +136,7 @@ export function generateTown(world) {
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     if (Math.hypot(x - cx, z - cz) < VR) tops[x + z * W] = hv;
     if (Math.hypot(x - cot.x, z - cot.z) < 16) tops[x + z * W] = hc;
-    for (const o of homes) if (Math.hypot(x - o.x, z - o.z) < 15) tops[x + z * W] = o.y;
+    for (const o of homes) if (Math.hypot(x - o.x, z - o.z) < o.flat) tops[x + z * W] = o.y;
   }
   // ...and the ground ramps up to them (no ledge at the edge of a flat yard)
   for (let pass = 0; pass < 2; pass++) {
@@ -201,7 +208,7 @@ export function generateTown(world) {
   village.cottageRoad = { from: cotArm, to: cottage.door, trail: pave(world, cotArm, cottage.door) };
 
   // --- woods: oaks in forest patches, a few lone trees in the fields
-  const clear = (x, z) => Math.hypot(x - cx, z - cz) < VB + 2 || Math.hypot(x - cot.x, z - cot.z) < 24 || homes.some((o) => Math.hypot(x - o.x, z - o.z) < 19);
+  const clear = (x, z) => Math.hypot(x - cx, z - cz) < VB + 2 || Math.hypot(x - cot.x, z - cot.z) < 24 || homes.some((o) => Math.hypot(x - o.x, z - o.z) < o.flat + 4);
   for (let z = 4; z < D - 4; z++) for (let x = 4; x < W - 4; x++) {
     const forest = n6.fbm(x / 60, z / 60, 2);
     const p = forest > 0.25 ? 0.05 : 0.004;
@@ -287,8 +294,13 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
     ['general', slot(11, -12, 19, -4, 's'), B.WOOD],
     ['butcher', slot(-19, 4, -12, 11, 'n'), B.BRICK],
     ['hunting', slot(11, 4, 18, 11, 'n'), B.LOG],
+    ['stable', slot(14, 14, 23, 22, 'w'), B.WOOD],
   ];
   for (const [type, s, wall] of plan) buildings.push(building(world, put, s, base, wall, type));
+  // the hitching rail in front of the stable, where its horses wait
+  { const st = buildings.find((b) => b.type === 'stable'), dz = Math.floor(st.door.z);
+    for (let z = st.z0 - 2; z <= st.z1 + 2; z++) if (Math.abs(z - dz) > 2) put(st.x0 - 7, base, z, B.FENCE);   // an opening in front of the door
+    st.hitch = { x: st.x0 - 4.5, y: base, z: st.z0 + 1.5 }; }
   // market stalls in the plaza: posts, a thatch canopy and a counter with goods
   const stall = (x0, z0, goods) => {
     const x1 = x0 + 4, z1 = z0 + 2;
@@ -304,36 +316,42 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
   }
   // the homes, each facing the road its path comes from, with a field beside it
   const fields = [], pens = [];
-  const walls = [B.WOOD, B.BRICK, B.LOG, B.WOOD, B.BRICK, B.LOG, B.WOOD, B.BRICK, B.LOG, B.WOOD];
+  const WALL = { mansion: [B.BRICK, B.BRICK, B.STONE], house: [B.WOOD, B.BRICK, B.WOOD], cottage: [B.LOG, B.LOG, B.WOOD] };
+  const HIGH = { mansion: 5, house: 4, cottage: 3 };
   const crops = ['wheat', 'carrot', 'cabbage'];
+  let penDone = false;
   homes.forEach((h, k) => {
-    const hb = h.y + 1;
+    const hb = h.y + 1, H = h.half;
     const dx = h.arm.x - h.x, dz = h.arm.z - h.z;
     const side = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'e' : 'w') : (dz > 0 ? 's' : 'n');
-    const b = building(world, put, { x0: h.x - 4, z0: h.z - 4, x1: h.x + 3, z1: h.z + 3, side }, hb, walls[k % walls.length], 'house');
-    b.arm = h.arm;
+    const b = building(world, put, { x0: h.x - H, z0: h.z - H, x1: h.x + H - 1, z1: h.z + H - 1, side }, hb, WALL[h.status][k % 3], 'house', HIGH[h.status]);
+    b.arm = h.arm; b.status = h.status;
+    // the front door: closed, opened by the household (and for welcome guests)
+    for (const [x, y, z] of b.doorCells) put(x, y, z, B.HDOOR);
     buildings.push(b);
     // local frame: u toward the door, w to the side
     const out = { s: [0, 1], n: [0, -1], e: [1, 0], w: [-1, 0] }[side], sv = [-out[1], out[0]];
     const L = (u, w) => ({ x: Math.floor(h.x + out[0] * u + sv[0] * w), z: Math.floor(h.z + out[1] * u + sv[1] * w) });
     const P = (u, w) => { const c = L(u, w); return { x: c.x + 0.5, y: hb, z: c.z + 0.5 }; };
     const crop = crops[k % crops.length], id = { wheat: B.WHEAT_R, carrot: B.CARROT_R, cabbage: B.CABBAGE_R }[crop];
-    const f = { x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, y: hb, crop, home: b, gate: P(5.5, 5.5), spots: [] };
-    for (let u = -3; u <= 3; u++) for (let w = 6; w <= 9; w++) {
+    const fu = h.status === 'mansion' ? 5 : h.status === 'house' ? 3 : 2, fw0 = H + 2, fw1 = H + (h.status === 'mansion' ? 7 : h.status === 'house' ? 5 : 4);
+    const f = { x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, y: hb, crop, home: b, gate: P(H + 1.5, H + 1.5), spots: [] };
+    for (let u = -fu; u <= fu; u++) for (let w = fw0; w <= fw1; w++) {
       const c = L(u, w);
       put(c.x, h.y, c.z, B.FARMLAND, false);
       put(c.x, hb, c.z, (c.x + c.z) % 5 === 0 ? B.SPROUT : id, false);
       f.x0 = Math.min(f.x0, c.x); f.x1 = Math.max(f.x1, c.x); f.z0 = Math.min(f.z0, c.z); f.z1 = Math.max(f.z1, c.z);
     }
-    for (let w = 6; w <= 9; w++) f.spots.push(P(4.5, w));
+    for (let w = fw0; w <= fw1; w++) f.spots.push(P(fu + 1.5, w));
     fields.push(f); b.field = f;
-    if (k === 0) {
-      // the village's livestock pen on the other side
+    if (!penDone && h.status !== 'cottage') {
+      // the village's livestock pen on the other side of a big farm
+      penDone = true;
       const p = { x0: 1e9, z0: 1e9, x1: -1e9, z1: -1e9, owner: 'village' };
-      for (const [u, w] of [[-3, -7], [4, -14]]) { const c = L(u, w); p.x0 = Math.min(p.x0, c.x); p.x1 = Math.max(p.x1, c.x); p.z0 = Math.min(p.z0, c.z); p.z1 = Math.max(p.z1, c.z); }
+      for (const [u, w] of [[-3, -H - 3], [4, -H - 10]]) { const c = L(u, w); p.x0 = Math.min(p.x0, c.x); p.x1 = Math.max(p.x1, c.x); p.z0 = Math.min(p.z0, c.z); p.z1 = Math.max(p.z1, c.z); }
       for (let x = p.x0; x <= p.x1; x++) for (const z of [p.z0, p.z1]) put(x, hb, z, B.FENCE);
       for (let z = p.z0; z <= p.z1; z++) for (const x of [p.x0, p.x1]) put(x, hb, z, B.FENCE);
-      pens.push(p);
+      pens.push(p); b.pen = p;
     }
   });
   return { type: 'village', cx, cz, y: base, floorY, buildings, fields, pens, radius: 36 };
@@ -341,10 +359,9 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
 
 // One building: walls, a door facing the road, glass windows, a plank floor,
 // a pitched thatch roof (shops and houses) or a flat brick top (town hall).
-function building(world, put, s, base, wall, type) {
+function building(world, put, s, base, wall, type, H = 4) {
   const bars = type === 'jail' ? B.FENCE : B.GLASS;
   const { x0, z0, x1, z1, side } = s;
-  const H = 4;
   for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
     for (let y = base; y < base + H + 6; y++) put(x, y, z, B.AIR);
     put(x, base - 1, z, B.WOOD);
@@ -364,34 +381,47 @@ function building(world, put, s, base, wall, type) {
       if (t > k && end && x >= x0 && x <= x1 && z >= z0 && z <= z1) put(x, y, z, wall);
     }
   }
-  // door (1 wide, 2 high) in the middle of the road-side wall
+  // door (2 wide, 3 high: room for people and horses) in the middle of the road-side wall
   const mx = Math.floor((x0 + x1) / 2), mz = Math.floor((z0 + z1) / 2);
   const door = side === 's' ? { x: mx, z: z1 } : side === 'n' ? { x: mx, z: z0 } : side === 'e' ? { x: x1, z: mz } : { x: x0, z: mz };
-  put(door.x, base, door.z, B.AIR); put(door.x, base + 1, door.z, B.AIR);
   const out = { s: [0, 1], n: [0, -1], e: [1, 0], w: [-1, 0] }[side];
+  const along = out[0] ? [0, 1] : [1, 0];                      // along the door's wall
+  const doorCells = [];
+  for (let k = 0; k <= 1; k++) for (let y = base; y <= base + 2; y++) {
+    const X = door.x + along[0] * k, Z = door.z + along[1] * k;
+    put(X, y, Z, B.AIR); doorCells.push([X, y, Z]);
+  }
+  const isDoor = (x, z) => doorCells.some(([X, , Z]) => X === x && Z === z);
   // windows on the other walls
-  for (let x = x0 + 2; x < x1 - 1; x += 3) for (const z of [z0, z1]) if (!(x === door.x && z === door.z)) put(x, base + 1, z, bars);
-  for (let z = z0 + 2; z < z1 - 1; z += 3) for (const x of [x0, x1]) if (!(x === door.x && z === door.z)) put(x, base + 1, z, bars);
+  for (let x = x0 + 2; x < x1 - 1; x += 3) for (const z of [z0, z1]) if (!isDoor(x, z)) put(x, base + 1, z, bars);
+  for (let z = z0 + 2; z < z1 - 1; z += 3) for (const x of [x0, x1]) if (!isDoor(x, z)) put(x, base + 1, z, bars);
   const inner = { x: mx + 0.5, y: base, z: mz + 0.5 };
+  const dc = { x: door.x + 0.5 + along[0] * 0.5, z: door.z + 0.5 + along[1] * 0.5 };   // the middle of the doorway
   const b = {
-    type, x0, z0, x1, z1, side,
-    door: { x: door.x + 0.5 + out[0] * 1.6, y: base, z: door.z + 0.5 + out[1] * 1.6 },
-    doorIn: { x: door.x + 0.5 - out[0] * 1.2, y: base, z: door.z + 0.5 - out[1] * 1.2 },
+    type, x0, z0, x1, z1, side, doorCells,
+    door: { x: dc.x + out[0] * 1.6, y: base, z: dc.z + out[1] * 1.6 },
+    doorIn: { x: dc.x - out[0] * 1.4, y: base, z: dc.z - out[1] * 1.4 },
     inside: inner,
   };
   if (type === 'jail') {
     // a barred cell along the back wall
     const z = side === 's' ? z0 + 2 : z1 - 2;
-    for (let x = x0 + 1; x < x1; x++) if (x !== mx) for (let y = base; y < base + 3; y++) put(x, y, z, B.FENCE);
+    for (let x = x0 + 1; x < x1; x++) if (x !== mx && x !== mx + 1) for (let y = base; y < base + 3; y++) put(x, y, z, B.FENCE);
   } else if (type !== 'house') {
-    // a counter across the room with the keeper behind it
+    // a counter across the room with the keeper behind it, and an open gap
+    // at one end (the pass-through the keeper uses: he never climbs over)
     const cx = door.x - out[0] * 3, czz = door.z - out[1] * 3;
-    for (let k = -2; k <= 2; k++) {
-      const X = out[0] ? cx : cx + k, Z = out[0] ? czz + k : czz;
-      if (X > x0 && X < x1 && Z > z0 && Z < z1 && Math.abs(k) < 2) put(X, base, Z, B.WOOD);
-    }
-    b.keeper = { x: cx + 0.5 - out[0] * 1.2, y: base, z: czz + 0.5 - out[1] * 1.2 };
-    b.counter = { x: cx + 0.5 + out[0] * 1.1, y: base, z: czz + 0.5 + out[1] * 1.1 };
+    const inRoom = (k) => { const X = cx + along[0] * k, Z = czz + along[1] * k; return X > x0 && X < x1 && Z > z0 && Z < z1; };
+    // the counter (3 long) and a 2-wide gap at its end that the keeper walks
+    // straight through
+    const gapK = inRoom(-2) && inRoom(-1) ? -1.5 : 3.5;
+    for (let k = 0; k <= 2; k++) if (inRoom(k)) put(cx + along[0] * k, base, czz + along[1] * k, B.WOOD);
+    for (const k of gapK < 0 ? [-2, -1] : [3, 4]) if (inRoom(k)) { put(cx + along[0] * k, base, czz + along[1] * k, B.AIR); put(cx + along[0] * k, base + 1, czz + along[1] * k, B.AIR); }
+    const G = { x: cx + 0.5 + along[0] * gapK, z: czz + 0.5 + along[1] * gapK };
+    const mid = { x: cx + along[0] * 1 + 0.5, z: czz + along[1] * 1 + 0.5 };
+    b.keeper = { x: mid.x - out[0] * 1.3, y: base, z: mid.z - out[1] * 1.3 };
+    b.counter = { x: mid.x + out[0] * 1.2, y: base, z: mid.z + out[1] * 1.2 };
+    b.flap = [{ x: G.x - out[0] * 1.3, y: base, z: G.z - out[1] * 1.3 }, { x: G.x, y: base, z: G.z }, { x: G.x + out[0] * 1.3, y: base, z: G.z + out[1] * 1.3 }];
   }
   return b;
 }

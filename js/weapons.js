@@ -13,6 +13,8 @@ export const WEAPONS = {
   spistol: { damage: 26, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
   rifle:  { damage: 70, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
   sniper: { damage: 130, range: 170, rate: 1.4, spread: 0.0015, loud: 55, sound: 'sniper', kick: 1.3, scope: true, reticle: 'cross' },
+  // Town Life: a double-barrel shotgun: very strong close up, weak far away
+  shotgun: { damage: 85, range: 26, rate: 0.95, spread: 0.035, loud: 50, sound: 'rifle', kick: 1.4, reticle: 'cross', falloff: true },
   smg:    { damage: 20, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
   grenade: { throw: true, rate: 0.9, reticle: 'arc' },
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
@@ -69,11 +71,13 @@ export class Combat {
     const a = g.animals.raycast(eye, dir, maxD);
     const e = g.enemies.raycast(eye, dir, a ? a.dist : maxD);
     const v = g.town ? g.town.folk.raycast(eye, dir, (e || a) ? (e || a).dist : maxD) : null;
-    return v || e || a;
+    const h = g.horses ? g.horses.raycast(eye, dir, (v || e || a) ? (v || e || a).dist : maxD) : null;
+    return h || v || e || a;
   }
   applyHit(hit, damage, { silent = false } = {}) {
     const g = this.game;
-    if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
+    if (hit.horse) g.horses.hurt(hit.horse, damage, 'player');
+    else if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
     else if (hit.soldier) g.enemies.hurt(hit.soldier, damage, { silent, head: hit.head });
     else if (hit.tank) hit.tank.hurt(damage, false);
     else if (hit.villager) {
@@ -122,7 +126,8 @@ export class Combat {
     let end;
     if (hit) {
       end = hit.point;
-      this.applyHit(hit, W.damage, { silent: !!W.silent });
+      const dmg = W.falloff ? W.damage * Math.max(0.15, 1 - (hit.dist || 0) / W.range) : W.damage;   // shotgun: strong close up
+      this.applyHit(hit, dmg, { silent: !!W.silent });
     } else {
       end = eye.clone().addScaledVector(dir, maxD);
       if (block) {

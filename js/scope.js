@@ -61,6 +61,16 @@ export class ScopeView {
     const g = this.game, p = g.player;
     const sel = g.selected();
     if (playing && (input.hit('KeyZ') || input.thit('zoom'))) this.toggle(sel === 'sniper' ? 'sniper' : 'binoc');
+    // phones: more ways out of the zoom: the dedicated Exit (the zoom
+    // button itself, moved to its own corner), a swipe down from the top
+    // edge, or the phone's back gesture
+    if (this.kind && (input.thit('swipeDown') || this.backHit)) this.kind = null;
+    this.backHit = false;
+    if (g.app.input.touch) {
+      if (this.kind && !this.histOn) { this.histOn = true; try { history.pushState({ zoom: 1 }, ''); } catch { /* ignore */ } }
+      if (!this.kind && this.histOn) { this.histOn = false; this.popSelf = true; try { if (history.state && history.state.zoom) history.back(); else this.popSelf = false; } catch { this.popSelf = false; } }
+      if (!this.popWired) { this.popWired = true; this.onPop = () => { if (this.popSelf) { this.popSelf = false; return; } if (this.kind) { this.histOn = false; this.backHit = true; } }; addEventListener('popstate', this.onPop); }
+    }
     if (this.kind === 'sniper' && sel !== 'sniper') this.kind = null;
     if (p.swimming || g.dead) this.kind = null;
     // binocular zoom steps: the wheel (it doesn't change the hotbar while looking) or + / -

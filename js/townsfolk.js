@@ -1,6 +1,10 @@
-// Townspeople: shopkeepers who stay at their shops, the sheriff, farmers who
-// work the fields by their homes, and villagers who go to the shops, the
-// plaza and their neighbors' homes by day and go home at night. They greet
+// Townspeople: households of four adults (a man, a woman and two grown
+// sons) in mansions, houses or cottages depending on their social status,
+// which also decides their money, goods and weapons. Shopkeepers stay at
+// their shops, the sheriff keeps the town center, farmers work the fields
+// by their homes; women tend the home and the crops and never join the
+// posse. People go to the shops, the plaza and their neighbors' homes by
+// day and home at night. They greet
 // you (warmly or coldly, depending on your honor), notice crimes they can
 // see, run to the sheriff to report them, and form the posse.
 // Only townspeople near the player are active: far-away ones are not
@@ -30,6 +34,10 @@ const WALK = 2.2, RUN = 5.2;
 export const GROW_DAYS = 2, BODY_DAYS = 3;
 const VISIT = 0.1;              // chance a day out is a visit to a neighbor
 const ACTIVE_M = 80;            // only people this close to the player are active
+const RIG_IN = 85, RIG_OUT = 105;   // a person only has a 3D model this close (the rest are simple data)
+// what each status owns: coins carried and the weapons a man keeps
+const WEALTH = { mansion: [60, 150], house: [18, 55], cottage: [2, 14] };
+const GUNS = { mansion: [['pistol', 'rifle'], ['pistol']], house: [['pistol'], ['shotgun'], ['rifle']], cottage: [['shotgun'], [], []] };
 
 export class Townsfolk {
   constructor(game, saved = {}) {
@@ -44,11 +52,23 @@ export class Townsfolk {
     const homes = v.buildings.filter((b) => b.type === 'house');
     // each home's two nearest neighbors (the homes its people visit)
     for (const h of homes) h.neighbors = homes.filter((o) => o !== h).sort((a, b) => Math.hypot(a.inside.x - h.inside.x, a.inside.z - h.inside.z) - Math.hypot(b.inside.x - h.inside.x, b.inside.z - h.inside.z)).slice(0, 2);
-    const roles = [
-      ['keeper', 'general'], ['keeper', 'butcher'], ['keeper', 'hunting'], ['keeper', 'market'], ['sheriff', 'hall'],
-      ['farmer'], ['farmer'], ['farmer'], ['villager'], ['villager'], ['villager'], ['villager'], ['villager'],
-    ];
-    roles.forEach(([role, shop], i) => this.spawn(i, role, shop, homes[i % homes.length]));
+    // households: a man, a woman and two grown sons in every home; the
+    // shopkeepers, the stable keeper and the sheriff are men of middle-class
+    // and wealthy homes (the market stall is kept by a woman)
+    this.specs = [];
+    const jobs = [['keeper', 'general'], ['keeper', 'butcher'], ['keeper', 'hunting'], ['keeper', 'stable'], ['sheriff', 'hall']];
+    let fam = 0;
+    homes.forEach((h, hi) => {
+      const status = h.status || 'house', last = LAST[(hi * 7 + (game.cfg.seed % 13)) % LAST.length];
+      const better = status !== 'cottage' && jobs.length;
+      const man = better ? jobs.shift() : [h.field ? 'farmer' : 'villager'];
+      const woman = !this.specs.some((q) => q.shop === 'market') && status === 'house' ? ['keeper', 'market'] : ['woman'];
+      const mem = [{ role: man[0], shop: man[1], female: false, kin: 'father' }, { role: woman[0], shop: woman[1], female: true, kin: 'mother' },
+        { role: h.field ? 'farmer' : 'villager', female: false, kin: 'son' }, { role: 'villager', female: false, kin: 'son' }];
+      for (const m of mem) this.specs.push(Object.assign(m, { home: h, homeIdx: hi, status, last, fam }));
+      fam++;
+    });
+    this.specs.forEach((sp, i) => this.spawn(i, sp));
     this.lineMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.8 });
     for (let i = 0; i < 6; i++) {
       const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
@@ -59,40 +79,56 @@ export class Townsfolk {
   }
 
   // the same people every time (from the world seed); a newcomer replaces
-  // someone who died (generation counter)
-  spawn(i, role, shop, home) {
+  // someone who died (generation counter), a grown-up adult of the same
+  // household with no memory of what happened
+  spawn(i, sp) {
     const g = this.game, gen = this.gens[i] || 0;
+    const { role, shop, home, female, status } = sp;
     const r = mulberry32(g.cfg.seed * 31 + i * 977 + gen * 7919);
-    const female = role === 'keeper' && shop === 'market' ? true : role === 'sheriff' ? false : r() < 0.45;
-    const name = (female ? FIRST_F : FIRST_M)[Math.floor(r() * 14)] + ' ' + LAST[Math.floor(r() * LAST.length)];
+    const name = (female ? FIRST_F : FIRST_M)[Math.floor(r() * 14)] + ' ' + (gen ? LAST[Math.floor(r() * LAST.length)] : sp.last);
     const look = female
       ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, hat: r() < 0.4 ? 'scarf' : 'none', hatColor: [0x8a3a3a, 0x3a5a7a, 0x6a6a3a][Math.floor(r() * 3)] }
       : { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], trousers: DARK[Math.floor(r() * DARK.length)], hair: HAIR[Math.floor(r() * HAIR.length)], vest: r() < 0.45 ? DARK[Math.floor(r() * DARK.length)] : null, hat: r() < 0.5 ? 'cap' : r() < 0.6 ? 'felt' : 'none', moustache: r() < 0.35, rolled: r() < 0.4, braces: r() < 0.3 ? 0x3a2a1c : null };
+    if (status === 'mansion' && !female) { look.vest = 0x2e2a26; look.hat = 'felt'; look.hatColor = 0x2a2420; }
     if (shop === 'butcher') look.apron = 0xe8e4dc;
     if (shop === 'general') look.apron = 0x7a5a3a;
-    if (shop === 'hunting') { look.vest = 0x4a5a3a; look.hat = 'felt'; }
+    if (shop === 'hunting' || shop === 'stable') { look.vest = 0x4a5a3a; look.hat = 'felt'; }
     if (role === 'sheriff') { look.vest = 0x2a2a2e; look.hat = 'felt'; look.hatColor = 0x2a2420; }
     if (role === 'farmer') { look.hat = r() < 0.5 ? 'felt' : 'cap'; look.hatColor = 0x8a7a50; look.rolled = true; }
-    const key = 'v' + i + '_' + gen;
-    civLook(key, look);
-    const rig = new Character('civ', key, Math.floor(r() * 5));
-    g.scene.add(rig.root);
     const b = this.village.buildings;
     const work = shop ? b.find((x) => x.type === shop) : null;
     const p = (work && (work.keeper || work.inside)) || home.inside;
+    // what they own: coins, a few goods, and (men) the guns of their station
+    const [lo, hi] = WEALTH[status] || WEALTH.house;
+    const opts = GUNS[status] || GUNS.house;
+    let guns = female ? [] : opts[Math.floor(r() * opts.length)].slice();
+    if (role === 'sheriff') guns = ['pistol', 'rifle'];
+    if (shop === 'hunting') guns = ['shotgun'];
     const v = {
-      i, role, shop, home, work, name, female, pitch: female ? 1.35 + r() * 0.15 : 0.85 + r() * 0.25,
-      rig, pos: new THREE.Vector3(p.x, p.y, p.z), yaw: r() * 6, speed: 0, crouch: false,
+      i, role, shop, home, work, name, female, status, kin: sp.kin, homeIdx: sp.homeIdx, fam: sp.fam, look, lookKey: 'v' + i + '_' + gen, skin: Math.floor(r() * 5),
+      pitch: female ? 1.35 + r() * 0.15 : 0.85 + r() * 0.25,
+      rig: null, pos: new THREE.Vector3(p.x, p.y, p.z), yaw: r() * 6, speed: 0, crouch: false,
       hp: 100, alive: true, deadT: 0, state: 'idle', idleT: r() * 10, route: [], goal: null, greetT: 0, actT: 0,
       armed: null, posse: false, hostile: false, cool: 0, reportTo: null, crime: null, scaredT: 0, seenT: 0, stuckT: 0, faceT: 0,
+      money: Math.round(lo + r() * (hi - lo)), guns, goods: female ? ['bread', 'egg'] : ['bread'], brave: r(),
     };
+    civLook(v.lookKey, look);
     const body = this.bodies[i];
     if (body) { v.alive = false; v.body = body; v.deadT = 30; v.fallDir = body.f || 1; v.pos.set(body.x, body.y, body.z); v.yaw = body.yaw || 0; }
-    else if (this.dead[i] && this.dead[i] > g.time) { v.alive = false; v.away = true; rig.root.visible = false; }
+    else if (this.dead[i] && this.dead[i] > g.time) { v.alive = false; v.away = true; }
     this.list[i] = v;
     return v;
   }
-
+  // a 3D model only for people near the player (others are plain data)
+  rigFor(v) {
+    if (!v.rig) {
+      v.rig = new Character('civ', v.lookKey, v.skin);
+      this.game.scene.add(v.rig.root);
+      if (v.armed) v.rig.setWeapon(v.armed);
+    }
+    return v.rig;
+  }
+  dropRig(v) { if (v.rig) { v.rig.dispose(); v.rig = null; } }
 
   hour() { return (this.game.time % 1) * 24; }
   night() { const h = this.hour(); return h >= 21 || h < 6; }
@@ -115,6 +151,9 @@ export class Townsfolk {
     const vi = this.village, out = [];
     const cur = v.place;
     const same = cur && cur.b && cur.b === place.b;
+    // behind a shop counter: out through the pass-through, never over the counter
+    const behind = (b, pos) => b && b.flap && b.keeper && pos && Math.hypot(pos.x - b.keeper.x, pos.z - b.keeper.z) < 1.5;
+    if (cur && cur.b && behind(cur.b, cur.pos) && !(same && behind(place.b, place.pos))) out.push(...cur.b.flap);
     if (cur && cur.b && !same) { if (cur.b.doorIn) out.push(cur.b.doorIn); out.push(cur.b.door); }
     if (cur && cur.from) out.push(cur.from);
     const trA = cur ? (cur.b ? cur.b.trail : cur.trail) : null;
@@ -133,6 +172,7 @@ export class Townsfolk {
       if (trZ) for (const q of trZ) out.push(q);
     }
     if (place.b && !same) { out.push(place.b.door); if (place.b.doorIn) out.push(place.b.doorIn); }
+    if (behind(place.b, place.pos) && !(same && behind(cur.b, cur.pos))) out.push(...place.b.flap.slice().reverse());
     if (place.via) out.push(place.via);
     out.push(place.pos);
     v.route = out.map((q) => ({ x: q.x, y: q.y ?? vi.y, z: q.z }));
@@ -150,6 +190,15 @@ export class Townsfolk {
       return { road: { x: p.x, y: vi.y, z: vi.cz + 0.5, axis: 'x' }, pos: { x: p.x, y: vi.y, z: p.z } };
     }
     const f = v.home && v.home.field;
+    if (v.role === 'woman') {
+      // women tend the home and the crops, shop in town and visit neighbors
+      const k = r();
+      if (f && k < 0.35) { const s2 = f.spots[Math.floor(r() * f.spots.length)]; return { road: this.roadPoint(v.home), trail: v.home.trail, via: f.gate, from: f.gate, pos: { x: s2.x, y: s2.y, z: s2.z }, work: 'field' }; }
+      if (k < 0.65) return at(v.home, { x: v.home.inside.x + (r() - 0.5) * 2, y: v.home.inside.y, z: v.home.inside.z + (r() - 0.5) * 2 });
+      if (k < 0.85) { const sh = vi.buildings.filter((b) => b.type === 'general' || b.type === 'market' || b.type === 'butcher'); const s3 = sh[Math.floor(r() * sh.length)]; return s3.type === 'market' ? at(s3, s3.door) : at(s3, s3.counter || s3.inside); }
+      const n = v.home.neighbors && v.home.neighbors[Math.floor(r() * v.home.neighbors.length)];
+      return n ? at(n, n.inside) : at(v.home, v.home.inside);
+    }
     if (v.role === 'farmer' && f && r() < 0.75) {
       // the field beside his home
       const s = f.spots[Math.floor(r() * f.spots.length)];
@@ -233,6 +282,7 @@ export class Townsfolk {
       // (only round the obstacle to the next point; the rest of the way stays)
       const p = v.replans < 3 ? findPath(this.game.world, v.pos, v.route[0], 1500, false) : null;
       if (p && p.length && v.replans < 3) v.route = p.concat(v.route.slice(1));
+      // last resort: slip on to the next point (just outside the door, say)
       if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(); if (nx) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
     }
     return false;
@@ -286,15 +336,15 @@ export class Townsfolk {
     for (const v of this.list) {
       if (!v.alive || v.away) continue;
       if (Math.abs(v.pos.x - origin.x) > maxDist + 2 || Math.abs(v.pos.z - origin.z) > maxDist + 2) continue;
-      const h = v.crouch ? 1.4 : 1.85;
-      box.min.set(v.pos.x - 0.3, v.pos.y, v.pos.z - 0.3); box.max.set(v.pos.x + 0.3, v.pos.y + h, v.pos.z + 0.3);
-      if (ray.intersectBox(box, hit)) { const d = hit.distanceTo(origin); if (d < bd) { bd = d; best = { villager: v, dist: d, point: hit.clone(), head: hit.y > v.pos.y + h - 0.35 }; } }
+      const h = v.crouch && !v.horse ? 1.4 : 1.85, y0 = v.horse ? v.horse.saddle().y : v.pos.y;   // a rider sits up on the horse
+      box.min.set(v.pos.x - 0.3, y0, v.pos.z - 0.3); box.max.set(v.pos.x + 0.3, y0 + h, v.pos.z + 0.3);
+      if (ray.intersectBox(box, hit)) { const d = hit.distanceTo(origin); if (d < bd) { bd = d; best = { villager: v, dist: d, point: hit.clone(), head: hit.y > y0 + h - 0.35 }; } }
     }
     return best;
   }
 
   // ---- shooting (posse) ----------------------------------------------------
-  shootAt(v, dt) {
+  shootAt(v, dt, aimK = 1) {
     const g = this.game, p = g.player.pos;
     v.cool -= dt;
     if (v.cool > 0 || !this.sees(v, 50)) return;
@@ -303,7 +353,8 @@ export class Townsfolk {
     v.cool = 1.6 + Math.random() * 1.2;
     v.fired = true;
     const moving = Math.hypot(g.player.vel.x, g.player.vel.z) > 1;
-    const hitP = Math.max(0.12, Math.min(0.7, 0.78 - d / 55)) * (g.player.crouch ? 0.7 : 1) * (moving ? 0.75 : 1);
+    const hitP = Math.min(0.85, Math.max(0.12, Math.min(0.7, 0.78 - d / 55)) * (g.player.crouch ? 0.7 : 1) * (moving ? 0.75 : 1) * (v.posse ? 1.3 : aimK) * (g.player.riding ? 0.8 : 1));
+    if (v.armed === 'shotgun' && d > 28) return;                  // a shotgun only reaches so far
     sfx.shot(v.armed === 'pistol' ? 'pistol' : 'rifle', Math.max(0.2, 1 - d / 60));
     const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z);
     const b = new THREE.Vector3(p.x + (Math.random() - 0.5) * (Math.random() < hitP ? 0.2 : 2.5), p.y + 1.2, p.z + (Math.random() - 0.5) * 1.5);
@@ -311,7 +362,7 @@ export class Townsfolk {
     const pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
-    if (Math.random() < hitP) g.damage(v.armed === 'pistol' ? 9 : 13, 'shot', v.pos);
+    if (Math.random() < hitP) g.damage(v.armed === 'pistol' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
   }
   // cover from the player: a nearby spot with a block between
   coverSpot(v) {
@@ -341,15 +392,15 @@ export class Townsfolk {
       if (!v.alive) {
         if (v.away) { if (!this.dead[v.i] || this.dead[v.i] <= g.time) this.replace(v); continue; }
         v.deadT += dt;
-        const near = Math.hypot(v.pos.x - P.x, v.pos.z - P.z) < (g.settings.renderDist + 1) * 16;
-        v.rig.root.visible = near;
-        if (near) { v.rig.pose({ dead: v.deadT, fallDir: v.fallDir || 1 }, dt); v.rig.place(v.pos, v.yaw, v.pos.y); }
+        const near = Math.hypot(v.pos.x - P.x, v.pos.z - P.z) < Math.min(RIG_IN, (g.settings.renderDist + 1) * 16);
+        if (near) { const rig = this.rigFor(v); rig.root.visible = true; rig.pose({ dead: v.deadT, fallDir: v.fallDir || 1 }, dt); rig.place(v.pos, v.yaw, v.pos.y); }
+        else this.dropRig(v);
         // a body in a house stays until someone finds it (then it is taken
         // away after a while) or BODY_DAYS pass unnoticed; elsewhere it is
         // taken away soon
         const bd = v.body;
         if (bd ? (bd.found ? g.time > bd.found + 0.03 : g.time > bd.t + BODY_DAYS) : v.deadT > 40) {
-          v.away = true; v.rig.root.visible = false;
+          v.away = true; this.dropRig(v);
           if (bd) delete this.bodies[v.i];
           v.body = null;
         }
@@ -359,26 +410,30 @@ export class Townsfolk {
       v.far = d > ACTIVE_M;
       v.fired = false;
       v.greetT -= dt; v.faceT -= dt; v.scaredT -= dt;
-      if (v.posse) T.posseBehaviour(v, dt, d);
+      if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
+      else if (v.posse) T.posseBehaviour(v, dt, d);
+      else if (v.fight) this.fightBehaviour(v, dt, d);
       else if (v.reportTo) this.reportBehaviour(v, dt);
       else this.dailyBehaviour(v, dt, d);
+      if (v.horse) v.horse.carry(v);
       // greetings when the player comes close
-      if (!v.posse && !v.reportTo && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
+      if (!v.posse && !v.reportTo && !v.fight && !v.surrendered && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
         v.greetT = 70 + Math.random() * 40; v.faceT = 3;
         this.say(v, T.greetingKey(v));
       }
-      if (v.faceT > 0 && !v.posse) { v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 6); }
+      if (v.faceT > 0 && !v.posse && !v.fight) { v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 6); }
       // drawing: only close, on-screen people are animated every frame
-      const show = d < (g.settings.renderDist + 1) * 16;
-      v.rig.root.visible = show;
-      if (!show) continue;
-      if (relod) v.rig.setLod(d < 30 ? 0 : 1);
+      const show = d < Math.min(RIG_IN, (g.settings.renderDist + 1) * 16);
+      if (!show) { if (d > RIG_OUT) this.dropRig(v); else if (v.rig) v.rig.root.visible = false; continue; }
+      const rig = this.rigFor(v);
+      rig.root.visible = true;
+      if (relod) rig.setLod(d < 30 ? 0 : 1);
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
-        const aim = v.posse && v.hostile;
-        v.rig.pose({ speed: v.speed, crouch: v.crouch, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0 }, d < 50 ? dt : dt * 4);
+        const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed);
+        rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0 }, d < 50 ? dt : dt * 4);
       }
-      const gy = this.ground(v.pos.x, v.pos.z, v.pos.y + 0.5);
-      v.rig.place(v.pos, v.yaw, gy ?? v.pos.y);
+      if (v.horse) rig.place(v.horse.saddle(), v.yaw, v.horse.pos.y);
+      else { const gy = this.ground(v.pos.x, v.pos.z, v.pos.y + 0.5); rig.place(v.pos, v.yaw, gy ?? v.pos.y); }
     }
   }
 
@@ -445,6 +500,8 @@ export class Townsfolk {
   }
   kill(v) {
     const g = this.game;
+    if (v.horse) { v.lastHorse = v.horse; v.horse.unseat(v); v.horse = null; }   // the horse stays alive (it can be claimed by looting)
+    v.surrendered = 0; v.fight = null;
     v.alive = false; v.deadT = 0; v.speed = 0; v.route = []; v.reportTo = null;
     v.fallDir = Math.random() < 0.5 ? 1 : -1;
     g.bubbles.clearFor(v);
@@ -507,18 +564,45 @@ export class Townsfolk {
     }
   }
   replace(v) {
-    v.rig.dispose();
+    this.dropRig(v);
     this.gens[v.i] = (this.gens[v.i] || 0) + 1;
     delete this.dead[v.i]; delete this.bodies[v.i];
-    const n = this.spawn(v.i, v.role, v.shop, v.home);
+    const n = this.spawn(v.i, this.specs[v.i]);
     n.place = { b: n.work || n.home, pos: n.pos };
     // the newcomer has grown up (no memory of what happened before)
     this.game.hud.toast(t(v.role === 'keeper' ? 'town.grownKeeper' : 'town.grownUp', { name: n.name, shop: v.shop ? t('shop.' + v.shop) : '' }));
   }
-  armed(v, weapon) { v.armed = weapon; v.rig.setWeapon(weapon); }
+  armed(v, weapon) { v.armed = weapon; if (v.rig) v.rig.setWeapon(weapon); }
+  // the best gun a person owns (or null)
+  bestGun(v) { const order = ['rifle', 'shotgun', 'pistol']; return order.find((g) => v.guns && v.guns.includes(g)) || null; }
+
+  // ---- held up: hands up, then (after a while) off to tell the sheriff ---------
+  surrenderBehaviour(v, dt) {
+    v.surrendered -= dt; v.speed = 0; v.route = [];
+    const P = this.game.player.pos;
+    v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 4);
+    if (v.surrendered <= 0) { v.surrendered = 0; v.scaredT = 20; }
+  }
+  // fighting back (a hold-up gone wrong, a robbed household, a break-in)
+  fightBehaviour(v, dt, d) {
+    const g = this.game, F = v.fight, pl = g.player.pos;
+    F.t = (F.t || 0) + dt;
+    if (!F.armed) { // no gun: run and tell the sheriff
+      v.fight = null; v.scaredT = 15; return;
+    }
+    if (v.armed !== F.armed) this.armed(v, F.armed);
+    v.coverT = (v.coverT || 0) - dt;
+    if (!v.cover || v.coverT <= 0) { v.cover = this.coverSpot(v); v.coverT = 6; v.route = []; }
+    if (v.cover && Math.hypot(v.cover.x - v.pos.x, v.cover.z - v.pos.z) > 0.7 && d < 40) this.goDirect(v, v.cover, 4.6, dt, 0.5);
+    else if (d > 30) this.goDirect(v, pl, 4.6, dt, 8);
+    else { v.speed = 0; v.crouch = !!v.cover && (F.t % 3) < 1.2; }
+    v.yaw = Math.atan2(-(pl.x - v.pos.x), -(pl.z - v.pos.z));
+    if (!v.crouch) this.shootAt(v, dt, 1.1);
+    if (F.t > 90 || d > 70) { v.fight = null; this.armed(v, null); v.scaredT = 10; }
+  }
   toSave() { return { gens: this.gens, dead: this.dead, bodies: this.bodies }; }
   dispose() {
-    for (const v of this.list) v.rig.dispose();
+    for (const v of this.list) this.dropRig(v);
     for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); }
   }
 }
