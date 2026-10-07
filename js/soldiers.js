@@ -485,7 +485,7 @@ export class Enemies {
       const footsteps = h.kind !== 'player' ? d < 5 : (!pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) > 0.5 && d < (pl.running ? 9 : 4) * quiet);
       if (!s.alerted && !footsteps) {
         // unaware: they look ahead; a light or a muzzle flash catches the eye from the side too
-        const lit = h.kind === 'player' && (g.lightOn || g.shotT > 0);
+        const lit = h.kind === 'player' && (g.lightOn || g.shotT > 0 || (pl.car && pl.car.lights));
         const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
         if (((h.pos.x - s.pos.x) * fx + (h.pos.z - s.pos.z) * fz) / (d || 1) < (lit ? -0.4 : 0.3)) continue;
       }
@@ -517,6 +517,7 @@ export class Enemies {
     if (g.weather.rain > 0.3) R *= 0.85;
     R *= g.weatherSight || 1;                                    // fog, snow and heavy rain shorten long views
     if (g.lightOn) R = Math.max(R, 90);                                   // the beam is seen from far away
+    if (pl.car) { R = Math.max(R, 18 + 50 * day); if (pl.car.lights && day < 0.6) R = Math.max(R, 150); }   // a car is big; its headlights carry far at night
     if (g.campfires.near(pl.pos, 5)) R = Math.max(R, 38);
     if (day < 0.5 && this.inFortLight(pl.pos)) R = Math.max(R, 34);
     if (pl.running && moving && d < 14) R = Math.max(R, 16);
@@ -1362,6 +1363,8 @@ export class Enemies {
       return;
     }
     if (s.chute) { g.paratroops.stepSoldier(s, dt); return; }
+    // riding in your car: he keeps his seat and can still shoot
+    if (s.car) { g.vehicles.seat(s); if (s.car) { s.hurtT += dt; s.reloadT = Math.max(0, s.reloadT - dt); s.cool -= dt; s.senseT -= dt; if (s.senseT <= 0) { s.senseT = 0.35; s.target = this.findTarget(s); } this.combat(s, dt); g.vehicles.seat(s); this.animate(s, dt); return; } }
     s.blockT = (s.blockT || 0) - dt;
     if (s.blockT <= 0 && !s.raft && !s.swimming && !(s.climbT > 0)) { s.blockT = 0.5; this.unstick(s); }
     s.hurtT += dt; s.reloadT = Math.max(0, s.reloadT - dt); s.throwT = Math.max(0, s.throwT - dt); s.climbT = Math.max(0, s.climbT - dt);
@@ -1951,7 +1954,7 @@ export class Enemies {
       s.mark.visible = vis && pd < 90 && pd > 2 && s.alive;
       s.mark.scale.setScalar((s.inSquad ? 0.42 : 0.34) * (1 + s.markPop * 0.8));
     }
-    rig.place(s.pos, s.yaw, s.swimming ? s.pos.y : this.groundY(s));
+    rig.place(s.pos, s.yaw, s.swimming || s.car ? s.pos.y : this.groundY(s));
     if (!vis) return;
     // soldiers outside the animation budget update their pose 4x less often
     s.animAcc += dt;
@@ -1970,7 +1973,7 @@ export class Enemies {
       look, pitch, fired: s.fired,
       reload: s.reloadT > 0 ? 1 - s.reloadT / s.T.reload : null,
       throwT: s.throwT > 0 ? s.throwT / 0.6 : null,
-      climb: s.climbT > 0, swim: s.swimming, surrender: s.surrender,
+      climb: s.climbT > 0, swim: s.swimming, surrender: s.surrender, sit: !!s.car,
       dead: s.alive ? null : s.deadT, fallDir: s.fallDir || 1,
     }, adt);
   }

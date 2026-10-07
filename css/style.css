@@ -629,10 +629,14 @@ body.binoc .zbtn { display: inline-block; min-width: 46px; font-size: 22px; font
 #warAlert { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); z-index: 30; background: var(--panel); border: 2px solid var(--red); padding: 10px 14px; max-width: min(480px, 92vw); pointer-events: auto; text-align: center; }
 #warAlert p { margin: 0 0 8px; }
 #warAlert .row { justify-content: center; gap: 10px; }
-#travel { position: fixed; inset: 0; z-index: 60; background: #000; }
-#travel canvas { width: 100%; height: 100%; display: block; }
-#travel .travel-to { position: absolute; top: 6%; width: 100%; text-align: center; font: 600 clamp(20px, 4vw, 34px) var(--stencil); color: #f0e8cc; text-shadow: 0 2px 6px #000; margin: 0; }
-#travel #tskip { position: absolute; right: 16px; bottom: 16px; }
+#travel { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+#travel .tcard { position: absolute; left: 0; right: 0; bottom: 18%; text-align: center; color: #f0e8cc; text-shadow: 0 2px 8px #000; opacity: 0; }
+#travel .tdest { margin: 0; font: 600 clamp(22px, 4.4vw, 40px) var(--stencil); letter-spacing: 0.06em; }
+#travel .tdate { margin: 6px 0 0; font: 500 clamp(14px, 2.2vw, 20px) var(--stencil); opacity: 0.85; }
+#travel .tfade { position: absolute; inset: 0; background: #000; opacity: 1; }
+#travel::before, #travel::after { content: ''; position: absolute; left: 0; right: 0; height: 7vh; background: #000; }
+#travel::before { top: 0; } #travel::after { bottom: 0; }
+#travel #tskip { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); pointer-events: auto; z-index: 2; min-width: 88px; min-height: 44px; }
 .choices.battles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .choice.battle .bhead { display: flex; align-items: center; gap: 8px; }
 .choice.battle .bhead img { width: 30px; height: 20px; border: 1px solid #000; }
@@ -680,3 +684,13 @@ body:not(.binoc) .zbtn { display: none !important; }
 /* Town Life: the horse's stamina while riding */
 #stamina { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: 160px; height: 8px; border: 1px solid rgba(240,232,204,0.7); background: rgba(20,20,14,0.6); border-radius: 4px; overflow: hidden; }
 #stamina i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #b88a3a, #e8c870); }
+
+/* War: army cars. While driving only the car's own bar (Exit, Lights) and
+   the fire / zoom / pause buttons stay; the bar sits top centre, clear of
+   the minimap and the corner buttons */
+#carbar { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 6; pointer-events: auto; }
+#carbar[hidden] { display: none; }
+#carbar .btn { min-height: 40px; min-width: 76px; padding: 8px 14px; font-size: 13px; }
+#carbar kbd { font-family: var(--body); font-size: 11px; opacity: 0.8; margin-right: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; padding: 0 4px; }
+body.driving #touch .tb:not([data-btn=dig]):not([data-btn=zoom]):not([data-btn=zin]):not([data-btn=zout]):not([data-btn=pause]) { display: none; }
+body.driving #aimprompt { display: none; }

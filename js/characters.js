@@ -69,6 +69,8 @@ const sph = (r, ts = 0, tl = Math.PI) => { const k = `s${r}${ts}${tl}${SEG}`; re
 const cyl = (r1, r2, h) => { const k = `y${r1}${r2}${h}${SEG}`; return G[k] || (G[k] = new THREE.CylinderGeometry(r1, r2, h, SEG[0] + 2)); };
 const box = (w, h, d) => { const k = `b${w}${h}${d}`; return G[k] || (G[k] = new THREE.BoxGeometry(w, h, d)); };
 const FAB = UV[0], SKIN = UV[1], LEA = UV[2], MET = UV[3];
+// the upper half of the skin region has no stubble (women and boys' faces)
+const SKIN_CLEAN = [0.51, 0.755, 0.48, 0.235];
 
 // skeleton measurements (blocks; a soldier stands about 1.85 tall)
 export const RIG = { hip: 0.93, thigh: 0.45, shin: 0.42, spine: 0.05, neck: 0.55, shoulderY: 0.47, shoulderX: 0.21, upper: 0.29, fore: 0.27 };
@@ -204,7 +206,7 @@ function variant(faction, type, skin) {
 function civVariant(L, skin) {
   const sk = SKINS[skin % SKINS.length];
   const shirt = L.shirt ?? 0xc8bca0, trousers = L.trousers ?? 0x4a4038, hair = L.hair ?? 0x3a2a1c;
-  const v = {};
+  const v = {}, SK = L.long ? SKIN_CLEAN : SKIN;
   let p = new PartList();
   if (L.dress) {
     p.add(cyl(0.16, 0.29, 0.62), mat4([0, -0.2, 0]), L.dress, FAB);                  // skirt to mid-calf
@@ -222,12 +224,26 @@ function civVariant(L, skin) {
   if (L.bag) p.add(box(0.2, 0.18, 0.08), mat4([0.14, 0.12, 0.08], [0, 0, 0.2]), 0x6a5034, LEA);
   v.kit = p.build();
   p = new PartList();
-  p.add(cyl(0.055, 0.06, 0.12), mat4([0, 0.02, 0]), sk, SKIN);
-  p.add(sph(0.115), mat4([0, 0.15, 0], 0, [0.92, 1.08, 1]), sk, SKIN);
-  p.add(sph(0.06), mat4([0, 0.08, -0.04], 0, [1.3, 0.75, 1.1]), sk, SKIN);
-  for (const s of [-1, 1]) p.add(sph(0.028), mat4([s * 0.105, 0.15, 0.01], 0, [0.5, 1, 0.8]), sk, SKIN);
-  p.add(sph(0.12, 0, Math.PI / 2), mat4([0, 0.17, 0.015], 0, [1, 0.8, 1.02]), hair, FAB);   // hair
-  if (L.long) p.add(sph(0.075), mat4([0, 0.16, 0.11], 0, [1, 1.2, 0.8]), hair, FAB);        // bun
+  p.add(cyl(0.055, 0.06, 0.12), mat4([0, 0.02, 0]), sk, SK);
+  p.add(sph(0.115), mat4([0, 0.15, 0], 0, [0.92, 1.08, 1]), sk, SK);
+  p.add(sph(0.06), mat4([0, 0.08, -0.04], 0, [1.3, 0.75, 1.1]), sk, SK);
+  for (const s of [-1, 1]) p.add(sph(0.028), mat4([s * 0.105, 0.15, 0.01], 0, [0.5, 1, 0.8]), sk, SK);
+  if (!L.long) p.add(sph(0.12, 0, Math.PI / 2), mat4([0, 0.17, 0.015], 0, [1, 0.8, 1.02]), hair, FAB);   // short hair
+  else {
+    // women: fuller hair over the ears and the back of the head, in one of
+    // three styles of the period: long to the shoulders, a full bun, a braid
+    // the hairline sits high on the forehead and low at the nape (the cap is tipped back)
+    if (L.hat !== 'scarf') p.add(sph(0.128, 0, Math.PI * 0.6), mat4([0, 0.165, 0.02], [-0.55, 0, 0], [1.05, 0.95, 1.05]), hair, FAB);
+    for (const s of [-1, 1]) p.add(sph(0.05), mat4([s * 0.1, 0.13, 0.03], 0, [0.6, 1.3, 1]), hair, FAB);     // over the ears
+    if (L.style === 'bun') { p.add(sph(0.08), mat4([0, 0.2, 0.11], 0, [1.1, 1, 0.9]), hair, FAB); p.add(sph(0.045), mat4([0, 0.27, 0.06]), hair, FAB); }
+    else if (L.style === 'braid') {
+      p.add(sph(0.06), mat4([0, 0.12, 0.11], 0, [1, 1, 0.8]), hair, FAB);
+      for (let k = 0; k < 4; k++) p.add(sph(0.035), mat4([0, 0.06 - k * 0.07, 0.125 + k * 0.004], 0, [1, 1.25, 1]), hair, FAB);
+    } else {
+      p.add(caps(0.1, 0.12), mat4([0, 0.06, 0.07], [0.1, 0, 0], [1.08, 1, 0.5]), hair, FAB);                    // falls softly to the shoulders
+      for (const s of [-1, 1]) p.add(caps(0.035, 0.12), mat4([s * 0.095, 0.07, 0.02], [0, 0, -s * 0.08], [1, 1, 1.2]), hair, FAB);
+    }
+  }
   if (L.hat === 'cap') {
     p.add(cyl(0.125, 0.13, 0.05), mat4([0, 0.25, 0.01]), L.hatColor ?? 0x5a5448, FAB);
     p.add(box(0.2, 0.015, 0.09), mat4([0, 0.235, -0.12], [-0.15, 0, 0]), L.hatColor ?? 0x5a5448, FAB);
@@ -236,17 +252,17 @@ function civVariant(L, skin) {
     p.add(cyl(0.1, 0.12, 0.1), mat4([0, 0.29, 0]), L.hatColor ?? 0x3a3430, FAB);
     p.add(cyl(0.122, 0.122, 0.022), mat4([0, 0.255, 0]), 0x1a1614, FAB);
   } else if (L.hat === 'scarf') {
-    p.add(sph(0.13, 0, Math.PI * 0.62), mat4([0, 0.15, 0.01], 0, [1, 1.05, 1.05]), L.hatColor ?? 0x8a3a3a, FAB);
+    p.add(sph(0.13, 0, Math.PI * 0.62), mat4([0, 0.17, 0.022], [-0.6, 0, 0], [1.1, 1.0, 1.1]), L.hatColor ?? 0x8a3a3a, FAB);
   }
   v.head = p.build();
   p = new PartList();
   for (const s of [-1, 1]) {
     p.add(sph(0.017), mat4([s * 0.042, 0.165, -0.098], 0, [1, 0.8, 0.6]), 0xf0ece0, MET);
     p.add(sph(0.009), mat4([s * 0.042, 0.165, -0.11]), 0x2a2018, MET);
-    p.add(box(0.04, 0.01, 0.012), mat4([s * 0.045, 0.19, -0.104], [0, 0, s * 0.12]), hair, SKIN);
+    p.add(box(0.04, 0.01, 0.012), mat4([s * 0.045, 0.19, -0.104], [0, 0, s * 0.12]), hair, SK);
   }
-  p.add(box(0.026, 0.05, 0.03), mat4([0, 0.14, -0.112], [0.25, 0, 0]), sk, SKIN);
-  p.add(box(0.045, 0.008, 0.01), mat4([0, 0.095, -0.1]), 0x6a3a30, SKIN);
+  p.add(box(0.026, 0.05, 0.03), mat4([0, 0.14, -0.112], [0.25, 0, 0]), sk, SK);
+  p.add(box(0.045, 0.008, 0.01), mat4([0, 0.095, -0.1]), L.long ? 0x9a4a44 : 0x6a3a30, SK);
   if (L.moustache) p.add(box(0.06, 0.014, 0.012), mat4([0, 0.108, -0.106]), hair, FAB);
   v.face = p.build();
   for (const side of ['L', 'R']) {
@@ -438,6 +454,13 @@ export class Character {
     this.kneeL.rotation.x = -kneeL; this.kneeR.rotation.x = -kneeR;   // knees flex backwards
     // riding: seated in the saddle, thighs forward and apart around the
     // horse's back, knees bent, feet down in the stirrups
+    // seated on a bench (the transport plane): thighs forward, knees bent down
+    if (st.sit) {
+      this.hips.position.y = RIG.hip - 0.42;
+      this.legL.rotation.set(1.45, 0, -0.08); this.legR.rotation.set(1.45, 0, 0.08);
+      this.kneeL.rotation.x = -1.5; this.kneeR.rotation.x = -1.5;
+      lean = 0.05;
+    }
     if (st.ride) {
       this.hips.position.y = RIG.hip;
       this.legL.rotation.set(1.25, 0, -0.42); this.legR.rotation.set(1.25, 0, 0.42);

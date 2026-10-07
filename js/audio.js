@@ -174,3 +174,19 @@ export function setRain(intensity) {
   rainGain.gain.setTargetAtTime(intensity * 0.16, ctx.currentTime, 0.5);
 }
 export function audioCtx() { return ctx; }
+export function audioOut() { return master || (ctx && ctx.destination); }
+// a running engine (army cars): a low sawtooth with a rumble, its pitch and
+// loudness following the speed; set(0) idles, stop() switches it off
+export function engineLoop() {
+  if (!ctx) return { set() {}, stop() {} };
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 34;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 9; const lg = ctx.createGain(); lg.gain.value = 3; lfo.connect(lg).connect(o.frequency);
+  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260;
+  const g = ctx.createGain(); g.gain.value = 0.0001;
+  o.connect(f).connect(g).connect(master); o.start(); lfo.start();
+  g.gain.setTargetAtTime(0.05, ctx.currentTime, 0.3);
+  return {
+    set(k) { const t = ctx.currentTime; o.frequency.setTargetAtTime(34 + k * 46, t, 0.25); lfo.frequency.setTargetAtTime(9 + k * 14, t, 0.25); f.frequency.setTargetAtTime(260 + k * 420, t, 0.25); g.gain.setTargetAtTime(0.05 + k * 0.05, t, 0.25); },
+    stop() { const t = ctx.currentTime; g.gain.setTargetAtTime(0.0001, t, 0.15); setTimeout(() => { try { o.stop(); lfo.stop(); } catch { /* */ } g.disconnect(); }, 600); },
+  };
+}

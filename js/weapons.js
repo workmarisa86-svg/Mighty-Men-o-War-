@@ -45,6 +45,7 @@ export class Combat {
     if (!playing) return;
     const W = WEAPONS[id];
     if (!W) return;
+    if (g.player.car && (W.melee || W.throw)) return;          // in a car only the gun in your hands
     // sniper scope on/off with right-click (or the ZOOM button on phones)
     if (W.scope && (input.mouse.rightPressed || input.thit('place'))) g.scopeView.toggle('sniper');
     const firing = W.auto ? (input.mouse.left || input.tdown('dig'))
@@ -72,11 +73,13 @@ export class Combat {
     const e = g.enemies.raycast(eye, dir, a ? a.dist : maxD);
     const v = g.town ? g.town.folk.raycast(eye, dir, (e || a) ? (e || a).dist : maxD) : null;
     const h = g.horses ? g.horses.raycast(eye, dir, (v || e || a) ? (v || e || a).dist : maxD) : null;
-    return h || v || e || a;
+    const c = g.vehicles ? g.vehicles.raycast(eye, dir, (h || v || e || a) ? (h || v || e || a).dist : maxD) : null;
+    return c || h || v || e || a;
   }
   applyHit(hit, damage, { silent = false } = {}) {
     const g = this.game;
-    if (hit.horse) g.horses.hurt(hit.horse, damage, 'player');
+    if (hit.car) g.vehicles.hurt(hit.car, damage * 0.5);
+    else if (hit.horse) g.horses.hurt(hit.horse, damage, 'player');
     else if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
     else if (hit.soldier) g.enemies.hurt(hit.soldier, damage, { silent, head: hit.head });
     else if (hit.tank) hit.tank.hurt(damage, false);

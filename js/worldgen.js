@@ -187,6 +187,45 @@ export function generate(world) {
   world.forts = forts;
   const nearFort = (x, z, r) => forts.some((f) => Math.abs(f.cx - x) <= r && Math.abs(f.cz - z) <= r);
 
+  // --- bridges: a few wooden bridges, three blocks wide, across rivers and
+  // lakes (cars need ground under both sides; deep water sinks them)
+  if (world.cfg.country) {
+    const brnd = mulberry32(seed + 515), want = 3 + Math.floor(brnd() * 3);
+    world.bridges = [];
+    for (let tries = 0, made = 0; tries < 6000 && made < want; tries++) {
+      const x0 = 8 + Math.floor(brnd() * (W - 16)), z0 = 8 + Math.floor(brnd() * (D - 16));
+      if (water[x0 + z0 * W] || tops[x0 + z0 * W] > SEA + 1 || nearFort(x0, z0, 16)) continue;
+      const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]], d0 = Math.floor(brnd() * 4);
+      for (let q = 0; q < 4; q++) {
+        const [dx, dz] = dirs[(d0 + q) % 4], px = dz !== 0 ? 1 : 0, pz = dx !== 0 ? 1 : 0;
+        let n = 1, ok = true;
+        for (; n < 28; n++) {
+          const x = x0 + dx * n, z = z0 + dz * n;
+          if (x < 4 || z < 4 || x >= W - 4 || z >= D - 4 || (coast && z > D - COAST - 14)) { ok = false; break; }
+          if (!water[x + z * W]) break;
+        }
+        const span = n - 1;
+        if (!ok || n >= 28 || span < 3) continue;
+        const x1 = x0 + dx * n, z1 = z0 + dz * n;
+        if (tops[x1 + z1 * W] > SEA + 1 || nearFort(x1, z1, 16)) continue;
+        // all three lanes must cross water the same way
+        let lanes = true;
+        for (let w = -1; w <= 1 && lanes; w += 2) for (let m = 1; m <= span; m++) if (!water[(x0 + dx * m + px * w) + (z0 + dz * m + pz * w) * W]) { lanes = false; break; }
+        if (!lanes) continue;
+        for (let m = 0; m <= n; m++) for (let w = -1; w <= 1; w++) {
+          const x = x0 + dx * m + px * w, z = z0 + dz * m + pz * w, k = x + z * W;
+          if (water[k]) {
+            world.data[world.idx(x, SEA, z)] = B.WOOD;                         // the deck, just above the water
+            if (w !== 0 && m % 4 === 2) for (let y = tops[k] + 1; y < SEA; y++) world.data[world.idx(x, y, z)] = B.LOG;   // piles
+          }
+          for (let y = SEA + 1; y <= SEA + 3; y++) world.data[world.idx(x, y, z)] = B.AIR;
+        }
+        world.bridges.push({ x: x0 + dx * (n / 2), z: z0 + dz * (n / 2) });
+        made++; break;
+      }
+    }
+  }
+
   // --- the land's own features: frozen water, fields, rice paddies, hedgerows
   if (L.frozen) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     if (coast && z > D - COAST - 12) continue;                  // the sea stays open

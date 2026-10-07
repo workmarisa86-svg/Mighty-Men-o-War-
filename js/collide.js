@@ -10,11 +10,11 @@ export class Collide {
   gather() {
     const g = this.game, P = g.player.pos, out = this.bodies; out.length = 0;
     const near = (p) => Math.abs(p.x - P.x) < RANGE && Math.abs(p.z - P.z) < RANGE;
-    if (!g.dead && !g.player.riding) out.push({ kind: 'player', p: P, r: 0.34, w: 1, ref: g.player });
+    if (!g.dead && !g.player.riding && !g.player.car) out.push({ kind: 'player', p: P, r: 0.34, w: 1, ref: g.player });
     if (g.town) for (const v of g.town.folk.list) if (v.alive && !v.away && !v.far && near(v.pos)) out.push({ kind: 'folk', p: v.pos, r: v.horse ? 0.75 : 0.3, w: v.horse ? 4 : 1, ref: v });
     if (g.horses) for (const h of g.horses.list) if (h.alive && !h.rider && near(h.pos)) out.push({ kind: 'horse', p: h.pos, r: 0.75, w: 4, ref: h });
     if (g.horses && g.player.riding) out.push({ kind: 'mount', p: g.player.riding.pos, r: 0.75, w: 4, ref: g.player.riding });
-    if (g.enemies && g.enemies.enabled) for (const s of g.enemies.list) if (s.alive && !s.chute && !s.raft && near(s.pos)) out.push({ kind: 'soldier', p: s.pos, r: 0.3, w: 1, ref: s });
+    if (g.enemies && g.enemies.enabled) for (const s of g.enemies.list) if (s.alive && !s.chute && !s.raft && !s.car && near(s.pos)) out.push({ kind: 'soldier', p: s.pos, r: 0.3, w: 1, ref: s });
     return out;
   }
   update() {

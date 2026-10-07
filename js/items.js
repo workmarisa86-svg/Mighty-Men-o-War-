@@ -17,6 +17,7 @@ export const ITEMS = {
   sandbag: { block: B.SANDBAG, tiles: ['sandbag_top', 'sandbag'] },
   wire: { block: B.WIRE, flat: 'wire' },
   raft: { place: 'raft' },
+  car: { place: 'car' },                       // War: an army car (rolls out beside the fire, never carried)
   watchtower: { place: 'watchtower' },
   meat_raw: { food: 15 },
   meat_cooked: { food: 45 },
@@ -68,6 +69,8 @@ export const RECIPES = [
   { id: 'medkit', cat: 'gear', needs: { iron: 1, wood: 1 }, time: 6 },
   { id: 'scuba', cat: 'gear', needs: { iron: 4, wood: 1 }, time: 12 },
   { id: 'raft', cat: 'transport', needs: { wood: 6 }, time: 7 },
+  // the longest job at a fire: an army car of your side (lots of iron)
+  { id: 'car', cat: 'transport', needs: { iron: 16, wood: 4 }, time: 30 },
   { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
   // Town Life: weapons are crafted as in War; materials are smelted on the fire
   { id: 'bread', cat: 'food', needs: { wheat: 3 }, time: 5, cook: true, town: true },
@@ -80,7 +83,7 @@ export const RECIPES = [
   { id: 'dynamite', cat: 'weapons', needs: { charcoal: 2, clay: 1, sand: 1 }, time: 8, town: true },
 ];
 // which recipes each game offers
-const WAR_ONLY = ['grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
+const WAR_ONLY = ['car', 'grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
 export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) : !r.town); }
 
 const ICON_DRAW = {
@@ -169,6 +172,15 @@ const ICON_DRAW = {
     c.fillStyle = '#4a4a50'; c.beginPath(); c.moveTo(8, 30); c.lineTo(20, 14); c.lineTo(28, 22); c.lineTo(18, 36); c.closePath(); c.fill();
     c.strokeStyle = '#8a8f94'; c.lineWidth = 4; c.beginPath(); c.arc(32, 26, 9, 0.3, Math.PI * 1.7); c.stroke();
     c.fillStyle = '#f0b040'; c.fillRect(24, 12, 2, 2); c.fillRect(27, 9, 2, 2); c.fillRect(22, 8, 2, 2);
+  },
+  car(c) {
+    // a small open army car seen from the side
+    c.fillStyle = '#4e5434'; c.fillRect(6, 20, 36, 10); c.fillRect(8, 15, 14, 6);
+    c.fillStyle = '#3a3e28'; c.fillRect(26, 13, 2, 8);
+    c.fillStyle = '#9ab0b8'; c.fillRect(27, 14, 1, 6);
+    c.fillStyle = '#1a1a18'; for (const x of [13, 35]) { c.beginPath(); c.arc(x, 31, 5.5, 0, Math.PI * 2); c.fill(); }
+    c.fillStyle = '#6a6a5a'; for (const x of [13, 35]) { c.beginPath(); c.arc(x, 31, 2.2, 0, Math.PI * 2); c.fill(); }
+    c.fillStyle = '#f0ece0'; c.beginPath(); c.arc(24, 24, 3, 0, Math.PI * 2); c.fill();
   },
   raft(c) {
     for (let i = 0; i < 5; i++) {

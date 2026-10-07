@@ -128,6 +128,7 @@ export class Explosives {
       g.player.vel.add(push); g.player.vel.y += 4 * (1 - dp / reach);
     }
     g.enemies.blast(center, reach, falloff, owner);
+    if (g.vehicles) g.vehicles.blast(center, reach, falloff);
     if (g.forts) g.forts.blast(center, door);   // fort doors: 3 TNT or 12 grenades
     for (const a of g.animals.list) {
       const d = a.pos.distanceTo(center);
