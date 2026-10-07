@@ -1,6 +1,6 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.9.0';
-export const SAVE_FORMAT = 3;      // 3: sides (Allies / Axis); older War saves can't be converted
+export const GAME_VERSION = '1.0.0';
+export const SAVE_FORMAT = 4;      // 4: the 14-country campaign; older War saves can't be converted
 // every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
 export const STORE_PREFIX = 'blocks-mmow-';
 export const OLD_PREFIX = 'blocks-';

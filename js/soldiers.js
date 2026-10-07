@@ -13,6 +13,8 @@ import { B, SOLID } from './blocks.js';
 import { sfx } from './audio.js';
 import { t } from './i18n.js';
 import { MAIN_NATIONS } from './nations.js';
+import { FORT_HALF } from './forts.js';
+import { COUNTRY } from './countries.js';
 import { Character, FACTIONS } from './characters.js';
 
 // Follow me: the spacing in the single-file line, in metres (first follower
@@ -155,17 +157,29 @@ export class Enemies {
     this.psq = this.newSquad(game.player.pos, 'ally');   // the player's own squad
     this.psq.player = true;
     if (!this.enabled) return;
-    this.populate('enemy', DIFF[this.diff].enemies);
-    if (this.allies) this.populate('ally', DIFF[this.diff].allies, saved.followers ?? 4);
+    // the campaign or a battle decides how many are in the field here
+    const plan = game.campaign ? game.campaign.plan(saved.followers) : game.battle ? game.battle.plan() : null;
+    if (plan) { this.populate('enemy', plan.enemy); this.populate('ally', plan.ally, plan.followers); this.noDispatch = !!plan.noDispatch; }
+    else {
+      this.populate('enemy', DIFF[this.diff].enemies);
+      if (this.allies) this.populate('ally', DIFF[this.diff].allies, saved.followers ?? 4);
+    }
     this.bodies = [];         // the fallen, until someone finds them
     this.setupRoutines();
   }
 
   // which country a new soldier comes from (the side's main nations)
+  // Stage 2: a country's own soldiers hold it; an occupier's come from
+  // the occupying side's main nations
   nationFor(faction) {
     const side = faction === 'ally' ? this.side : this.side === 'allies' ? 'axis' : 'allies';
-    const list = MAIN_NATIONS[side];
-    return list[Math.floor(Math.random() * list.length)];
+    const pick = (l) => l[Math.floor(Math.random() * l.length)];
+    const c = COUNTRY[this.game.cfg.country];
+    if (c) {
+      if (c.occupied) return side === 'axis' ? (c.id === 'gr' ? pick(['de', 'it']) : 'de') : pick([c.id, c.id, ...MAIN_NATIONS.allies]);
+      if (c.side === side) return Math.random() < 0.8 ? c.id : pick(MAIN_NATIONS[side]);
+    }
+    return pick(MAIN_NATIONS[side]);
   }
   sideOf(faction) { return faction === 'ally' ? this.side : this.side === 'allies' ? 'axis' : 'allies'; }
 
@@ -183,7 +197,7 @@ export class Enemies {
       const ox = f.doorOut.x - f.cx, oz = f.doorOut.z - f.cz, L = Math.hypot(ox, oz) || 1;
       const side = { x: -oz / L, z: ox / L };
       let camp = null;
-      for (const dist of [15, 18, 21]) for (const sg of [1, -1]) {
+      for (const dist of [FORT_HALF + 8, FORT_HALF + 11, FORT_HALF + 14]) for (const sg of [1, -1]) {
         if (camp) break;
         const x = Math.floor(f.cx + side.x * dist * sg), z = Math.floor(f.cz + side.z * dist * sg);
         const y = w.surfaceY(x, z) + 1;
@@ -207,7 +221,7 @@ export class Enemies {
         s.setRole('guard'); s.home = f; s.spot = { x: p.x, y, z: p.z }; s.face = { x: p.x + (p.x - f.cx), z: p.z + (p.z - f.cz) };
       }
       if (k.patrol) {
-        const R = 15, route = [];
+        const R = FORT_HALF + 9, route = [];
         for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, x = f.cx + 0.5 + Math.cos(a) * R, z = f.cz + 0.5 + Math.sin(a) * R; const y = this.ground(x, z, f.base + 3); if (y != null) route.push({ x, y, z }); }
         if (route.length >= 3) for (let i = 0; i < k.patrol; i++) {
           const q = route[(i * 3) % route.length];
@@ -309,13 +323,25 @@ export class Enemies {
       else { x = 6 + Math.random() * (w.W - 12); z = 6 + Math.random() * (w.D - 12); }
       if (x < 6 || z < 6 || x > w.W - 6 || z > w.D - 6) continue;
       if (Math.hypot(x - p.x, z - p.z) < minDist) continue;
-      if (this.game.forts && this.game.forts.list.some((f) => Math.abs(f.cx - x) < 10 && Math.abs(f.cz - z) < 10)) continue;
+      if (this.game.forts && this.game.forts.list.some((f) => Math.abs(f.cx - x) < FORT_HALF + 4 && Math.abs(f.cz - z) < FORT_HALF + 4)) continue;
       const y = w.surfaceY(Math.floor(x), Math.floor(z));
       if (y < SEA || w.get(Math.floor(x), y + 1, Math.floor(z)) === B.WATER) continue;
       if (this.ground(x, z, y + 1) == null) continue;
       return { x, y: y + 1, z };
     }
     return null;
+  }
+  // a landing spot on the beach (seaborne attack waves)
+  beachSpot() {
+    const w = this.game.world;
+    for (let i = 0; i < 40; i++) {
+      const x = 30 + Math.random() * (w.W - 60);
+      for (let z = w.D - 8; z > w.D / 2; z--) {
+        const y = w.surfaceY(Math.floor(x), z);
+        if (y >= SEA && w.get(Math.floor(x), y + 1, z) === B.AIR) return { x: x + 0.5, y: y + 1, z: z - 2.5 };
+      }
+    }
+    return this.farSpot(70, 'enemy');
   }
   newSquad(at, faction) {
     const sq = { faction, members: [], mode: 'patrol', wp: { x: at.x, z: at.z }, alert: null, alertT: 0, fort: null, tnt: 0, t: 0 };
@@ -474,10 +500,13 @@ export class Enemies {
   // running close by and gunfire give you away.
   playerSight(s, d) {
     const g = this.game, pl = g.player, day = g.sky.daylight;
+    // a night drop is only seen near a lit headquarters, a campfire, or in a light from close by
+    if (pl.chute && day < 0.5) return this.inFortLight(pl.pos) ? 34 : g.campfires.near(pl.pos, 10) ? 26 : g.lightOn ? 20 : 0;
     const moving = Math.hypot(pl.vel.x, pl.vel.z) > 0.5;
     let R = 7 + 63 * day;
     if (pl.crouch) R *= moving ? 0.7 : 0.5;
     if (g.weather.rain > 0.3) R *= 0.85;
+    R *= g.weatherSight || 1;                                    // fog, snow and heavy rain shorten long views
     if (g.lightOn) R = Math.max(R, 90);                                   // the beam is seen from far away
     if (g.campfires.near(pl.pos, 5)) R = Math.max(R, 38);
     if (day < 0.5 && this.inFortLight(pl.pos)) R = Math.max(R, 34);
@@ -510,6 +539,7 @@ export class Enemies {
   // carry sound less far).
   hear(pos, radius, faction = 'enemy') {
     if (this.game.weather.rain > 0.3) radius *= 0.7;
+    radius *= this.game.weatherHear || 1;                        // rain, snow and fog carry sound less far
     for (const sq of this.squads) {
       if (sq.faction !== faction || sq.garrison) continue;
       const m = sq.members.find((s) => s.alive && s.pos.distanceTo(pos) < radius);
@@ -671,7 +701,7 @@ export class Enemies {
   fortXZ(x, z) {
     const F = this.game.forts;
     if (!F) return null;
-    return F.list.find((f) => Math.abs(x - (f.cx + 0.5)) <= 5.6 && Math.abs(z - (f.cz + 0.5)) <= 5.6) || null;
+    return F.list.find((f) => Math.abs(x - (f.cx + 0.5)) <= FORT_HALF - 0.4 && Math.abs(z - (f.cz + 0.5)) <= FORT_HALF - 0.4) || null;
   }
   // Fort-aware routing. A fort is entered and left only through its door:
   //  - on the rampart and heading elsewhere: walk to a ladder and climb down;
@@ -724,11 +754,11 @@ export class Enemies {
     const A = this.fortAxes(f), cx = f.cx + 0.5, cz = f.cz + 0.5;
     const dx = s.pos.x - cx, dz = s.pos.z - cz;
     const pu = dx * A.ux + dz * A.uz, pv = dx * A.vx + dz * A.vz;
-    if (pu >= 6.9) return f.doorOut;                             // already on the door side
+    if (pu >= FORT_HALF + 0.9) return f.doorOut;                             // already on the door side
     if (s.navFort !== f || Math.abs(pv) > 2) { s.navFort = f; s.navSide = pv >= 0 ? 1 : -1; }   // pick a side, keep it
-    const sg = s.navSide, C = 9;
+    const sg = s.navSide, C = FORT_HALF + 3;
     const at = (u, v) => ({ x: cx + A.ux * u + A.vx * v, z: cz + A.uz * u + A.vz * v });
-    if (pu < -6.9 && Math.abs(pv) < C - 0.6) return at(-C, sg * C);   // behind: to the back corner first
+    if (pu < -FORT_HALF - 0.9 && Math.abs(pv) < C - 0.6) return at(-C, sg * C);   // behind: to the back corner first
     return at(C, sg * C);                                              // alongside: to the front corner
   }
   doorBusy(f, me) {
@@ -1322,6 +1352,7 @@ export class Enemies {
       if (s.deadT > 12) this.remove(s);
       return;
     }
+    if (s.chute) { g.paratroops.stepSoldier(s, dt); return; }
     s.blockT = (s.blockT || 0) - dt;
     if (s.blockT <= 0 && !s.raft && !s.swimming && !(s.climbT > 0)) { s.blockT = 0.5; this.unstick(s); }
     s.hurtT += dt; s.reloadT = Math.max(0, s.reloadT - dt); s.throwT = Math.max(0, s.throwT - dt); s.climbT = Math.max(0, s.climbT - dt);
@@ -1792,6 +1823,13 @@ export class Enemies {
   respawnPending(dt) {
     for (const p of this.pending) p.t -= dt;
     for (const p of this.pending.filter((q) => q.t <= 0)) {
+      // the campaign: he goes to another country his side holds; a fresh
+      // soldier from this country's reserves may take his place here
+      if (this.game.campaign && !p.counted) {
+        p.counted = true;
+        if (!this.game.campaign.defeated(p.faction)) { this.pending.splice(this.pending.indexOf(p), 1); continue; }
+      }
+      if (this.game.battle) { this.pending.splice(this.pending.indexOf(p), 1); continue; }   // battles: no comebacks
       const forts = this.ownForts(p.faction);
       if (forts.length) {
         const f = forts[Math.floor(Math.random() * forts.length)];
@@ -1967,7 +2005,9 @@ export class Enemies {
       if (Math.hypot(pl.vel.x, pl.vel.z) > 3) p *= 0.7;
       if (pl.crouch) p *= 0.8;
       if (night && !g.lightOn) p *= 0.6;
+      if (pl.chute) p *= 0.3;                                    // a small, swinging target under a canopy
     } else if (night) p *= 0.75;
+    if (tgt.ref && tgt.ref.chute) p *= 0.3;
     if (tgt.kind === 'soldier' && tgt.ref.crouch) p *= 0.6;      // harder to hit in cover
     if (tgt.kind === 'tank') p = 0.9;
     let end;

@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
 import { TOWN_SIZE, TOWN_LAYOUT } from './towngen.js';
+import { startCountry } from './campaign.js';
+import { BATTLE } from './countries.js';
+import { playTravel } from './travel.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
 import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
@@ -98,13 +101,48 @@ class App {
   }
 
   // War: side ('allies' | 'axis'), difficulty; day and night always cycle
-  newGame({ side = 'allies', difficulty = 'medium', name, gameType = 'open' }) {
+  // Open World: a campaign across 14 countries, starting in your side's
+  // home country. Battles: one real battle, started fresh and never saved.
+  newGame({ side = 'allies', difficulty = 'medium', name, gameType = 'open', battle = null }) {
     const size = WAR_SIZE, mode = 'war', sub = 'allies', timeMode = 'cycle', mission = null;
-    const now = Date.now();
+    const now = Date.now(), seed = (Math.random() * 2 ** 31) | 0;
+    if (gameType === 'battle' && BATTLE[battle]) {
+      this.startGame({ v: SAVE_FORMAT, id: 'battle', name: t('battle.' + battle), created: now, updated: now,
+        cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'battle', battle, country: BATTLE[battle].c, mission } });
+      return;
+    }
     this.startGame({
-      v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, side, difficulty, timeMode, gameType, mission },
+      v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now, followers: 4,
+      cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'open', mission, country: startCountry(side) },
     });
+  }
+  // Travel to another country (from the officer's room): this country is
+  // stored as a small record, the chosen soldiers come along, a short boat
+  // or plane scene plays (Skip ends it) and the new country loads.
+  async travel({ to, by, n }) {
+    const g = this.game;
+    if (!g || !g.campaign || to === g.cfg.country) return;
+    g.flushStats();
+    const s = g.toSave(), C = g.campaign, side = g.cfg.side;
+    const worlds = Object.assign({}, s.worlds);
+    worlds[g.cfg.country] = { edits: s.edits, forts: s.forts, pickups: s.pickups, rafts: s.rafts };
+    const take = Math.max(0, Math.min(n, C.here.gar[side] || 0));
+    C.here.gar[side] -= take;
+    C.rec(to).gar[side] = (C.rec(to).gar[side] || 0) + take;
+    const W = worlds[to] || {};
+    delete worlds[to];
+    const night = (g.time % 1) < 0.22 || (g.time % 1) > 0.8;
+    const next = Object.assign({}, s, {
+      cfg: Object.assign({}, s.cfg, { country: to }), edits: W.edits || null, forts: W.forts || null, pickups: W.pickups || [], rafts: W.rafts || [],
+      player: null, followers: Math.min(take, 16), arrival: { by }, worlds, campaign: C.state, weather: null,
+    });
+    writeSave(Object.assign({}, next, { arrival: { by: 'hq' } }));
+    g.dispose(); this.game = null;
+    document.body.classList.remove('ingame');
+    this.input.enabled = false; this.input.exitLock();
+    this.ui.hide();
+    await playTravel(by, night, t('cname.' + to), this.input.touch);
+    this.startGame(next);
   }
   loadGame(id) {
     const s = readSave(id);
@@ -118,6 +156,7 @@ class App {
     this.ui.show('loading', { town: save.cfg && save.cfg.mode === 'town' });
     await new Promise((r) => setTimeout(r, 30));
     this.game = new Game(this, save);
+    if (save.cfg.gameType === 'battle') this.lastBattleSide = { side: save.cfg.side, difficulty: save.cfg.difficulty };
     document.body.classList.add('ingame');
     this.game.resize();
     this.game.update(0);
@@ -162,6 +201,7 @@ class App {
 
   saveGame(quiet) {
     if (!this.game) return;
+    if (this.game.battle) return;                 // battles are never saved
     this.game.flushStats();
     const ok = this.game.town ? this.game.town.save() : writeSave(this.game.toSave());
     if (!quiet || !ok) this.game.hud.toast(t(ok ? 'hud.saved' : 'hud.saveFail'));
@@ -185,13 +225,13 @@ class App {
     if (!this.game) return;
     this.game.flushStats();
     this.saveGame(true);
-    const town = !!this.game.town;
+    const town = !!this.game.town, battle = !!this.game.battle;
     this.game.dispose();
     this.game = null;
     document.body.classList.remove('ingame');
     this.input.enabled = false;
     this.input.exitLock();
-    if (!silent) { this.ui.show(town ? 'town' : 'main'); this.menuMusic(); }
+    if (!silent) { this.ui.show(town ? 'town' : battle ? 'battles' : 'main', battle ? this.lastBattleSide : {}); this.menuMusic(); }
   }
 
   loop(now) {

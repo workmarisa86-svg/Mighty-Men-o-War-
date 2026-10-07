@@ -3,14 +3,18 @@ import * as THREE from 'three';
 import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './config.js';
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
-import { generate } from './worldgen.js';
+import { generate, landFor, hasCoast, COAST } from './worldgen.js';
+import { Campaign } from './campaign.js';
+import { Battle } from './battle.js';
+import { Paratroops, DROP_Y } from './paratroops.js';
+import { COUNTRY, WEATHER } from './countries.js';
 import { generateTown } from './towngen.js';
 import { TownLife } from './town.js';
 import { Bubbles } from './bubbles.js';
 import { AimUse } from './aimuse.js';
 import { UNIFORMS } from './nations.js';
 import { buildChunk, skyAt } from './mesher.js';
-import { buildAtlas, buildCracks } from './textures.js';
+import { buildAtlas, buildCracks, paintLand } from './textures.js';
 import { Player } from './player.js';
 import { Sky } from './sky.js';
 import { Raft } from './raft.js';
@@ -71,8 +75,10 @@ export class Game {
       if (id === B.CAMPFIRE) this.campfires.add(x, y, z);
     };
 
-    // materials
+    // materials (a War country repaints its ground: snow, desert, jungle...)
     this.atlas = buildAtlas();
+    this.land = this.townMode ? null : landFor(this.cfg);
+    paintLand(this.land ? this.land.ground : null);
     const tex = new THREE.CanvasTexture(this.atlas.canvas);
     tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
@@ -161,6 +167,10 @@ export class Game {
     if (!this.townMode) this.vm.setUniform(UNIFORMS[(this.cfg.side || 'allies') === 'axis' ? 'de' : 'us'].tunic);
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
+    // War, Stage 2: the Open World campaign (14 countries) or one battle
+    this.campaign = !this.townMode && this.cfg.gameType === 'open' && this.cfg.country ? new Campaign(this, save.campaign) : null;
+    this.battle = !this.townMode && this.cfg.gameType === 'battle' ? new Battle(this) : null;
+    this.paratroops = this.townMode ? null : new Paratroops(this);
     this.forts = new Forts(this, save.forts);
     this.cabin = new Cabin(this, save.cabin);
     this.enemies = new Enemies(this, { followers: save.followers });
@@ -175,7 +185,11 @@ export class Game {
     this.hud = new HUD(this);
     this.bubbles = new Bubbles(this);
     this.aimUse = this.townMode ? null : new AimUse(this);
-    this.mission = null;      // the old missions are gone (Battles come later)
+    this.mission = null;      // the old missions are gone (replaced by Battles)
+    // arriving in a country: by boat (beach landing), by plane (parachute),
+    // overland (battles) or straight into one of your headquarters
+    if (!this.townMode && (save.arrival || !save.player) && (this.campaign || this.battle)) this.arrive(save.arrival || this.defaultArrival());
+    if (this.campaign) this.campaign.arrived();
     this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
@@ -273,6 +287,7 @@ export class Game {
     const playing = !this.paused && !this.overlay;
 
     this.time += dt / DAY_SECONDS;
+    if (!this.paused) this.stats.played = (this.stats.played || 0) + dt;     // time played (seconds)
     this.shotT = Math.max(0, (this.shotT || 0) - dt);
     this.updateWeather(dt);
 
@@ -310,6 +325,9 @@ export class Game {
       this.animals.update(dt); this.pickups.update(dt);
       this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
       if (this.mission) this.mission.update(dt);
+      if (this.campaign) this.campaign.update(dt);
+      if (this.battle) this.battle.update(dt);
+      if (this.paratroops) this.paratroops.update(dt);
       if (this.town) this.town.update(dt);
       this.supplyT -= dt;
       this.updateDefuse(dt);
@@ -361,6 +379,7 @@ export class Game {
 
   updateWeather(dt) {
     const w = this.weather;
+    if (!this.town && (this.campaign || this.battle)) { this.warWeather(dt); return; }
     w.timer -= dt;
     if (w.timer <= 0) {
       w.timer = 120 + Math.random() * 260;
@@ -371,6 +390,106 @@ export class Game {
     this.sky.snow = snow;
     setRain(this.paused || snow ? 0 : w.rain);
     if (!this.paused && !snow && w.rain > 0.75 && Math.random() < dt / 40 && (!this.town || this.town.season === 'summer' || this.town.season === 'spring')) sfx.thunder();
+  }
+
+  // War climates: in the Open World each country's weather never changes;
+  // in a battle it follows the real battle in phases with smooth changes.
+  // Rain and snow slow running a little and shorten long views; footsteps
+  // and gunshots carry less far; fog and haze shorten the view; bright sun
+  // gives harsher light.
+  warWeather(dt) {
+    const w = this.weather;
+    let A, Bw = null, mix = 0;
+    if (this.battle) { const bw = this.battle.weather(); A = bw.a; Bw = bw.b; mix = bw.mix; }
+    else A = WEATHER[COUNTRY[this.cfg.country].climate];
+    const lerp = (k) => (A[k] || 0) + ((Bw ? Bw[k] || 0 : A[k] || 0) - (A[k] || 0)) * mix;
+    const cur = mix > 0.5 && Bw ? Bw : A;
+    this.climateNow = cur;
+    const amount = lerp('amount') * (cur.precip === 'none' ? 0 : 1);
+    w.target = amount;
+    w.rain += Math.sign(w.target - w.rain) * Math.min(Math.abs(w.target - w.rain), dt * 0.05);
+    if (!this.weatherInit) { this.weatherInit = true; w.rain = w.target; }
+    const snow = cur.precip === 'snow' || !!cur.ashfall;
+    this.sky.snow = snow; this.sky.ash = !!cur.ashfall;
+    this.sky.cloud = lerp('cloud'); this.sky.bright = cur.sun === 'bright';
+    const tint = cur.dust ? 0xb89a70 : cur.smoke ? 0x6a6258 : cur.ashfall ? 0x6a6a68 : null;
+    if (tint) { this.sky.tint = this.sky.tint || new THREE.Color(); this.sky.tint.setHex(tint); this.sky.tintK = 0.45; } else this.sky.tint = null;
+    const fog = Math.min(0.85, lerp('fog') + w.rain * 0.25);
+    const far = (this.renderDist() + 1.5) * CHUNK;
+    if (fog > 0.03) {
+      if (!this.scene.fog) this.scene.fog = new THREE.Fog(0x808080, 10, far);
+      this.scene.fog.near = 6 + (1 - fog) * far * 0.35;
+      this.scene.fog.far = Math.max(40, far * (1 - fog * 0.75));
+    } else this.scene.fog = null;
+    this.weatherSight = 1 - fog * 0.5;
+    this.weatherHear = 1 - Math.min(0.4, w.rain * 0.35 + fog * 0.15);
+    if (this.ashT === undefined) this.ashT = 0;
+    setRain(this.paused || snow ? 0 : w.rain);
+    if (!this.paused && cur.thunder && Math.random() < dt / 30) sfx.thunder();
+  }
+
+  // arrival in a country (see the travel scenes in main.js)
+  defaultArrival() {
+    if (this.battle) {
+      const b = this.battle.b;
+      if (this.battle.role === 'defend') return { by: 'hq' };
+      return { by: b.by === 'boat' ? 'boat' : b.by === 'plane' ? 'plane' : 'land' };
+    }
+    return { by: 'hq' };
+  }
+  arrive(a) {
+    const g = this, p = this.player, E = this.enemies, w = this.world;
+    const own = this.forts.list.filter((f) => f.owner === 'ally');
+    const followers = E.followers();
+    const place = (x, z) => { const y = w.surfaceY(Math.floor(x), Math.floor(z)) + 1; p.pos.set(x, y, z); p.vel.set(0, 0, 0); };
+    let by = a.by;
+    if (by === 'hq' && !own.length) by = hasCoast(this.cfg) ? 'boat' : 'plane';
+    if (by === 'hq') {
+      const f = (this.battle && this.battle.home()) || own[Math.floor(Math.random() * own.length)];
+      p.pos.set(f.cx + 0.5, f.base, f.cz + 0.5); p.vel.set(0, 0, 0);
+    } else if (by === 'boat') {
+      // the landing beach: barbed wire along it, enemy fire from inland
+      const x = 40 + Math.random() * (w.W - 80);
+      let z = w.D - COAST - 2;
+      while (z > 10 && w.surfaceY(Math.floor(x), z) < SEA) z--;
+      place(x + 0.5, z + 2.5);
+      for (const s of followers) { s.pos.set(p.pos.x + (Math.random() - 0.5) * 14, p.pos.y, p.pos.z + 1 + Math.random() * 3); }
+      const hostile = this.forts.list.some((f) => f.owner === 'enemy');
+      if (hostile) {
+        for (let k = 0; k < 70; k++) {
+          const wx = Math.floor(x - 30 + Math.random() * 60), wz = Math.floor(z - 4 - Math.random() * 8);
+          const y = w.surfaceY(wx, wz) + 1;
+          if (y > SEA && w.get(wx, y, wz) === B.AIR && Math.abs(wx - x) > 1.5) w.set(wx, y, wz, B.WIRE);
+        }
+        const at = E.farSpot(28, 'enemy', { x, z: z - 34 }, 12);
+        if (at) E.missionSquad('enemy', 5, at, { player: true, x: p.pos.x, z: p.pos.z });
+      }
+      this.hud.bigMessage(t('travel.ashore', { name: t('cname.' + this.cfg.country) }), hostile ? t('travel.ashoreSub') : '');
+    } else if (by === 'plane') {
+      // jump over open ground away from the enemy's headquarters
+      let best = null;
+      for (let k = 0; k < 40; k++) {
+        const x = 30 + Math.random() * (w.W - 60), z = 30 + Math.random() * (w.D - 60 - (hasCoast(this.cfg) ? COAST : 0));
+        const d = Math.min(...this.forts.list.filter((f) => f.owner === 'enemy').map((f) => Math.hypot(f.cx - x, f.cz - z)), 999);
+        const score = -Math.abs(d - 75);
+        if (!best || score > best.score) best = { x, z, score };
+      }
+      this.paratroops.playerJump(best.x, best.z);
+      // your soldiers jump with you and land scattered around
+      for (const s of followers) {
+        const a2 = Math.random() * Math.PI * 2, r = 5 + Math.random() * 18;
+        s.pos.set(best.x + Math.cos(a2) * r, DROP_Y - 2 - Math.random() * 6, best.z + Math.sin(a2) * r);
+        s.chute = { vx: (Math.random() - 0.5) * 1.4, vz: (Math.random() - 0.5) * 1.4 };
+        s.chuteMesh = null; this.paratroops.air.push(s);
+        this.paratroops.attachCanopy(s);
+      }
+    } else {
+      // overland: from the far edge of the country with your squad
+      const x = 40 + Math.random() * (w.W - 80), z = 12;
+      place(x + 0.5, z + 0.5);
+      for (const s of followers) s.pos.set(p.pos.x + (Math.random() - 0.5) * 8, p.pos.y, p.pos.z + Math.random() * 4);
+      this.hud.bigMessage(t('cname.' + this.cfg.country), this.battle ? t('battle.' + this.battle.b.id) : '');
+    }
   }
 
   handleLook(input) {
@@ -613,6 +732,7 @@ export class Game {
     if (this.blockOverlapsBodies(x, y, z)) return;
     if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     this.world.set(x, y, z, def.block);
+    if (this.campaign) this.campaign.noteBuilt(def.block);
     this.take(item);
     sfx.place();
     this.hud.dirtyHotbar = true;
@@ -743,7 +863,7 @@ export class Game {
   // a random spot with 4-5 allies; alone, the cabin (spawn point).
   respawn() {
     const p = this.player;
-    p.vel.set(0, 0, 0);
+    p.vel.set(0, 0, 0); p.chute = false;
     if (this.cfg.sub === 'allies') {
       const own = this.forts.list.filter((f) => f.owner === 'ally');
       if (own.length) {
@@ -771,7 +891,7 @@ export class Game {
     const f = this.forts.fortAt(new THREE.Vector3(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5));
     if (!f || f.owner !== 'ally') { this.hud.toast(t('fort.notYours')); sfx.error(); return true; }
     if (this.supplyT > 0) { this.hud.toast(t('fort.rationsWait')); return true; }
-    this.supplyT = 30;
+    this.supplyT = 8;                  // the HQ's food storeroom never runs out
     this.give('meat_cooked', 2);
     this.player.hunger = 100;
     sfx.done();
@@ -869,6 +989,7 @@ export class Game {
     if (this.town) { this.scopeView.close(); this.craft = null; this.breath = AIR; this.town.onDeath(cause); return; }
     if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
     if (this.mission) this.mission.playerDied();
+    if (this.battle) { this.battle.playerDied(); this.player.health = 100; return; }
     this.stats.aloneSince = this.time;
     this.inv.counts.scuba = 0;          // scuba gear is lost every time you are defeated
     const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
@@ -915,7 +1036,7 @@ export class Game {
   flushStats() {
     if (this.town) return;            // Town Life keeps its own statistics
     const f = this.statsFlushed, s = this.stats, d = {};
-    for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals']) d[k] = (s[k] || 0) - (f[k] || 0);
+    for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals', 'countries', 'battles', 'played']) d[k] = (s[k] || 0) - (f[k] || 0);
     d.days = Math.max(0, this.time - (f.time || 0));
     const maxes = this.cfg.sub === 'alone' ? { longestAlone: this.time - (s.aloneSince || 0) } : {};
     addStats(this.cfg.difficulty, d, maxes);
@@ -940,6 +1061,7 @@ export class Game {
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
       edits: this.world.serializeEdits(), cabin: this.cabin.toSave(), mission: this.mission ? this.mission.toSave() : null,
+      campaign: this.campaign ? this.campaign.state : undefined, worlds: this.save.worlds || {},
     };
   }
 
@@ -949,6 +1071,9 @@ export class Game {
 
   dispose() {
     setRain(0);
+    paintLand(null); this.scene.fog = null;
+    if (this.paratroops) this.paratroops.dispose();
+    if (this.campaign) this.campaign.dispose();
     if (this.town) this.town.dispose();
     this.bubbles.dispose(); if (this.aimUse) this.aimUse.dispose();
     document.body.classList.remove('townlife');

@@ -11,6 +11,7 @@ import { SIDE_NATIONS, flagURL } from './nations.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
 import { installTownUI } from './townui.js';
+import { installWarUI } from './warui.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -204,7 +205,7 @@ export class UI {
       body = `<p class="muted small">${t('side.' + st.side)} · ${t('diff.' + st.difficulty)}</p>
         <p class="label">${t('new.type')}</p><div class="choices">
         <div class="choice small ${st.gameType === 'open' ? 'on' : ''}" data-gt="open"><h3>${t('new.type.open')}</h3><p>${t('new.type.openDesc')}</p></div>
-        <div class="choice small locked" data-gt="battles"><h3>${t('new.type.battles')}</h3><p>${t('new.type.battlesSoon')}</p></div></div>
+        <div class="choice small" data-gt="battles"><h3>${t('new.type.battles')}</h3><p>${t('new.type.battlesDesc')}</p></div></div>
         <p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
@@ -212,7 +213,7 @@ export class UI {
     const panel = this.panel(t('new.title'), body, { onBack: back, wide: true });
     panel.querySelectorAll('.choice[data-side]').forEach((c) => c.onclick = () => go({ step: 'diff', side: c.dataset.side }));
     panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => go({ step: 'final', difficulty: c.dataset.d }));
-    panel.querySelectorAll('.choice[data-gt]').forEach((c) => c.onclick = () => { if (c.dataset.gt === 'battles') { this.app.input && sfx.error(); return; } go({ gameType: 'open' }); });
+    panel.querySelectorAll('.choice[data-gt]').forEach((c) => c.onclick = () => { if (c.dataset.gt === 'battles') { this.show('battles', { side: st.side, difficulty: st.difficulty }); return; } go({ gameType: 'open' }); });
     const sb = panel.querySelector('#startbtn');
     if (sb) sb.onclick = () => {
       const name = panel.querySelector('#wname').value.trim() || t('new.defaultName', { n: 1 });
@@ -224,7 +225,7 @@ export class UI {
   r_load() {
     const saves = listSaves();
     const modeLabel = (m) => `${t('mode.war')} · ${t('side.' + (m.side || 'allies'))} · ${t('diff.' + m.difficulty)}` +
-      ' · ' + t('new.type.open');
+      ' · ' + t('new.type.open') + (m.country ? ' · ' + t('cname.' + m.country) : '') + (m.owned != null ? ' · ' + t('load.owned', { n: m.owned }) : '');
     const body = saves.length ? `<div class="saves">${saves.map((m) => `
       <div class="save">
         <div><h3>${esc(m.name)}</h3><p>${modeLabel(m)} · ${t('load.day', { n: m.day })}</p>
@@ -449,7 +450,7 @@ export class UI {
   }
   r_stats({ from } = {}) {
     const S = loadStats();
-    const rows = [['days', (v) => v.toFixed(1)], ['fortsCaptured'], ['fortsLost'], ['enemies'], ['animals'], ['longestAlone', (v) => v.toFixed(1)], ['missions'], ['medals']];
+    const rows = [['days', (v) => v.toFixed(1)], ['fortsCaptured'], ['fortsLost'], ['enemies'], ['animals'], ['countries'], ['battles'], ['played', (v) => `${Math.floor(v / 3600)}:${String(Math.floor(v / 60) % 60).padStart(2, '0')}`]];
     const val = (o, k, f) => k === 'medals' ? `<i class="medal gold"></i>${o.gold} <i class="medal silver"></i>${o.silver} <i class="medal bronze"></i>${o.bronze}` : f ? f(o[k] || 0) : (o[k] || 0);
     const diffs = DIFFICULTIES.filter((d) => S.byDiff[d]);
     const body = `<div class="stats-wrap"><table class="stats"><thead><tr><th></th><th>${t('stats.total')}</th>${diffs.map((d) => `<th>${t('diff.' + d)}</th>`).join('')}</tr></thead><tbody>
@@ -468,7 +469,7 @@ export class UI {
       <div class="legend"><span><i style="background:${OWNER_COLORS.ally}"></i>${t('map.ally')}</span><span><i style="background:${OWNER_COLORS.enemy}"></i>${t('map.enemy')}</span>
       <span><i style="background:${OWNER_COLORS.none}"></i>${t('map.none')}</span><span><i class="you"></i>${t('map.you')}</span>${g.mission ? `<span><i class="obj"></i>${t('map.objective')}</span>` : ''}</div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
-    const panel = this.panel(t('menu.map'), body, { wide: true, onBack: close });
+    const panel = this.panel(g.cfg.country ? t('map.countryTitle', { name: t('cname.' + g.cfg.country) }) : t('menu.map'), body, { wide: true, onBack: close });
     panel.classList.add('mappanel');
     // a clear Close button; on phones tapping the map itself closes it too
     const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
@@ -492,6 +493,11 @@ export class UI {
     }
     const cab = w.sites.find((s) => s.type === 'cabin');
     if (cab) { c.fillStyle = '#d8c890'; c.strokeStyle = '#000'; c.beginPath(); const X = cab.x * sc, Y = cab.z * sc, r = 7 * dpr; c.moveTo(X, Y - r); c.lineTo(X + r, Y); c.lineTo(X + r * 0.7, Y); c.lineTo(X + r * 0.7, Y + r); c.lineTo(X - r * 0.7, Y + r); c.lineTo(X - r * 0.7, Y); c.lineTo(X - r, Y); c.closePath(); c.fill(); c.stroke(); }
+    // your soldiers, and enemies close enough to have been seen
+    for (const s of g.enemies.list) {
+      if (!s.alive || (s.faction === 'enemy' && s.pos.distanceTo(g.player.pos) > 45)) continue;
+      c.fillStyle = OWNER_COLORS[s.faction]; c.beginPath(); c.arc(s.pos.x * sc, s.pos.z * sc, 2.4 * dpr, 0, Math.PI * 2); c.fill();
+    }
     const mk = g.mission && g.mission.marker();
     if (mk) { c.strokeStyle = '#ffd040'; c.lineWidth = 3 * dpr; c.beginPath(); c.arc(mk.x * sc, mk.z * sc, 10 * dpr, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.arc(mk.x * sc, mk.z * sc, 3 * dpr, 0, Math.PI * 2); c.fillStyle = '#ffd040'; c.fill(); }
     const p = g.player;
@@ -547,3 +553,4 @@ export class UI {
 export { esc };
 
 installTownUI(UI);
+installWarUI(UI);

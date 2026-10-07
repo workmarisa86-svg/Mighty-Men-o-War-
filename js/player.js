@@ -151,6 +151,11 @@ export class Player {
       v.y = up * speed * 0.8;
       const k = 1 - Math.exp(-10 * dt);
       v.x += (wx * speed - v.x) * k; v.z += (wz * speed - v.z) * k;
+    } else if (this.chute) {
+      // under a parachute: drift down slowly, steer with the move controls
+      const k = 1 - Math.exp(-1.6 * dt);
+      v.x += (wx * 4.2 - v.x) * k; v.z += (wz * 4.2 - v.z) * k;
+      v.y = Math.max(v.y - BODY.gravity * dt, -3.2);
     } else {
       const k = 1 - Math.exp(-(this.onGround ? 14 : this.swimming ? 6 : 2.5) * dt);
       v.x += (wx * speed - v.x) * k; v.z += (wz * speed - v.z) * k;

@@ -54,21 +54,27 @@ export class Sky {
     const elev = Math.sin(ang);
     const day = THREE.MathUtils.smoothstep(elev, -0.12, 0.25);
     this.daylight = day;
+    // War climates: cloud cover dims the sun like rain does; bright sun is harsher
+    const rainP = rain;
+    rain = Math.max(rain, this.cloud || 0);
+    const bright = this.bright ? 1 : 0;
     const dusk = Math.max(0, 1 - Math.abs(elev) / 0.3) * (1 - rain * 0.7);
 
     this.color.copy(SKY_NIGHT).lerp(SKY_DAY, day);
     this.color.lerp(SKY_DUSK, dusk * 0.45);
     this.color.lerp(SKY_RAIN.clone().multiplyScalar(0.25 + day * 0.75), rain * 0.7);
+    if (this.tint) this.color.lerp(this.tint, this.tintK * (0.3 + day * 0.5));      // dust, smoke or ash in the air
     this.scene.background = this.color;
+    if (this.scene.fog) this.scene.fog.color.copy(this.color);
 
     const sunDir = new THREE.Vector3(Math.cos(ang) * 0.8, elev, 0.35).normalize();
     this.sun.position.copy(camPos).addScaledVector(sunDir, 100);
     this.sun.target.position.copy(camPos);
     const moonLight = 0.12 * (1 - day);
-    this.sun.intensity = day * (1.1 - rain * 0.55) + moonLight;
+    this.sun.intensity = day * (1.1 + bright * 0.3 - rain * 0.55) + moonLight;
     this.sun.color.setHex(day > 0.2 ? 0xfff0dc : 0x8c9cc0);
     if (elev < 0) this.sun.position.copy(camPos).addScaledVector(sunDir.clone().negate(), 100);
-    this.hemi.intensity = 0.12 + day * (0.95 - rain * 0.3);
+    this.hemi.intensity = 0.12 + day * (0.95 - bright * 0.2 - rain * 0.3);
     this.ambient.intensity = 0.06 + day * 0.15;
 
     this.sunMesh.position.copy(camPos).addScaledVector(sunDir, 380);
@@ -83,6 +89,7 @@ export class Sky {
     this.stars.material.opacity = (1 - day) * (1 - rain);
     this.stars.visible = this.stars.material.opacity > 0.02;
 
+    rain = rainP;
     // rain streaks follow the camera
     this.rain.visible = rain > 0.02;
     if (this.rain.visible) {
@@ -109,6 +116,7 @@ export class Sky {
       this.rain.geometry.attributes.position.needsUpdate = true;
       this.rain.material.color.setScalar(snow ? 0.75 + day * 0.25 : 0.35 + day * 0.35);
       this.rain.material.opacity = snow ? 0.85 : 0.4;
+      if (snow && this.ash) this.rain.material.color.setRGB(0.3, 0.29, 0.28);           // falling volcanic ash
     }
   }
 }

@@ -9,6 +9,8 @@ export const B = {
   CHARCOAL: 26, GOLD: 27, FARMLAND: 28, PATH: 29, FENCE: 30,
   SPROUT: 31, WHEAT_G: 32, WHEAT_R: 33, CARROT_G: 34, CARROT_R: 35, CABBAGE_G: 36, CABBAGE_R: 37, WILTED: 38,
   LADDER: 39,
+  // War headquarters rooms
+  MEDICAL: 40, ARMORY: 41, MAPTABLE: 42,
 };
 
 export const BLOCKS = [];
@@ -61,6 +63,9 @@ for (const [id, name] of [[B.SPROUT, 'sprout'], [B.WHEAT_G, 'wheat_g'], [B.WHEAT
   def(id, { name, crop: true, solid: false, opaque: false, render: 'cross', tiles: { top: name, side: name, bottom: name }, hard: 0.05, drop: null, color: [0.4, 0.5, 0.2] });
 }
 // ladder: two side rails and even rungs (see-through), climbed like a trunk
+def(B.MEDICAL, { name: 'medical', tiles: { top: 'med_top', side: 'med_side', bottom: 'fort_top' }, hard: Infinity, fort: true, color: [0.75, 0.75, 0.7] });
+def(B.ARMORY, { name: 'armory', tiles: { top: 'planks', side: 'rack', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.4, 0.32, 0.22] });
+def(B.MAPTABLE, { name: 'maptable', tiles: { top: 'map_top', side: 'planks', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.6, 0.55, 0.42] });
 def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'wood', color: [0.42, 0.32, 0.2] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 

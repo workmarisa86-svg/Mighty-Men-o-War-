@@ -12,6 +12,8 @@ const TILE_NAMES = [
   'charcoal', 'gold', 'farmland', 'path', 'fence',
   'sprout', 'wheat_g', 'wheat_r', 'carrot_g', 'carrot_r', 'cabbage_g', 'cabbage_r', 'wilted',
   'ladder', 'ladder_top',
+  // War headquarters rooms
+  'med_side', 'med_top', 'rack', 'map_top',
 ];
 // season currently painted into the seasonal tiles (grass, leaves): null = War look
 let SEASON = null;
@@ -264,6 +266,28 @@ const PAINT = {
     p.rect(9, 11, 14, 10, [200, 186, 140]);           // stencilled ration label
     p.rect(12, 14, 8, 1, [60, 50, 34]); p.rect(12, 17, 8, 1, [60, 50, 34]);
   },
+  // first-aid cabinet: pale enamel, a dark green cross
+  med_side(p) {
+    p.fill([196, 194, 182], 10);
+    p.rect(0, 0, 32, 2, [120, 118, 110]); p.rect(0, 30, 32, 2, [120, 118, 110]); p.rect(15, 2, 1, 28, [150, 148, 138]);
+    p.rect(6, 11, 6, 2, [46, 92, 60]); p.rect(8, 9, 2, 6, [46, 92, 60]);
+    p.rect(21, 14, 2, 4, [90, 88, 80]);
+  },
+  med_top(p) { p.fill([180, 178, 168], 10); p.rect(12, 14, 8, 4, [46, 92, 60]); p.rect(14, 12, 4, 8, [46, 92, 60]); },
+  // weapon rack: rifles standing in a wooden frame
+  rack(p) {
+    p.fill([62, 50, 36], 10);
+    for (let x = 3; x < 30; x += 6) { p.rect(x, 3, 2, 24, [52, 46, 40]); p.rect(x, 18, 2, 9, [92, 66, 42]); p.rect(x - 1, 5, 1, 2, [40, 38, 34]); }
+    p.rect(0, 27, 32, 3, [96, 74, 48]); p.rect(0, 8, 32, 2, [96, 74, 48]);
+  },
+  // war-map table top: a paper map with sea, land and pins
+  map_top(p) {
+    p.fill([196, 184, 150], 8);
+    p.blobs(5, [130, 150, 150], 4, 8);
+    p.blobs(4, [150, 160, 112], 3, 8);
+    for (const [x, y, c] of [[8, 9, [170, 40, 40]], [20, 14, [40, 60, 140]], [14, 24, [170, 40, 40]], [25, 6, [40, 60, 140]]]) p.rect(x, y, 2, 2, c);
+    p.rect(0, 0, 32, 1, [110, 90, 60]); p.rect(0, 31, 32, 1, [110, 90, 60]); p.rect(0, 0, 1, 32, [110, 90, 60]); p.rect(31, 0, 1, 32, [110, 90, 60]);
+  },
   supply_top(p) { PAINT.planks(p); p.rect(13, 0, 6, 32, [64, 52, 36]); },
   bedrock(p) {
     p.fill([36, 35, 34], 14);
@@ -465,4 +489,42 @@ export function cubeIcon(top, side, size = 48) {
   face(side, 20 / S, -10 / S, 0, 22 / S, 24, 22, 0.42);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   return c;
+}
+
+// War, Stage 2: each country's landscape repaints the ground tiles (grass,
+// dirt, sand, leaves) in War's muted palette: snowfields, lush or jungle
+// green, red desert, dry yellow hills, dark volcanic ash. null: back to the
+// standard look.
+const LAND_COLORS = {
+  grass: { grass: [[74, 88, 52], [64, 78, 46], [88, 96, 58]], side: [70, 84, 50], leaves: [[58, 70, 42], [48, 60, 36], [70, 80, 50]] },
+  lush: { grass: [[62, 92, 50], [54, 82, 44], [76, 102, 56]], side: [60, 88, 48], leaves: [[44, 74, 40], [38, 64, 34], [56, 86, 46]] },
+  jungle: { grass: [[44, 74, 38], [36, 64, 32], [56, 84, 42]], side: [42, 70, 36], leaves: [[30, 60, 30], [26, 50, 26], [40, 72, 36]] },
+  snow: { grass: [[214, 220, 226], [196, 204, 212], [226, 230, 236]], side: [206, 212, 220], leaves: [[44, 60, 44], [210, 216, 222], [36, 52, 38]], dirt: [[200, 206, 212], [120, 104, 86]] },
+  dry: { grass: [[132, 122, 76], [118, 108, 66], [146, 134, 86]], side: [126, 116, 72], leaves: [[92, 100, 70], [80, 88, 60], [104, 110, 78]] },
+  red: { sand: [[158, 92, 58], [140, 80, 50], [170, 104, 66]], dirt: [[132, 82, 56], [110, 68, 46]], leaves: [[96, 96, 62], [84, 84, 54], [108, 104, 70]] },
+  ash: { sand: [[62, 60, 58], [52, 50, 48], [74, 72, 68]], dirt: [[70, 66, 62], [54, 52, 50]], grass: [[78, 84, 62], [66, 72, 54], [88, 92, 70]], side: [72, 74, 60], leaves: [[50, 60, 44], [42, 52, 38], [60, 68, 50]] },
+};
+let LAND = null;
+function speckle(p, cols, dens = 1) {
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (p.r() < dens) p.px(x, y, jit(cols[p.r() * cols.length | 0], p.r, 14));
+}
+export function paintLand(kind) {
+  const a = buildAtlas();
+  if (LAND === kind) return false;
+  LAND = kind;
+  const C = kind && LAND_COLORS[kind];
+  const paint = (name, fn) => {
+    const i = TILE_NAMES.indexOf(name);
+    const tx = (i % COLS) * TILE, ty = Math.floor(i / COLS) * TILE;
+    a.ctx.clearRect(tx, ty, TILE, TILE);
+    const p = painter(a.ctx, tx, ty, 1000 + i * 7919);
+    if (C && fn) fn(p); else PAINT[name](p);
+  };
+  paint('grass_top', C && C.grass && ((p) => { speckle(p, C.grass); }));
+  paint('grass_side', C && C.grass && ((p) => { PAINT.dirt(p); p.rect(0, 0, 32, 5, C.side); for (let x = 0; x < 32; x++) if (p.r() < 0.6) p.rect(x, 5, 1, 1 + (p.r() * 3 | 0), C.side); }));
+  paint('leaves', C && C.leaves && ((p) => { p.clear(); for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (p.r() < 0.58) p.px(x, y, jit(C.leaves[p.r() * C.leaves.length | 0], p.r, 12)); }));
+  paint('sand', C && C.sand && ((p) => { speckle(p, C.sand); for (let i = 0; i < 20; i++) p.px(p.r() * 32 | 0, p.r() * 32 | 0, mix(C.sand[0], [30, 26, 22], 0.4)); }));
+  paint('dirt_top', C && C.dirt && ((p) => { p.fill(C.dirt[0], 14); p.blobs(5, C.dirt[1], 2, 10); }));
+  a.version++;
+  return true;
 }
