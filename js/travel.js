@@ -20,7 +20,7 @@ import { Character } from './characters.js';
 import { Sky } from './sky.js';
 import { QUALITY } from './config.js';
 import { crossInsignia } from './nations.js';
-import { audioCtx } from './audio.js';
+import { audioCtx, audioOut } from './audio.js';
 import { t, getLang } from './i18n.js';
 
 // ---------------------------------------------------------------- textures
@@ -34,7 +34,7 @@ function canvasTex(key, w, h, paint, rep = 1) {
   return (TEX[key] = tx);
 }
 // weathered painted metal: chipped paint, dirt and salt stains, rivet rows
-function metal(key, base, corrugated = false) {
+export function metal(key, base, corrugated = false) {
   return canvasTex('metal:' + key + corrugated, 128, 128, (x, w, h) => {
     x.fillStyle = base; x.fillRect(0, 0, w, h);
     for (let i = 0; i < 900; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,240'},${Math.random() * 0.06})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
@@ -55,7 +55,7 @@ function plywood() {
   });
 }
 // national markings
-function marking(nat) {
+export function marking(nat) {
   return canvasTex('mark:' + nat, 128, 128, (x) => {
     const C = (r, c) => { x.fillStyle = c; x.beginPath(); x.arc(64, 64, r, 0, Math.PI * 2); x.fill(); };
     const star = (r, c) => { x.fillStyle = c; x.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.4 : r; x.lineTo(64 + Math.cos(a) * rr, 64 + Math.sin(a) * rr); } x.fill(); };
@@ -158,7 +158,7 @@ function invasionStripes(plane) {
 function sceneAudio(boat) {
   const ac = audioCtx();
   if (!ac) return { stop() {}, boom() {}, setEngine() {} };
-  const out = ac.createGain(); out.gain.value = 0.0001; out.connect(ac.destination);
+  const out = ac.createGain(); out.gain.value = 0.0001; out.connect(audioOut());
   out.gain.setTargetAtTime(0.5, ac.currentTime, 1.2);
   const nodes = [];
   // engine

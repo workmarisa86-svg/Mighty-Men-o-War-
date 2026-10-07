@@ -684,3 +684,13 @@ body:not(.binoc) .zbtn { display: none !important; }
 /* Town Life: the horse's stamina while riding */
 #stamina { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); width: 160px; height: 8px; border: 1px solid rgba(240,232,204,0.7); background: rgba(20,20,14,0.6); border-radius: 4px; overflow: hidden; }
 #stamina i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #b88a3a, #e8c870); }
+
+/* War: army cars. While driving only the car's own bar (Exit, Lights) and
+   the fire / zoom / pause buttons stay; the bar sits top centre, clear of
+   the minimap and the corner buttons */
+#carbar { position: absolute; top: calc(80px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 6; pointer-events: auto; }
+#carbar[hidden] { display: none; }
+#carbar .btn { min-height: 40px; min-width: 76px; padding: 8px 14px; font-size: 13px; }
+#carbar kbd { font-family: var(--body); font-size: 11px; opacity: 0.8; margin-right: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; padding: 0 4px; }
+body.driving #touch .tb:not([data-btn=dig]):not([data-btn=zoom]):not([data-btn=zin]):not([data-btn=zout]):not([data-btn=pause]) { display: none; }
+body.driving #aimprompt { display: none; }

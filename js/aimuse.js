@@ -36,7 +36,10 @@ export class AimUse {
   }
   find() {
     const g = this.game, { eye, dir } = g.aim(), w = g.world;
+    if (g.player.car) return null;                          // in a car: only Exit and Lights (the car's own bar)
     const hit = w.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, BODY.reach);
+    // army cars (War): drive one of your side's
+    if (g.vehicles) { const vt = g.vehicles.aimTarget(eye, dir, hit ? hit.dist ?? 99 : 99); if (vt) return vt; }
     // Town Life's own targets (people, horses, bodies, doors) come first
     if (g.town) { const tt = g.town.aimTarget(hit, eye, dir); if (tt) return tt; }
     if (!hit) return null;

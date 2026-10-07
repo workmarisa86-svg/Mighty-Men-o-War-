@@ -6,6 +6,7 @@ import { World } from './world.js';
 import { generate, landFor, hasCoast, COAST } from './worldgen.js';
 import { Campaign } from './campaign.js';
 import { Horses } from './horses.js';
+import { Vehicles } from './vehicles.js';
 import { Collide } from './collide.js';
 import { Battle } from './battle.js';
 import { Paratroops, DROP_Y } from './paratroops.js';
@@ -193,6 +194,7 @@ export class Game {
     if (!this.townMode && (save.arrival || !save.player) && (this.campaign || this.battle)) this.arrive(save.arrival || this.defaultArrival());
     if (this.campaign) this.campaign.arrived();
     this.horses = this.townMode ? new Horses(this, (save.town && save.town.horses) || {}) : null;
+    this.vehicles = this.townMode ? null : new Vehicles(this, save.cars);      // army cars (War)
     this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
     this.collide = new Collide(this);
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
@@ -307,7 +309,8 @@ export class Game {
     const env = { rain: this.weather.rain, speedMul: inWire ? 0.4 : 1 };
     const wasDiving = p.diving;
     // on horseback the horse moves (and carries you); otherwise you walk
-    const res = p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
+    // in a car the car moves (and carries you)
+    const res = p.car ? (this.vehicles.drive(dt, it), { fallDamage: 0 }) : p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
     if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
@@ -319,7 +322,7 @@ export class Game {
     } else this.breath = Math.min(AIR, this.breath + dt * 5);
     this.underwaterFx(dt, p.headInWater);
 
-    if (playing && !p.riding) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
+    if (playing && !p.riding && !p.car) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
     this.combat.update(dt, input, playing);
     this.updateCraft(dt);
@@ -335,6 +338,7 @@ export class Game {
       if (this.battle) this.battle.update(dt);
       if (this.paratroops) this.paratroops.update(dt);
       if (this.horses) this.horses.update(dt);
+      if (this.vehicles) this.vehicles.update(dt);
       this.collide.update();
       if (this.town) this.town.update(dt);
       this.supplyT -= dt;
@@ -539,6 +543,13 @@ export class Game {
 
   handleKeys(input) {
     const inv = this.inv;
+    // in a car: only driving and the gun in your hands (E gets out, L or F the headlights)
+    if (this.player.car) {
+      if (input.hit('KeyE')) this.vehicles.exit();
+      else if (input.hit('KeyL') || input.hit('KeyF') || input.thit('light')) this.vehicles.toggleLights();
+      if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
+      return;
+    }
     if (!this.orders.eatKeys) for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
     if (input.mouse.wheel && this.scopeView.kind !== 'binoc') { inv.sel = (inv.sel + (input.mouse.wheel > 0 ? 1 : 8)) % 9; this.hud.dirtyHotbar = true; }
     if (input.hit('KeyF') || input.thit('light')) {
@@ -950,6 +961,8 @@ export class Game {
   recipes() { return recipesFor(this.townMode); }
   startCraft(r) {
     if (this.craft) { this.hud.toast(t('craft.busy')); sfx.error(); return false; }
+    if (this.player.car) { this.hud.toast(t('car.noCraft')); sfx.error(); return false; }
+    if (r.id === 'car' && (!this.vehicles || !this.vehicles.canAdd())) { this.hud.toast(t('car.cap'), 'warn'); sfx.error(); return false; }
     if (!this.canCraft(r)) { sfx.error(); return false; }
     for (const [id, n] of Object.entries(r.needs)) this.take(id, n);
     const fire = this.craftFire();
@@ -970,6 +983,11 @@ export class Game {
     c.tick -= dt;
     if (c.tick <= 0) { c.tick = 0.6; sfx.craftTick(); }
     if (c.t >= c.total) {
+      if (c.r.id === 'car') {
+        // a car is not carried: it rolls out next to the fire
+        if (!this.vehicles.spawnAt(c.at)) { for (const [id, n] of Object.entries(c.r.needs)) this.give(id, n, true); this.hud.toast(t('car.noRoom'), 'warn'); sfx.error(); this.craft = null; return; }
+        this.hud.toast(t('car.built'), 'pick'); sfx.done(); this.craft = null; return;
+      }
       this.give(c.r.id, c.r.out || 1, true);
       this.hud.toast(t('hud.crafted', { item: t('item.' + c.r.id) }));
       sfx.done();
@@ -979,6 +997,7 @@ export class Game {
 
   damage(n, cause = 'hurt', from = null) {
     if (this.dead || n <= 0) return;
+    if (this.player.car && cause === 'combat') n = this.vehicles.absorb(n);     // the car takes most of it
     this.player.health = Math.max(0, this.player.health - n * (1 - this.armor()));
     this.hud.flash();
     if (from) {
@@ -993,6 +1012,7 @@ export class Game {
   // weapon; any other death loses every carried weapon.
   die(cause) {
     if (this.dead) return;
+    if (this.player.car) this.vehicles.exit(true);
     this.stats.deaths = (this.stats.deaths || 0) + 1;
     const alone = this.cfg.sub === 'alone';
     if (this.town) { this.scopeView.close(); this.craft = null; this.breath = AIR; this.town.onDeath(cause); return; }
@@ -1068,7 +1088,7 @@ export class Game {
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger },
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
-      rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
+      rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })), cars: this.vehicles ? this.vehicles.toSave() : undefined,
       edits: this.world.serializeEdits(), cabin: this.cabin.toSave(), mission: this.mission ? this.mission.toSave() : null,
       campaign: this.campaign ? this.campaign.state : undefined, worlds: this.save.worlds || {},
     };
@@ -1082,6 +1102,7 @@ export class Game {
     setRain(0);
     paintLand(null); this.scene.fog = null;
     if (this.horses) this.horses.dispose();
+    if (this.vehicles) this.vehicles.dispose();
     if (this.paratroops) this.paratroops.dispose();
     if (this.campaign) this.campaign.dispose();
     if (this.town) this.town.dispose();

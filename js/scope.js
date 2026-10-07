@@ -60,7 +60,7 @@ export class ScopeView {
   update(dt, input, playing) {
     const g = this.game, p = g.player;
     const sel = g.selected();
-    if (playing && (input.hit('KeyZ') || input.thit('zoom'))) this.toggle(sel === 'sniper' ? 'sniper' : 'binoc');
+    if (playing && (input.hit('KeyZ') || input.thit('zoom')) && !(p.car && sel !== 'sniper')) this.toggle(sel === 'sniper' ? 'sniper' : 'binoc');   // no binoculars in a car
     // phones: more ways out of the zoom: the dedicated Exit (the zoom
     // button itself, moved to its own corner), a swipe down from the top
     // edge, or the phone's back gesture

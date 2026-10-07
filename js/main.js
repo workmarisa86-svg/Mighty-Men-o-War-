@@ -134,7 +134,7 @@ class App {
     g.flushStats();
     const s = g.toSave(), C = g.campaign, side = g.cfg.side;
     const worlds = Object.assign({}, s.worlds);
-    worlds[g.cfg.country] = { edits: s.edits, forts: s.forts, pickups: s.pickups, rafts: s.rafts };
+    worlds[g.cfg.country] = { edits: s.edits, forts: s.forts, pickups: s.pickups, rafts: s.rafts, cars: s.cars };
     const take = Math.max(0, Math.min(n, C.here.gar[side] || 0));
     const followerNations = g.enemies.followers().map((f) => f.nation).filter(Boolean);
     C.here.gar[side] -= take;
@@ -142,7 +142,7 @@ class App {
     const W = worlds[to] || {};
     delete worlds[to];
     const next = Object.assign({}, s, {
-      cfg: Object.assign({}, s.cfg, { country: to }), edits: W.edits || null, forts: W.forts || null, pickups: W.pickups || [], rafts: W.rafts || [],
+      cfg: Object.assign({}, s.cfg, { country: to }), edits: W.edits || null, forts: W.forts || null, pickups: W.pickups || [], rafts: W.rafts || [], cars: W.cars || null,
       player: null, followers: Math.min(take, 16), arrival: { by }, worlds, campaign: C.state, weather: null,
     });
     writeSave(Object.assign({}, next, { arrival: { by: 'hq' } }));
