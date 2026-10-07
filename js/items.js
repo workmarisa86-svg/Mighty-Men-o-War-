@@ -23,16 +23,32 @@ export const ITEMS = {
   helmet: { armor: 0.15 },
   vest: { armor: 0.25 },
   scuba: { armor: 0, worn: true },     // unlimited air under water; lost when you are defeated
-  // standard gear (always carried in War mode, not on the hotbar)
+  // standard gear (always carried, not on the hotbar)
   flashlight: { gear: true }, compass: { gear: true }, binoculars: { gear: true },
+  // ---- Town Life
+  sand: { block: B.SAND, tiles: ['sand', 'sand'] },
+  clay: { block: B.CLAY, tiles: ['clay', 'clay'] },
+  brick: { block: B.BRICK, tiles: ['brick', 'brick'] },
+  glass: { block: B.GLASS, tiles: ['glass', 'glass'] },
+  thatch: { block: B.THATCH, tiles: ['thatch', 'thatch'] },
+  charcoal: { block: B.CHARCOAL, tiles: ['charcoal', 'charcoal'] },
+  gold: { block: B.GOLD, tiles: ['gold', 'gold'] },
+  fence: { block: B.FENCE, tiles: ['fence', 'fence'] },
+  seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
+  wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
+  bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
+  hide: {}, bear_hide: {},
+  bucket: { tool: 'bucket' }, bucket_water: { tool: 'bucket' },
+  chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
 export const WEAPON_IDS = ['knife', 'pistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
 export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 
 // Crafting happens at a campfire. Weapon times rise 2 s per level of
-// destructive power, and stronger weapons cost more iron.
-export const RECIPE_CATS = ['weapons', 'defense', 'gear', 'transport', 'food'];
+// destructive power, and stronger weapons cost more iron. `war: false` /
+// `town: true` keep a recipe to one of the two games.
+export const RECIPE_CATS = ['weapons', 'defense', 'gear', 'transport', 'food', 'materials'];
 export const RECIPES = [
   { id: 'knife', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 5 },
   { id: 'pistol', cat: 'weapons', needs: { iron: 2, wood: 1 }, time: 7 },
@@ -51,7 +67,17 @@ export const RECIPES = [
   { id: 'scuba', cat: 'gear', needs: { iron: 4, wood: 1 }, time: 12 },
   { id: 'raft', cat: 'transport', needs: { wood: 6 }, time: 7 },
   { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
+  // Town Life: weapons are crafted as in War; materials are smelted on the fire
+  { id: 'bread', cat: 'food', needs: { wheat: 3 }, time: 5, cook: true, town: true },
+  { id: 'charcoal', cat: 'materials', needs: { wood: 2 }, time: 6, town: true },
+  { id: 'brick', cat: 'materials', needs: { clay: 1, charcoal: 1 }, time: 5, out: 2, town: true },
+  { id: 'glass', cat: 'materials', needs: { sand: 2, charcoal: 1 }, time: 6, out: 2, town: true },
+  { id: 'thatch', cat: 'materials', needs: { wheat: 2 }, time: 3, out: 2, town: true },
+  { id: 'fence', cat: 'materials', needs: { wood: 2 }, time: 3, out: 3, town: true },
 ];
+// which recipes each game offers
+const WAR_ONLY = ['grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg'];
+export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) : !r.town); }
 
 const ICON_DRAW = {
   shovel(c) {
@@ -168,6 +194,27 @@ const ICON_DRAW = {
     c.fillStyle = '#8ab8c8'; c.beginPath(); c.ellipse(16, 26, 8, 5, 0, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#d0eef6'; c.fillRect(11, 23, 4, 2);
   },
+  seed_wheat(c) { ICON_DRAW.sack(c, '#c8a858'); },
+  seed_carrot(c) { ICON_DRAW.sack(c, '#d07a34'); },
+  seed_cabbage(c) { ICON_DRAW.sack(c, '#78a85a'); },
+  sack(c, dot) {
+    c.fillStyle = '#b8a27a'; c.beginPath(); c.moveTo(14, 14); c.lineTo(34, 14); c.lineTo(38, 40); c.lineTo(10, 40); c.closePath(); c.fill();
+    c.fillStyle = '#8a7656'; c.fillRect(16, 10, 16, 6);
+    c.fillStyle = dot; for (const [x, y] of [[20, 26], [27, 30], [22, 34], [29, 23]]) { c.beginPath(); c.arc(x, y, 2.5, 0, Math.PI * 2); c.fill(); }
+  },
+  wheat(c) { c.strokeStyle = '#c8a050'; c.lineWidth = 2; for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(24, 42); c.lineTo(24 + i * 5, 12); c.stroke(); c.fillStyle = '#e0bc62'; c.beginPath(); c.ellipse(24 + i * 5, 12, 3, 6, 0, 0, Math.PI * 2); c.fill(); } },
+  carrot(c) { c.fillStyle = '#d8742c'; c.beginPath(); c.moveTo(14, 16); c.lineTo(22, 12); c.lineTo(38, 40); c.closePath(); c.fill(); c.fillStyle = '#5a9a3a'; c.fillRect(10, 8, 4, 10); c.fillRect(15, 6, 4, 9); },
+  cabbage(c) { c.fillStyle = '#6aa04e'; c.beginPath(); c.arc(24, 26, 15, 0, Math.PI * 2); c.fill(); c.fillStyle = '#a8d088'; c.beginPath(); c.arc(24, 26, 9, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#4a7a36'; c.beginPath(); c.moveTo(24, 12); c.lineTo(24, 40); c.stroke(); },
+  bread(c) { c.fillStyle = '#b8803c'; c.beginPath(); c.ellipse(24, 28, 17, 10, 0, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#e0b878'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(14 + i * 8, 32); c.lineTo(20 + i * 8, 22); c.stroke(); } },
+  egg(c) { c.fillStyle = '#efe4cc'; c.beginPath(); c.ellipse(24, 26, 10, 13, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = '#fff8ec'; c.beginPath(); c.ellipse(20, 21, 3, 4, 0, 0, Math.PI * 2); c.fill(); },
+  milk(c) { c.fillStyle = '#d8d8d0'; c.fillRect(15, 14, 18, 28); c.fillStyle = '#f4f4ee'; c.fillRect(17, 20, 14, 20); c.fillStyle = '#8a8a80'; c.fillRect(18, 8, 12, 6); },
+  hide(c) { c.fillStyle = '#9a7650'; c.beginPath(); c.moveTo(8, 14); c.lineTo(20, 10); c.lineTo(28, 12); c.lineTo(40, 10); c.lineTo(38, 26); c.lineTo(42, 40); c.lineTo(26, 36); c.lineTo(8, 40); c.lineTo(12, 26); c.closePath(); c.fill(); c.fillStyle = '#7a5a3a'; c.beginPath(); c.arc(24, 24, 5, 0, Math.PI * 2); c.fill(); },
+  bear_hide(c) { c.fillStyle = '#3e2c1e'; c.beginPath(); c.moveTo(6, 14); c.lineTo(20, 8); c.lineTo(28, 10); c.lineTo(42, 8); c.lineTo(40, 26); c.lineTo(44, 42); c.lineTo(26, 36); c.lineTo(6, 42); c.lineTo(10, 26); c.closePath(); c.fill(); c.fillStyle = '#5a422c'; c.beginPath(); c.arc(24, 22, 6, 0, Math.PI * 2); c.fill(); },
+  bucket(c) { c.fillStyle = '#7e848a'; c.beginPath(); c.moveTo(12, 16); c.lineTo(36, 16); c.lineTo(32, 40); c.lineTo(16, 40); c.closePath(); c.fill(); c.strokeStyle = '#4e5458'; c.lineWidth = 2; c.beginPath(); c.arc(24, 16, 11, Math.PI, 0); c.stroke(); },
+  bucket_water(c) { ICON_DRAW.bucket(c); c.fillStyle = '#5a8ab0'; c.fillRect(14, 17, 20, 5); },
+  chicken(c) { c.fillStyle = '#f0e8d8'; c.beginPath(); c.ellipse(24, 28, 12, 10, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(32, 16, 6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#c83a2a'; c.fillRect(31, 8, 4, 4); c.fillStyle = '#e0a030'; c.fillRect(37, 15, 5, 3); },
+  piglet(c) { c.fillStyle = '#e0a898'; c.beginPath(); c.ellipse(24, 28, 14, 10, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = '#c88878'; c.fillRect(36, 25, 5, 6); c.fillStyle = '#222'; c.fillRect(32, 23, 2, 2); },
+  calf(c) { c.fillStyle = '#8a6a4a'; c.fillRect(10, 18, 26, 14); c.fillRect(32, 12, 10, 10); c.fillStyle = '#e8e0d0'; c.fillRect(16, 20, 8, 6); c.fillStyle = '#5a4430'; for (const x of [12, 18, 28, 33]) c.fillRect(x, 32, 3, 9); },
   flashlight(c) {
     c.fillStyle = '#4b5240'; c.fillRect(10, 18, 22, 12);
     c.fillStyle = '#6a705c'; c.fillRect(30, 15, 8, 18);

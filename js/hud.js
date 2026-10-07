@@ -43,7 +43,10 @@ export class HUD {
       const s = e.target.closest('.slot');
       if (s) { game.inv.sel = +s.dataset.i; this.dirtyHotbar = true; }
     };
-    this.keyhint.textContent = game.app.input.touch ? '' : t('help.keys');   // phones: the pause menu lists the buttons
+    this.keyhint.textContent = game.app.input.touch ? '' : t(game.townMode ? 'help.townKeys' : 'help.keys');   // phones: the pause menu lists the buttons
+    // three quick taps on the clock: show or hide the frame-rate counter
+    let taps = [];
+    this.status.onclick = this.status.ontouchend = () => { const now = performance.now(); taps = taps.filter((x) => now - x < 900).concat(now); if (taps.length >= 3) { taps = []; this.toggleFps(); } };
     this.keyhint.classList.remove('fade');
     clearTimeout(HUD.hintTimer);
     HUD.hintTimer = setTimeout(() => this.keyhint.classList.add('fade'), 12000);
@@ -81,8 +84,8 @@ export class HUD {
       const tod = g.dayOnly ? 0.45 : g.time % 1;
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const parts = [t('hud.day', { n: day }), g.dayOnly ? t('hud.daylight') : clock];
-      if (g.weather.rain > 0.15) parts.push(t('hud.rain'));
+      const parts = g.town ? [t('season.' + g.town.season) + ' ' + g.town.dayOfSeason(), t('hud.day', { n: day }), clock] : [t('hud.day', { n: day }), g.dayOnly ? t('hud.daylight') : clock];
+      if (g.weather.rain > 0.15) parts.push(t(g.town && g.town.snowing() ? 'hud.snow' : 'hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
 
@@ -108,16 +111,20 @@ export class HUD {
       if (g.defusing) hint = t('hint.defusing');
       else if (p.swimming) hint = t('hint.dive');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
-      else if (g.campfires.near(p.pos)) hint = t('hint.fire');
+      else if (g.campfires.near(p.pos) && !g.town) hint = t('hint.fire');
       else if (this.rationsAimed()) hint = t('hint.rations');
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');
       else if (g.selected() === 'flint') hint = t('hint.flint');
+      else if (g.town && ITEMS[g.selected()] && ITEMS[g.selected()].seed) hint = t('hint.seed');
+      else if (g.town && g.selected() === 'bucket') hint = t('hint.bucket');
+      else if (g.town && g.selected() === 'bucket_water') hint = t('hint.bucketWater');
       else if (ITEMS[g.selected()] && (ITEMS[g.selected()].food || ITEMS[g.selected()].heal)) hint = t('hint.eat');
     }
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
     const hs = p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
+    this.updateFps(dt);
     this.updateMarkers();
     this.updateSquadList(dt);
     this.updateMission(dt);
@@ -127,6 +134,20 @@ export class HUD {
     if (this.dirtyHotbar) this.renderHotbar();
   }
 
+  // hidden frame-rate counter: F3 on a computer, tap the clock three times on a phone
+  updateFps(dt) {
+    const input = this.game.app.input;
+    if (input.hit('F3')) this.toggleFps();
+    this.fpsN = (this.fpsN || 0) + 1; this.fpsAcc = (this.fpsAcc || 0) + dt;
+    if (this.fpsAcc >= 0.5) {
+      if (this.fpsEl) this.fpsEl.textContent = `${(this.fpsN / this.fpsAcc).toFixed(0)} fps · ${(this.fpsAcc / this.fpsN * 1000).toFixed(1)} ms`;
+      this.fpsN = 0; this.fpsAcc = 0;
+    }
+  }
+  toggleFps() {
+    if (this.fpsEl) { this.fpsEl.remove(); this.fpsEl = null; return; }
+    this.fpsEl = document.createElement('div'); this.fpsEl.id = 'fps'; this.root.appendChild(this.fpsEl);
+  }
   renderHotbar() {
     this.dirtyHotbar = false;
     const g = this.game;
@@ -197,6 +218,7 @@ export class HUD {
     const list = [];
     for (const pr of g.explosives.projectiles) if (pr.owner === 'enemy' && pr.kind === 'grenade' && pr.pos.distanceTo(p) < 14) list.push({ pos: pr.pos, label: '!' });
     for (const l of g.explosives.lit.values()) if (l.owner === 'enemy' && Math.hypot(l.x - p.x, l.z - p.z) < 45) list.push({ pos: new THREE.Vector3(l.x + 0.5, l.y + 1.3, l.z + 0.5), label: 'TNT ' + Math.max(0, l.t).toFixed(0) });
+    if (g.town) for (const w of g.town.marks()) list.push({ pos: new THREE.Vector3(w.pos.x, w.pos.y + 2.4, w.pos.z), label: '!' });
     while (this.markerEls.length < list.length) { const d = document.createElement('div'); d.className = 'marker danger'; this.markersEl.appendChild(d); this.markerEls.push(d); }
     this.markerEls.forEach((el, i) => {
       const m = list[i];
@@ -218,6 +240,7 @@ export class HUD {
 
   dispose() {
     this.root.hidden = true;
+    if (this.fpsEl) { this.fpsEl.remove(); this.fpsEl = null; }
     this.toasts.innerHTML = '';
     this.radioEl.innerHTML = '';
   }

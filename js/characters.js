@@ -73,9 +73,15 @@ const FAB = UV[0], SKIN = UV[1], LEA = UV[2], MET = UV[3];
 export const RIG = { hip: 0.93, thigh: 0.45, shin: 0.42, spine: 0.05, neck: 0.55, shoulderY: 0.47, shoulderX: 0.21, upper: 0.29, fore: 0.27 };
 
 const VARIANTS = {};
+// Town Life clothing: register a look, then use faction 'civ' with its key
+// as the type. look = { shirt, trousers, vest, apron, dress, hat: 'cap' |
+// 'felt' | 'scarf' | 'none', hair }
+const LOOKS = {};
+export function civLook(key, look) { LOOKS[key] = look; }
 function variant(faction, type, skin) {
   const key = `${faction}|${type}|${skin}|${SEG}`;
   if (VARIANTS[key]) return VARIANTS[key];
+  if (faction === 'civ') return (VARIANTS[key] = civVariant(LOOKS[type] || {}, skin));
   const F = FACTIONS[faction];
   const officer = type === 'officer', commander = type === 'commander';
   const tunic = commander ? 0x2a2a2a : officer ? (faction === 'enemy' ? 0x353d46 : 0x63583c) : F.tunic;
@@ -185,6 +191,75 @@ function variant(faction, type, skin) {
   p.add(sph(0.055, 0, Math.PI / 2), mat4([0, -RIG.shin - 0.03, -0.15], 0, [1, 0.7, 0.8]), BOOT, LEA);
   v.shin = p.build();
   VARIANTS[key] = v;
+  return v;
+}
+
+// Peacetime clothes for townspeople: shirt and trousers or a dress, an
+// optional waistcoat or apron, a cap, felt hat or headscarf.
+function civVariant(L, skin) {
+  const sk = SKINS[skin % SKINS.length];
+  const shirt = L.shirt ?? 0xc8bca0, trousers = L.trousers ?? 0x4a4038, hair = L.hair ?? 0x3a2a1c;
+  const v = {};
+  let p = new PartList();
+  if (L.dress) {
+    p.add(cyl(0.16, 0.29, 0.62), mat4([0, -0.2, 0]), L.dress, FAB);                  // skirt to mid-calf
+  } else p.add(caps(0.15, 0.08), mat4([0, 0.02, 0], [0, 0, Math.PI / 2], [1, 1, 0.75]), trousers, FAB);
+  p.add(cyl(0.172, 0.17, 0.05), mat4([0, 0.1, 0], 0, [1, 1, 0.72]), L.dress ? L.dress : LEATHER, L.dress ? FAB : LEA);
+  v.hips = p.build();
+  p = new PartList();
+  p.add(caps(0.165, 0.25), mat4([0, 0.3, 0], 0, [1.03, 1, 0.66]), L.dress || shirt, FAB);
+  p.add(cyl(0.07, 0.085, 0.06), mat4([0, 0.56, 0], 0, [1, 1, 0.9]), shirt, FAB);
+  if (L.vest) { p.add(caps(0.17, 0.2), mat4([0, 0.31, 0], 0, [1.06, 0.92, 0.7]), L.vest, FAB); for (let i = 0; i < 3; i++) p.add(box(0.014, 0.014, 0.01), mat4([0, 0.22 + i * 0.07, -0.12]), 0xc8b060, MET); }
+  if (L.apron) p.add(box(0.26, 0.5, 0.02), mat4([0, 0.12, -0.125]), L.apron, FAB);
+  if (L.braces) for (const s of [-1, 1]) p.add(box(0.03, 0.48, 0.02), mat4([s * 0.08, 0.32, -0.112], [0, 0, s * 0.1]), L.braces, LEA);
+  v.spine = p.build();
+  p = new PartList();
+  if (L.bag) p.add(box(0.2, 0.18, 0.08), mat4([0.14, 0.12, 0.08], [0, 0, 0.2]), 0x6a5034, LEA);
+  v.kit = p.build();
+  p = new PartList();
+  p.add(cyl(0.055, 0.06, 0.12), mat4([0, 0.02, 0]), sk, SKIN);
+  p.add(sph(0.115), mat4([0, 0.15, 0], 0, [0.92, 1.08, 1]), sk, SKIN);
+  p.add(sph(0.06), mat4([0, 0.08, -0.04], 0, [1.3, 0.75, 1.1]), sk, SKIN);
+  for (const s of [-1, 1]) p.add(sph(0.028), mat4([s * 0.105, 0.15, 0.01], 0, [0.5, 1, 0.8]), sk, SKIN);
+  p.add(sph(0.12, 0, Math.PI / 2), mat4([0, 0.17, 0.015], 0, [1, 0.8, 1.02]), hair, FAB);   // hair
+  if (L.long) p.add(sph(0.075), mat4([0, 0.16, 0.11], 0, [1, 1.2, 0.8]), hair, FAB);        // bun
+  if (L.hat === 'cap') {
+    p.add(cyl(0.125, 0.13, 0.05), mat4([0, 0.25, 0.01]), L.hatColor ?? 0x5a5448, FAB);
+    p.add(box(0.2, 0.015, 0.09), mat4([0, 0.235, -0.12], [-0.15, 0, 0]), L.hatColor ?? 0x5a5448, FAB);
+  } else if (L.hat === 'felt') {
+    p.add(cyl(0.2, 0.2, 0.015), mat4([0, 0.235, 0]), L.hatColor ?? 0x3a3430, FAB);
+    p.add(cyl(0.1, 0.12, 0.1), mat4([0, 0.29, 0]), L.hatColor ?? 0x3a3430, FAB);
+    p.add(cyl(0.122, 0.122, 0.022), mat4([0, 0.255, 0]), 0x1a1614, FAB);
+  } else if (L.hat === 'scarf') {
+    p.add(sph(0.13, 0, Math.PI * 0.62), mat4([0, 0.15, 0.01], 0, [1, 1.05, 1.05]), L.hatColor ?? 0x8a3a3a, FAB);
+  }
+  v.head = p.build();
+  p = new PartList();
+  for (const s of [-1, 1]) {
+    p.add(sph(0.017), mat4([s * 0.042, 0.165, -0.098], 0, [1, 0.8, 0.6]), 0xf0ece0, MET);
+    p.add(sph(0.009), mat4([s * 0.042, 0.165, -0.11]), 0x2a2018, MET);
+    p.add(box(0.04, 0.01, 0.012), mat4([s * 0.045, 0.19, -0.104], [0, 0, s * 0.12]), hair, SKIN);
+  }
+  p.add(box(0.026, 0.05, 0.03), mat4([0, 0.14, -0.112], [0.25, 0, 0]), sk, SKIN);
+  p.add(box(0.045, 0.008, 0.01), mat4([0, 0.095, -0.1]), 0x6a3a30, SKIN);
+  if (L.moustache) p.add(box(0.06, 0.014, 0.012), mat4([0, 0.108, -0.106]), hair, FAB);
+  v.face = p.build();
+  for (const side of ['L', 'R']) {
+    p = new PartList();
+    p.add(caps(0.056, RIG.upper - 0.08), mat4([0, -RIG.upper / 2, 0]), L.dress || shirt, FAB);
+    v['upper' + side] = p.build();
+    p = new PartList();
+    p.add(caps(0.048, RIG.fore - 0.08), mat4([0, -RIG.fore / 2 + 0.01, 0]), L.rolled ? sk : (L.dress || shirt), L.rolled ? SKIN : FAB);
+    p.add(sph(0.045), mat4([0, -RIG.fore - 0.03, -0.01], 0, [0.8, 1.15, 1]), sk, SKIN);
+    v['fore' + side] = p.build();
+  }
+  p = new PartList();
+  p.add(caps(0.072, RIG.thigh - 0.12), mat4([0, -RIG.thigh / 2, 0]), L.dress ? sk : trousers, L.dress ? SKIN : FAB);
+  v.thigh = p.build();
+  p = new PartList();
+  p.add(caps(0.06, RIG.shin - 0.14), mat4([0, -RIG.shin / 2 + 0.02, 0]), L.dress ? (L.stockings ?? 0x5a4a40) : trousers, FAB);
+  p.add(box(0.1, 0.07, 0.22), mat4([0, -RIG.shin - 0.03, -0.045]), L.shoes ?? 0x2a1e16, LEA);
+  v.shin = p.build();
   return v;
 }
 

@@ -123,7 +123,43 @@ export const sfx = {
   },
   radio() { noise(0.08, { type: 'bandpass', freq: 2200, gain: 0.08, q: 3 }); tone(1100, 0.05, { type: 'square', gain: 0.03, delay: 0.06 }); },
   thunder() { noise(2.5, { freq: 300, gain: 0.5, freqEnd: 60, attack: 0.2 }); },
+  // danger warning (grenades, lit charges): a sharp two-tone alarm, no voice
+  alert() { for (let i = 0; i < 3; i++) { tone(1320, 0.07, { type: 'square', gain: 0.07, delay: i * 0.16 }); tone(990, 0.07, { type: 'square', gain: 0.07, delay: i * 0.16 + 0.08 }); } },
+  // speech is never spoken: a short mumble in the speaker's own pitch
+  mumble(pitch = 1, n = 4, vol = 1) {
+    let tt = 0;
+    for (let i = 0; i < n; i++) {
+      const f = (150 + Math.random() * 70) * pitch, d = 0.06 + Math.random() * 0.07;
+      tone(f, d, { type: 'triangle', gain: 0.05 * vol, freqEnd: f * (0.8 + Math.random() * 0.4), delay: tt, attack: 0.015 });
+      noise(d * 0.8, { type: 'bandpass', freq: 900 + Math.random() * 900, gain: 0.02 * vol, q: 4, delay: tt });
+      tt += d + 0.03 + Math.random() * 0.05;
+    }
+  },
+  cluck(vol = 1) { for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) tone(520 + Math.random() * 120, 0.05, { type: 'square', gain: 0.035 * vol, freqEnd: 380, delay: i * 0.11 }); },
+  growl(vol = 1) { noise(0.9, { type: 'lowpass', freq: 260, gain: 0.25 * vol, freqEnd: 120, attack: 0.08 }); tone(70, 0.8, { type: 'sawtooth', gain: 0.06 * vol, freqEnd: 55, attack: 0.1 }); },
+  deer(vol = 1) { tone(900, 0.18, { type: 'triangle', gain: 0.05 * vol, freqEnd: 500 }); },
+  owl(vol = 1) { tone(420, 0.35, { type: 'sine', gain: 0.05 * vol, freqEnd: 380, attack: 0.05 }); tone(400, 0.6, { type: 'sine', gain: 0.05 * vol, freqEnd: 360, delay: 0.5, attack: 0.08 }); },
+  cricket(vol = 1) { for (let i = 0; i < 3; i++) tone(4300 + Math.random() * 300, 0.03, { type: 'sine', gain: 0.018 * vol, delay: i * 0.05 }); },
+  songbird(vol = 1) {
+    const base = 2000 + Math.random() * 1500; let tt = 0;
+    for (let i = 0; i < 3 + (Math.random() * 4 | 0); i++) { const f = base * (0.8 + Math.random() * 0.5); tone(f, 0.07, { type: 'sine', gain: 0.025 * vol, freqEnd: f * (0.7 + Math.random() * 0.6), delay: tt }); tt += 0.08 + Math.random() * 0.06; }
+  },
+  coins() { for (let i = 0; i < 3; i++) tone(1800 + i * 300, 0.08, { type: 'triangle', gain: 0.05, delay: i * 0.06 }); },
 };
+
+// Continuous wind bed; intensity 0..1
+let windNode = null, windGain = null, windF = null;
+export function setWind(intensity) {
+  if (!ctx) return;
+  if (!windNode) {
+    windNode = ctx.createBufferSource(); windNode.buffer = noiseBuf; windNode.loop = true; windNode.playbackRate.value = 0.5;
+    windF = ctx.createBiquadFilter(); windF.type = 'lowpass'; windF.frequency.value = 400; windF.Q.value = 0.6;
+    windGain = ctx.createGain(); windGain.gain.value = 0;
+    windNode.connect(windF); windF.connect(windGain); windGain.connect(master); windNode.start();
+  }
+  windGain.gain.setTargetAtTime(intensity * 0.07, ctx.currentTime, 1.5);
+  windF.frequency.setTargetAtTime(280 + intensity * 500 + Math.random() * 120, ctx.currentTime, 2);
+}
 
 // Continuous rain bed; intensity 0..1
 export function setRain(intensity) {

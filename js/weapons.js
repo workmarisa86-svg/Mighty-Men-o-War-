@@ -66,13 +66,18 @@ export class Combat {
     const g = this.game;
     const a = g.animals.raycast(eye, dir, maxD);
     const e = g.enemies.raycast(eye, dir, a ? a.dist : maxD);
-    return e || a;
+    const v = g.town ? g.town.folk.raycast(eye, dir, (e || a) ? (e || a).dist : maxD) : null;
+    return v || e || a;
   }
   applyHit(hit, damage, { silent = false } = {}) {
     const g = this.game;
     if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
     else if (hit.soldier) g.enemies.hurt(hit.soldier, damage, { silent, head: hit.head });
     else if (hit.tank) hit.tank.hurt(damage, false);
+    else if (hit.villager) {
+      const v = hit.villager, killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
+      g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v });
+    }
     g.hud.hitMarker(hit.head);
     sfx.hitMark();
   }
@@ -136,6 +141,7 @@ export class Combat {
     sfx.shot(W.sound);
     g.animals.noise(p.pos, W.loud);
     g.enemies.hear(p.pos, W.loud * 1.5);
+    if (g.town) g.town.hearShot(p.pos);
   }
 
   dispose() { for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); } }

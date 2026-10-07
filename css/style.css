@@ -548,3 +548,33 @@ body.swimming [data-btn=crouch] { display: none; }
 .start-screen .extras { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .start-screen .ver { position: absolute; }
 .soonart { display: block; width: min(100%, 420px); height: auto; margin: 0 auto 12px; border-radius: 10px; border: 2px solid var(--line); }
+
+/* ---- Town Life HUD --------------------------------------------------------- */
+body.townlife #squadlist, body.townlife #mission { display: none !important; }
+#townbar { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  font-family: var(--body); font-size: 13px; color: #f0e8cc; text-shadow: 0 1px 2px #000; max-width: 70vw; pointer-events: none; }
+#townbar > span { background: rgba(20, 22, 14, 0.62); border: 1px solid rgba(190, 170, 100, 0.5); border-radius: 12px; padding: 2px 9px; }
+#townbar .coins::before { content: ''; display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px;
+  background: radial-gradient(circle at 35% 35%, #ffe9a0, #c89a30 60%, #7a5a18); box-shadow: 0 0 0 1px #3a2a08; }
+#townbar .honor { width: 70px; height: 9px; padding: 0 !important; position: relative; overflow: hidden; }
+#townbar .honor i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #8a6a3a, #d8c070); }
+#townbar .bounty { color: #ffb0a0; border-color: #c04a3a !important; font-weight: bold; }
+#townbar .posse { color: #ffd0a0; border-color: #e07a30 !important; }
+#townctx { bottom: 122px; }
+#bubbles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.bubble { position: absolute; left: 0; top: 0; max-width: 220px; background: rgba(250, 246, 232, 0.94); color: #2a2418; border-radius: 10px; padding: 4px 9px 5px;
+  font-family: var(--body); font-size: 13px; line-height: 1.25; box-shadow: 0 2px 6px rgba(0,0,0,0.4); text-align: center; will-change: transform; }
+.bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(250, 246, 232, 0.94); }
+.bubble b { display: block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.6; }
+.bubble.warn { background: rgba(255, 226, 200, 0.96); color: #5a1408; } .bubble.warn::after { border-top-color: rgba(255, 226, 200, 0.96); }
+.bubble.ally { background: rgba(222, 236, 250, 0.94); color: #102438; } .bubble.ally::after { border-top-color: rgba(222, 236, 250, 0.94); }
+#fps { position: absolute; right: 10px; top: calc(var(--mm, 0px) + 18px); font: 12px/1.2 monospace; color: #c8f0a0; background: rgba(0,0,0,0.55); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+.shop { display: flex; flex-direction: column; gap: 6px; }
+.shop-row { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 4px 8px; }
+.shop-row img { width: 32px; height: 32px; image-rendering: pixelated; }
+.shop-row span { flex: 1; } .shop-row b { min-width: 34px; text-align: right; color: #e8c860; }
+.shop-row b::after { content: ' ¢'; opacity: 0.6; font-weight: normal; }
+.coins-line { color: #e8c860; margin: 2px 0 8px; }
+.say { font-style: italic; font-size: 16px; margin: 6px 0 12px; }
+.seg.tabs { margin-bottom: 10px; }
+@media (max-width: 760px) { #townbar { top: 48px; font-size: 11px; max-width: 92vw; } #townctx { bottom: 108px; } .bubble { font-size: 11px; max-width: 160px; } }

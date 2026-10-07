@@ -42,7 +42,7 @@ export class Campfires {
       const x = i % w.W, z = Math.floor(i / w.W) % w.D, y = Math.floor(i / (w.W * w.D));
       this.add(x, y, z);
     }
-    for (const s of w.sites) if (s.campfire) this.add(s.campfire.x, s.campfire.y, s.campfire.z);
+    for (const s of w.sites) { const f = s.campfire || s.fire; if (f) this.add(f.x, f.y, f.z); }   // the cabin's ever-burning fire
   }
 
   add(x, y, z) {

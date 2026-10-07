@@ -156,6 +156,7 @@ export function buildChunk(world, cx, cz, uvs, useAO) {
       const nb = get(nx, ny, nz);
       if (isWater) { if (nb !== B.AIR && OPAQUE[nb]) continue; if (nb === B.WATER) continue; }
       else if (def.render === 'leaves') { if (OPAQUE[nb] || nb === B.LEAVES) continue; }
+      else if (def.render === 'glass') { if (OPAQUE[nb] || nb === id) continue; }
       else if (OPAQUE[nb]) continue;
       const tile = uvs[def.tiles[F.t]];
       // self-lit blocks (fort lamps) and faces looking into a lit fort interior

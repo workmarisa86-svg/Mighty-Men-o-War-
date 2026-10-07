@@ -1,7 +1,9 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, DIFF, QUALITY } from './config.js';
-import { loadSettings, saveSettings, readSave, writeSave, deleteSave } from './storage.js';
+import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
+import { TOWN_SIZE } from './towngen.js';
+import { startFolk, stopFolk, setFolk } from './folk.js';
 import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
@@ -35,7 +37,7 @@ class App {
     // the menu music downloads after the page (and the splash art) have loaded
     addEventListener('load', () => setTimeout(() => preloadMusic(), 300));
     // audio may only start after the first tap or click; menu music then fades in
-    addEventListener('pointerdown', () => { initAudio(); setMusic(this.settings.music, this.settings.musicMute); if (!this.game) startMusic(); }, { capture: true });
+    addEventListener('pointerdown', () => { initAudio(); setMusic(this.settings.music, this.settings.musicMute); setFolk(this.settings.music, this.settings.musicMute); if (!this.game) this.menuMusic(); }, { capture: true });
     addEventListener('keydown', (e) => {
       initAudio();
       if (!this.game) return;
@@ -56,11 +58,29 @@ class App {
     saveSettings(this.settings);
     setVolume(this.settings.volume);
     setMusic(this.settings.music, this.settings.musicMute);
+    setFolk(this.settings.music, this.settings.musicMute);
     const q = QUALITY[this.settings.quality] || QUALITY.medium;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio, this.settings.perf === 'smooth' ? 0.8 : 9));
     applyI18n();
     document.body.classList.remove('tb-s', 'tb-m', 'tb-l'); document.body.classList.add('tb-' + (this.settings.touchSize || 'm'));
     if (this.game) { this.game.settings = this.settings; this.game.quality = q; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
+  }
+
+  // menus: the War music, except on the Town Life menu (folk tunes)
+  menuMusic() {
+    const town = this.ui.current && this.ui.current.name === 'town';
+    if (town) { stopMusic(); startFolk(); } else { stopFolk(); startMusic(); }
+  }
+
+  // Town Life: one persistent world (no save slots)
+  startTown(fresh = false) {
+    if (fresh) deleteTown();
+    const L = fresh ? null : loadTown();
+    const cfg = { mode: 'town', sub: 'town', difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: L ? L.state.seed : (Math.random() * 2 ** 31) | 0 };
+    const save = L ? Object.assign({ id: 'town', name: 'Town Life' }, L.state, { cfg, edits: L.edits }) : { id: 'town', name: 'Town Life', cfg };
+    this.townRestored = !!(L && L.restored);
+    stopFolk();
+    this.startGame(save);
   }
 
   resize() {
@@ -117,6 +137,7 @@ class App {
     }
     this.input.enabled = true;
     this.saveGame(true);
+    if (this.game.town && this.townRestored) this.game.hud.toast(t('town.restored'), 'warn');
     if (this.input.touch) this.resume(); else this.ui.show('clickToPlay');
   }
 
@@ -150,7 +171,7 @@ class App {
   saveGame(quiet) {
     if (!this.game) return;
     this.game.flushStats();
-    const ok = writeSave(this.game.toSave());
+    const ok = this.game.town ? this.game.town.save() : writeSave(this.game.toSave());
     if (!quiet || !ok) this.game.hud.toast(t(ok ? 'hud.saved' : 'hud.saveFail'));
     if (!quiet && ok) sfx.done();
   }
@@ -172,12 +193,13 @@ class App {
     if (!this.game) return;
     this.game.flushStats();
     this.saveGame(true);
+    const town = !!this.game.town;
     this.game.dispose();
     this.game = null;
     document.body.classList.remove('ingame');
     this.input.enabled = false;
     this.input.exitLock();
-    if (!silent) { this.ui.show('main'); startMusic(); }
+    if (!silent) { this.ui.show(town ? 'town' : 'main'); this.menuMusic(); }
   }
 
   loop(now) {

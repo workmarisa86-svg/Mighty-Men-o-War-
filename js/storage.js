@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS = {
   music: 0.45,
   musicMute: false,
   touchSize: 'm',
+  perf: 'normal',      // 'smooth': shorter view and lighter effects for a steadier frame rate
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
 export function saveSettings(s) { save('settings', s); }
@@ -96,3 +97,30 @@ export function deleteSave(id) {
   remove('save-' + id);
   save('saves', load('saves', []).filter((m) => m.id !== id));
 }
+
+// ---- Town Life: one persistent world ----------------------------------------
+// Two parts: the small state (player, money, farm, people...) written every
+// autosave, and the world's block edits, written only when they changed.
+// Before each write the previous save is kept as a backup; if the save can't
+// be read, the backup is used instead.
+const TS = 'town-state', TE = 'town-edits';
+function raw(k) { try { return localStorage.getItem(STORE_PREFIX + k); } catch { return null; } }
+function rawSet(k, v) { try { localStorage.setItem(STORE_PREFIX + k, v); return true; } catch (e) { console.warn('save failed', e); return false; } }
+export function hasTown() { return raw(TS) != null || raw(TS + '-bak') != null; }
+export function saveTown(state, edits) {
+  const s = JSON.stringify(state);
+  const prev = raw(TS);
+  if (prev) rawSet(TS + '-bak', prev);
+  if (edits != null) { const pe = raw(TE); if (pe != null) rawSet(TE + '-bak', pe); if (!rawSet(TE, edits)) return false; }
+  else if (raw(TE + '-bak') == null && raw(TE) != null) rawSet(TE + '-bak', raw(TE));
+  return rawSet(TS, s);
+}
+export function loadTown() {
+  const read = (sk, ek) => { try { const st = JSON.parse(raw(sk)); if (!st || st.seed == null || !st.player) return null; return { state: st, edits: raw(ek) || '' }; } catch { return null; } };
+  const cur = read(TS, TE);
+  if (cur) return cur;
+  const bak = read(TS + '-bak', TE + '-bak');
+  if (bak) { bak.restored = true; return bak; }
+  return null;
+}
+export function deleteTown() { for (const k of [TS, TE, TS + '-bak', TE + '-bak']) remove(k); }
