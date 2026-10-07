@@ -694,3 +694,27 @@ body:not(.binoc) .zbtn { display: none !important; }
 #carbar kbd { font-family: var(--body); font-size: 11px; opacity: 0.8; margin-right: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; padding: 0 4px; }
 body.driving #touch .tb:not([data-btn=dig]):not([data-btn=zoom]):not([data-btn=zin]):not([data-btn=zout]):not([data-btn=pause]) { display: none; }
 body.driving #aimprompt { display: none; }
+
+/* Town Life: the arrow to whoever pays for your job (turns as you turn) */
+#jobarrow { position: absolute; left: 50%; top: 100px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0; pointer-events: none; z-index: 3; }
+#jobarrow[hidden] { display: none; }
+#jobarrow i { font-style: normal; font-size: 34px; line-height: 38px; width: 38px; text-align: center; color: #ffd060; text-shadow: 0 0 4px #000, 0 2px 4px #000; transition: transform 0.1s linear; }
+#jobarrow span { font-size: 12px; color: #f0e8cc; text-shadow: 0 1px 2px #000; background: rgba(20, 20, 14, 0.55); padding: 1px 8px; border-radius: 8px; white-space: nowrap; }
+@media (max-width: 760px) { #jobarrow { top: 92px; } #jobarrow i { font-size: 28px; line-height: 32px; } }
+
+/* phones: the map (radar tap) fills the screen; the legend sits beside it
+   in landscape and under it in portrait */
+.panel.mapfull { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100vh; height: 100dvh; max-height: none; margin: 0; border-radius: 0; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; overflow: hidden; }
+.panel.mapfull h2 { font-size: 14px; margin: 0 0 6px; padding: 4px 56px 4px 0; }
+.panel.mapfull > .row.end { display: none; }
+.panel.mapfull .icon-close { top: 6px; right: 8px; }
+.panel.mapfull .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr minmax(130px, 190px); grid-template-rows: auto 1fr; gap: 6px 12px; overflow: hidden; }
+.panel.mapfull .warmap { grid-column: 1; grid-row: 1 / span 2; min-height: 0; height: 100%; align-items: center; }
+.panel.mapfull .seg.tabs { grid-column: 2; grid-row: 1; margin: 0; flex-direction: column; }
+.panel.mapfull .legend { grid-column: 2; grid-row: 2; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; margin: 0; font-size: 12px; }
+@media (orientation: portrait) {
+  .panel.mapfull .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .panel.mapfull .warmap { grid-row: 2; }
+  .panel.mapfull .seg.tabs { grid-column: 1; grid-row: 1; flex-direction: row; justify-content: center; }
+  .panel.mapfull .legend { grid-column: 1; grid-row: 3; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+}

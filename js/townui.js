@@ -139,7 +139,7 @@ export function installTownUI(UI) {
     const back = panel.querySelector('[data-act=back]'); if (back) back.textContent = t('map.close');
     const cv = panel.querySelector('#wmap'), w = g.world;
     if (this.app.input.touch) cv.addEventListener('click', close);
-    const S = Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
+    const S = this.mapSize(panel);
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
     const c = cv.getContext('2d');
@@ -172,6 +172,9 @@ export function installTownUI(UI) {
       c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
       c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
     }
+    // whoever pays for your job: a gold ring
+    const jt = T.jobTarget();
+    if (jt) { c.strokeStyle = '#ffd060'; c.lineWidth = 3 * dpr / zoom; c.beginPath(); c.arc(jt.pos.x * sc, jt.pos.z * sc, 9 * dpr / zoom, 0, Math.PI * 2); c.stroke(); label(jt.name, jt.pos.x * sc, jt.pos.z * sc - 12 * dpr / zoom, 10); }
     const p = g.player;
     c.save(); c.translate(p.pos.x * sc, p.pos.z * sc); c.rotate(-p.yaw);
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr; const r = 8 * dpr;

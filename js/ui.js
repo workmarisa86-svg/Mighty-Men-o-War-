@@ -482,7 +482,7 @@ export class UI {
     const back = panel.querySelector('[data-act=back]'); if (back) back.textContent = t('map.close');
     const cv = panel.querySelector('#wmap'), w = g.world;
     if (this.app.input.touch) cv.addEventListener('click', close);
-    const S = Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
+    const S = this.mapSize(panel);
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
     const c = cv.getContext('2d');
@@ -511,6 +511,14 @@ export class UI {
     c.beginPath(); c.moveTo(0, -r); c.lineTo(r * 0.7, r * 0.7); c.lineTo(0, r * 0.3); c.lineTo(-r * 0.7, r * 0.7); c.closePath(); c.fill(); c.stroke(); c.restore();
   }
 
+  // how big the map canvas is: on phones the panel fills the screen and the
+  // map takes all the room left beside (or under) the legend
+  mapSize(panel) {
+    if (!this.app.input.touch) return Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
+    panel.classList.add('mapfull');
+    const r = panel.querySelector('.warmap').getBoundingClientRect();
+    return Math.max(140, Math.floor(Math.min(r.width, r.height) - 6));
+  }
   // terrain shading for the maps, made once per world visit (paths and
   // fields show too)
   terrainImage(g) {
