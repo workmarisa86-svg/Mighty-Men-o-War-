@@ -13,7 +13,11 @@ import { sfx } from './audio.js';
 
 const MAX_MODELS = 12, MODEL_M = 110;
 const WALK = 4.2, GALLOP = 11, SWIM = 2.6, STAM_USE = 0.22, STAM_BACK = 0.12;
-const JUMP_V = 8.6, HORSE_G = 24;         // a jump clears about a block and a half
+const JUMP_V = 8.6, HORSE_G = 24;
+// neck and head carriage (radians, each part relative to the one before):
+// lower neck ~45° forward of upright, upper neck ~22° (an arched crest),
+// head ~118° from upright (nose forward and a little down)
+const NECK = { base: 0.8, upper: -0.42, head: 1.68 };         // a jump clears about a block and a half
 export const SADDLE_ROOT = 0.6;          // where a rider's feet-root goes above the horse's hooves
 const COATS = [0x5a3a24, 0x3a2618, 0x7a5a3a, 0x2a2420, 0x8a7a68, 0x6a4a2e];
 
@@ -44,13 +48,23 @@ class Horse {
     const add = (geo, mat, x, y, z, parent = g) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); parent.add(o); return o; };
     add(box(0.62, 0.62, 1.55), coat, 0, 1.12, 0);                         // barrel
     add(box(0.56, 0.5, 0.4), coat, 0, 1.2, 0.72);                         // chest
-    const neck = new THREE.Group(); neck.position.set(0, 1.35, 0.85); neck.rotation.x = -0.75; g.add(neck);
-    add(box(0.34, 0.85, 0.42), coat, 0, 0.4, 0, neck);
-    add(box(0.08, 0.7, 0.3), M.mane, 0, 0.42, -0.2, neck);
-    const head = new THREE.Group(); head.position.set(0, 0.82, 0.08); head.rotation.x = 1.75; neck.add(head);
-    add(box(0.28, 0.66, 0.36), coat, 0, 0.3, 0, head);
-    add(box(0.07, 0.14, 0.07), coat, -0.08, -0.07, -0.12, head); add(box(0.07, 0.14, 0.07), coat, 0.08, -0.07, -0.12, head);   // ears
-    if (this.coat % 2) add(box(0.1, 0.3, 0.02), M.white, 0, 0.32, 0.185, head);   // a blaze
+    // The neck rises forward from the shoulders (the horse faces +z) in two
+    // parts: the lower neck, deep at its base, leans well forward; the upper
+    // neck stands a little more upright, so the crest (the top line, with the
+    // mane) arches gently. The head is carried forward of the chest, nose
+    // forward and a little down. (A rotation.x > 0 tips a part forward.)
+    const neck = new THREE.Group(); neck.position.set(0, 1.3, 0.78); neck.rotation.x = NECK.base; g.add(neck);
+    add(box(0.32, 0.56, 0.5), coat, 0, 0.24, 0, neck);                    // lower neck (deep at the shoulders)
+    add(box(0.07, 0.5, 0.12), M.mane, 0, 0.27, -0.24, neck);              // mane along the crest
+    const upper = new THREE.Group(); upper.position.set(0, 0.48, -0.02); upper.rotation.x = NECK.upper; neck.add(upper);
+    add(box(0.27, 0.5, 0.38), coat, 0, 0.22, 0, upper);                   // upper neck, slimmer toward the head
+    add(box(0.07, 0.46, 0.11), M.mane, 0, 0.24, -0.18, upper);
+    add(box(0.09, 0.14, 0.16), M.mane, 0, 0.5, -0.06, upper);             // forelock tuft at the poll
+    const head = new THREE.Group(); head.position.set(0, 0.46, 0.02); head.rotation.x = NECK.head; upper.add(head);
+    add(box(0.28, 0.4, 0.36), coat, 0, 0.17, -0.01, head);                // jaw and forehead
+    add(box(0.22, 0.3, 0.28), coat, 0, 0.5, 0.0, head);                   // the muzzle, narrower
+    add(box(0.07, 0.14, 0.07), coat, -0.08, -0.04, -0.15, head); add(box(0.07, 0.14, 0.07), coat, 0.08, -0.04, -0.15, head);   // ears, up at the poll
+    if (this.coat % 2) add(box(0.1, 0.42, 0.02), M.white, 0, 0.36, -0.19, head);   // a blaze down the face
     const tail = new THREE.Group(); tail.position.set(0, 1.32, -0.78); tail.rotation.x = 0.5; g.add(tail);
     add(box(0.12, 0.7, 0.12), M.mane, 0, -0.32, 0, tail);
     add(box(0.66, 0.08, 0.6), M.blanket, 0, 1.45, 0.05);                 // saddle blanket
@@ -62,7 +76,7 @@ class Horse {
       add(box(0.17, 0.1, 0.19), M.hoof, 0, -0.86, 0.01, leg);
       return leg;
     });
-    this.neck = neck; this.tail = tail;
+    this.neck = neck; this.upper = upper; this.head = head; this.tail = tail;
     this.mesh = g; this.mgr.game.scene.add(g);
   }
   drop() { if (this.mesh) { this.mgr.game.scene.remove(this.mesh); this.mesh = null; } }
@@ -92,7 +106,14 @@ class Horse {
       const off = gallop ? [0, 0.3, Math.PI, Math.PI + 0.3][i] : [0, Math.PI, Math.PI, 0][i];
       l.rotation.x = Math.sin(this.phase + off) * amp;
     });
-    this.neck.rotation.x = -0.75 + (gallop ? Math.sin(this.phase * 2) * 0.08 : 0) + (sp < 0.3 ? Math.sin(this.phase * 0.3) * 0.05 : 0);
+    // head and neck: a gentle nod in step when walking; stretched out forward
+    // and lower at the gallop (the neck reaches, the head opens up); a slow
+    // sway standing still. Always forward of the chest, never back at the rider.
+    const reach = gallop ? Math.min(1, (sp - 6) / 4) : 0;
+    const nod = sp >= 0.3 ? Math.sin(this.phase * 2) * (gallop ? 0.07 : 0.045) : Math.sin(this.phase * 0.3) * 0.04;
+    this.neck.rotation.x = NECK.base + reach * 0.28 + nod;
+    this.upper.rotation.x = NECK.upper + reach * 0.22 - nod * 0.4;
+    this.head.rotation.x = NECK.head - reach * 0.3 + nod * 0.5;
     this.tail.rotation.z = Math.sin(this.phase * 0.7) * 0.15;
   }
 }

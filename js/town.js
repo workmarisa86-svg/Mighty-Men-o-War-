@@ -69,6 +69,9 @@ export class TownLife {
     // HUD: coins, honor and bounty; context buttons for phones
     const hud = document.getElementById('hud');
     this.bar = document.createElement('div'); this.bar.id = 'townbar'; hud.appendChild(this.bar);
+    // a job: an arrow at the top of the screen points to whoever pays you
+    this.arrowEl = document.createElement('div'); this.arrowEl.id = 'jobarrow'; this.arrowEl.hidden = true;
+    this.arrowEl.innerHTML = '<i>&#10148;</i><span></span>'; hud.appendChild(this.arrowEl);
     this.ctxEl = document.createElement('div'); this.ctxEl.id = 'townctx'; this.ctxEl.className = 'ctx'; hud.appendChild(this.ctxEl);
     this.ctxEl.addEventListener('touchstart', (e) => { const b = e.target.closest('[data-a]'); if (!b) return; e.preventDefault(); e.stopPropagation(); this.doAction(b.dataset.a); }, { passive: false });
     this.ctxEl.addEventListener('mousedown', (e) => { const b = e.target.closest('[data-a]'); if (b) { e.stopPropagation(); this.doAction(b.dataset.a); } });
@@ -174,6 +177,25 @@ export class TownLife {
       Object.assign(offer, { courier: true, to: to.i, toName: to.name });
     } else Object.assign(offer, { item: pick.item, n: pick.n });
     g.app.openPanel('job', { v, offer });
+  }
+  // who pays for the job: the person you deliver to, or whoever asked you
+  jobTarget() {
+    const f = this.job;
+    if (!f) return null;
+    const id = f.courier ? f.to : f.giver;
+    return this.folk.list.find((v) => v.i === id && v.alive) || null;
+  }
+  // the arrow turns with you toward that person (name and distance under it)
+  jobArrow() {
+    const el = this.arrowEl, g = this.game, v = this.jobTarget(), p = g.player;
+    if (!v || g.paused) { if (!el.hidden) el.hidden = true; return; }
+    const dx = v.pos.x - p.pos.x, dz = v.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (d < 3) { if (!el.hidden) el.hidden = true; return; }
+    const rel = Math.atan2(-dx, -dz) - p.yaw;
+    el.hidden = false;
+    el.firstChild.style.transform = `rotate(${(-rel - Math.PI / 2).toFixed(3)}rad)`;
+    const txt = t('job.arrow', { name: v.name, m: Math.round(d) });
+    if (txt !== this.arrowTxt) { this.arrowTxt = txt; el.lastChild.textContent = txt; }
   }
   acceptJob(offer) { this.job = offer; this.game.hud.toast(t('job.accepted')); }
   payJob(v, f) {
@@ -746,6 +768,7 @@ export class TownLife {
     this.guestCheck();
     this.ambience(dt);
     this.updateBar();
+    this.jobArrow();
   }
   // hens lay eggs in the pen
   livestock(dt) {
@@ -831,7 +854,7 @@ export class TownLife {
   dispose() {
     stopFolk(); setWind(0);
     this.folk.dispose();
-    this.bar.remove(); this.ctxEl.remove();
+    this.bar.remove(); this.ctxEl.remove(); this.arrowEl.remove();
     if (paintSeason(null) && this.game.tex) this.game.tex.needsUpdate = true;
   }
 }
