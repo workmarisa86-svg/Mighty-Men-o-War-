@@ -12,7 +12,8 @@ import { t } from './i18n.js';
 import { sfx } from './audio.js';
 
 const MAX_MODELS = 12, MODEL_M = 110;
-const WALK = 4.2, GALLOP = 11, STAM_USE = 0.22, STAM_BACK = 0.12;
+const WALK = 4.2, GALLOP = 11, SWIM = 2.6, STAM_USE = 0.22, STAM_BACK = 0.12;
+const JUMP_V = 8.6, HORSE_G = 24;         // a jump clears about a block and a half
 export const SADDLE_ROOT = 0.6;          // where a rider's feet-root goes above the horse's hooves
 const COATS = [0x5a3a24, 0x3a2618, 0x7a5a3a, 0x2a2420, 0x8a7a68, 0x6a4a2e];
 
@@ -162,30 +163,75 @@ export class Horses {
     for (let yy = Math.floor(y); yy < Math.floor(y) + 3; yy++) if (w.get(Math.floor(x), yy, Math.floor(z)) === B.WATER) n++;
     return n;
   }
+  // the first floor at or below y (any depth), or null; water is not a floor
+  floorUnder(x, z, y) {
+    const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
+    if (bx < 2 || bz < 2 || bx >= w.W - 2 || bz >= w.D - 2) return null;
+    for (let yy = Math.floor(y); yy > 1; yy--) if (SOLID[w.get(bx, yy, bz)]) return yy + 1;
+    return null;
+  }
+  // the top of the water in this column (null: no water at the horse)
+  waterTop(x, y, z) {
+    const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
+    let yy = Math.floor(y + 0.4);
+    if (w.get(bx, yy, bz) !== B.WATER && w.get(bx, yy + 1, bz) !== B.WATER) return null;
+    while (w.get(bx, yy + 1, bz) === B.WATER) yy++;
+    return yy + 1;
+  }
+  // You ride the horse like your own feet: it walks, gallops (run), jumps
+  // (jump), steps up a block, goes down slopes and drops off ledges, and
+  // swims in deep water (slowly, its head above the surface).
   ride(dt, it) {
     const g = this.game, p = g.player, h = p.riding;
     if (!h || !h.alive) { this.dismount(true); return; }
     const sy = Math.sin(p.yaw), cy = Math.cos(p.yaw);
     let wx = -sy * it.fwd + cy * it.strafe * 0.5, wz = -cy * it.fwd - sy * it.strafe * 0.5;
     const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }
-    const gallop = it.run && it.fwd > 0 && this.stamina > 0.05;
+    const wTop = this.waterTop(h.pos.x, h.pos.y, h.pos.z);
+    const bottom = this.floorUnder(h.pos.x, h.pos.z, h.pos.y + 0.3);
+    const swimming = wTop != null && (bottom == null || wTop - bottom >= 1.6);
+    const gallop = it.run && it.fwd > 0 && this.stamina > 0.05 && !swimming;
     if (gallop) this.stamina = Math.max(0, this.stamina - STAM_USE * dt); else this.stamina = Math.min(1, this.stamina + STAM_BACK * dt);
-    let target = (gallop ? GALLOP : WALK) * Math.min(1, wl);
-    const wet = this.waterDepth(h.pos.x, h.pos.y, h.pos.z);
-    if (wet >= 2) { g.hud.toast(t('horse.deep'), 'warn'); this.dismount(); return; }
-    if (wet === 1) target *= 0.45;
+    let target = (swimming ? SWIM : gallop ? GALLOP : WALK) * Math.min(1, wl);
+    if (!swimming && wTop != null) target *= 0.55;                     // wading
     h.speed += (target - h.speed) * Math.min(1, dt * (target > h.speed ? 2.5 : 4));
     if (wl > 0.05) h.yaw = turnTo(h.yaw, Math.atan2(-wx, -wz), dt * 5);
+    // the ground under the horse now, and whether it stands on it
+    h.vy = h.vy || 0;
+    const floorHere = bottom ?? -99;
+    const onGround = !swimming && h.pos.y <= floorHere + 0.05 && h.vy <= 0;
+    if (onGround && it.jump && !h.jumpHeld) { h.vy = JUMP_V; sfx.thump(); }
+    h.jumpHeld = !!it.jump;
+    // horizontal: one block up while walking (two in a jump), a two-block wall stops it
     const st = h.speed * dt, nx = h.pos.x - Math.sin(h.yaw) * st, nz = h.pos.z - Math.cos(h.yaw) * st;
-    // feet: one block up at most; a two-block wall (or a deep drop into water) stops the horse
-    const ok = (x, z) => { const gy = this.ground(x, z, h.pos.y + 1.2); return gy != null && gy - h.pos.y <= 1.05 && gy - h.pos.y >= -3 && this.clear(x, gy, z) ? gy : null; };
-    let gy = ok(nx, nz);
-    if (gy != null) { h.pos.x = nx; h.pos.z = nz; h.pos.y += (gy - h.pos.y) * Math.min(1, dt * 10); }
-    else {
-      const ax = ok(nx, h.pos.z), az = ok(h.pos.x, nz);
-      if (ax != null) { h.pos.x = nx; h.pos.y += (ax - h.pos.y) * Math.min(1, dt * 10); } else if (az != null) { h.pos.z = nz; h.pos.y += (az - h.pos.y) * Math.min(1, dt * 10); } else h.speed *= 0.3;
+    const ok = (x, z) => {
+      const climb = swimming ? 1.7 : 1.05;                                  // out of the water onto a bank
+      const gy = this.floorUnder(x, z, h.pos.y + climb);
+      if (gy == null || gy > h.pos.y + climb) return null;                  // the edge of the world, or a wall too high (jump it)
+      return this.clear(x, Math.max(gy, h.pos.y + (swimming ? 1 : 0)), z) ? true : null;   // swimming, its legs hang below the bank's edge
+    };
+    if (ok(nx, nz)) { h.pos.x = nx; h.pos.z = nz; }
+    else if (Math.abs(nx - h.pos.x) > 0.002 && ok(nx, h.pos.z)) h.pos.x = nx;
+    else if (Math.abs(nz - h.pos.z) > 0.002 && ok(h.pos.x, nz)) h.pos.z = nz;
+    else h.speed *= 0.3;
+    // vertical: step up, fall with gravity, float when swimming
+    const floor = this.floorUnder(h.pos.x, h.pos.z, h.pos.y + 1.05);
+    if (swimming || (wTop != null && floor != null && wTop - floor >= 1.6)) {
+      const want = wTop - 1.35;                                             // body under water, head and rider above
+      h.vy = 0; h.pos.y += (want - h.pos.y) * Math.min(1, dt * 4);
+      if (floor != null && floor > h.pos.y) h.pos.y = floor;
+      if (it.jump && floor != null && floor - h.pos.y <= 1.05) h.pos.y += dt * 3;   // climbing out onto the bank
+    } else if (floor != null && floor > h.pos.y && h.vy <= 0) {
+      if (floor - h.pos.y <= 1.05) h.pos.y += (floor - h.pos.y) * Math.min(1, dt * 12);   // a step up
+    } else {
+      h.vy -= HORSE_G * dt; h.pos.y += h.vy * dt;
+      if (floor != null && h.pos.y <= floor) {
+        if (h.vy < -14) g.damage(Math.round((-h.vy - 14) * 4), 'fall');      // a long drop hurts the rider
+        h.pos.y = floor; h.vy = 0;
+      }
     }
-    if (h.pos.y < SEA - 1) h.pos.y = SEA - 1;
+    if (h.pos.y < 2) h.pos.y = 2;
+    h.swimming = swimming;
     // the rider sits on the saddle (eye height set by the player)
     p.pos.set(h.pos.x, h.pos.y + SADDLE_ROOT + 0.35, h.pos.z); p.vel.set(0, 0, 0); p.onGround = true;
     p.running = gallop;
@@ -194,9 +240,10 @@ export class Horses {
     if (h.speed > 1 && (h.stepAcc = (h.stepAcc || 0) + h.speed * dt) > 2.4) { h.stepAcc = 0; sfx.step('dirt'); }
   }
   // the horse's body (a little wider than its hooves) is free of blocks
+  // (from y + 1.05 up: the legs may straddle a one-block step, up or down)
   clear(x, y, z) {
     const w = this.game.world;
-    for (const [ox, oz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) for (let yy = Math.floor(y + 0.2); yy <= Math.floor(y + 2.4); yy++) if (SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) return false;
+    for (const [ox, oz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) for (let yy = Math.floor(y + 1.05); yy <= Math.floor(y + 2.4); yy++) if (SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) return false;
     return true;
   }
 
