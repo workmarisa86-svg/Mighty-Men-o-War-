@@ -123,7 +123,7 @@ export class Farm {
     this.crops.delete(i);
     const owner = cr.o;
     // the village replants its own fields
-    if (owner === 'v') this.replant.push({ i, c: cr.c, at: this.game.time + 1 });
+    if (owner === 'v') this.replant.push({ i, c: cr.c, at: this.game.time + 0.6 });   // replanted, then grows again (about 2 days in all)
     return { items: out.filter(([, n]) => n > 0), owner };
   }
   replant = [];
@@ -134,6 +134,9 @@ export class Farm {
       this.replant = this.replant.filter((q) => q !== r);
       if (w.data[r.i] !== B.AIR) continue;
       const x = r.i % w.W, z = Math.floor(r.i / w.W) % w.D, y = Math.floor(r.i / (w.W * w.D));
+      if (!this.growing(g.time)) { this.replant.push(r); r.at = g.time + 0.25; continue; }     // not in winter
+      // the owner also puts back farmland that was dug up
+      if (w.get(x, y - 1, z) === B.DIRT || w.get(x, y - 1, z) === B.GRASS) w.set(x, y - 1, z, B.FARMLAND);
       if (w.get(x, y - 1, z) !== B.FARMLAND) continue;
       this.crops.set(r.i, { c: r.c, g: 0, w: g.time, e: g.time, h: 1, o: 'v' });
       w.set(x, y, z, B.SPROUT);

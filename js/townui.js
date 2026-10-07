@@ -131,7 +131,8 @@ export function installTownUI(UI) {
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend">${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
-    const panel = this.panel(t('menu.townMap'), body, { wide: true, onBack: close });
+    const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button></div>` + body, { wide: true, onBack: close });
+    panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
     panel.classList.add('mappanel');
     const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
     x.onclick = close; panel.appendChild(x);
@@ -150,14 +151,24 @@ export function installTownUI(UI) {
       c.fillRect(b.x0 * sc, b.z0 * sc, (b.x1 - b.x0 + 1) * sc, (b.z1 - b.z0 + 1) * sc);
       c.strokeRect(b.x0 * sc, b.z0 * sc, (b.x1 - b.x0 + 1) * sc, (b.z1 - b.z0 + 1) * sc);
     };
+    const zoom = this.townZoom ? 3.4 : 1;
+    if (zoom > 1) { c.setTransform(zoom, 0, 0, zoom, -(V.cx * sc) * (zoom - 1), -(V.cz * sc) * (zoom - 1)); c.drawImage(this.terrainImage(g), 0, 0, S * dpr, S * dpr); }
     for (const b of V.buildings) box(b, b.type === 'house' ? C.home : b.type === 'hall' || b.type === 'jail' ? C.law : C.shop);
     const cot = T.cottage;
     box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
-    c.fillStyle = '#f0e8cc'; c.font = `${11 * dpr}px Oswald, Arial`; c.textAlign = 'center';
-    c.fillText(t('tmap.center'), V.cx * sc, (V.cz - 17) * sc);
-    c.fillText(t('tmap.cottage'), cot.x * sc, (cot.z - 5) * sc);
+    // labels: in the whole view the town center is one label and homes show
+    // their kind; the closer view names every building with its icon
+    const ICON = { general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
+    const label = (txt, x, y, size = 11) => { c.font = `${size * dpr / zoom}px Oswald, Arial`; c.textAlign = 'center'; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.strokeText(txt, x, y); c.fillStyle = '#f0e8cc'; c.fillText(txt, x, y); };
+    if (zoom > 1) {
+      for (const b of V.buildings) if (b.type !== 'house') label((ICON[b.type] || '') + ' ' + t('tmap.b.' + b.type), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 0.8) * sc, 10);
+    } else {
+      label(t('tmap.center'), V.cx * sc, (V.cz - 20) * sc);
+      for (const b of V.buildings) if (b.type === 'house') label(t('tmap.h.' + (b.status || 'house')), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 1) * sc, 9);
+    }
+    label(t('tmap.cottage'), cot.x * sc, (cot.z - 5) * sc);
     for (const v of T.folk.list) {
-      if (!v.alive || v.away) continue;
+      if (!v.alive || v.away || (!v.posse && Math.hypot(v.pos.x - g.player.pos.x, v.pos.z - g.player.pos.z) > 120)) continue;
       c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
       c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
     }
@@ -165,5 +176,48 @@ export function installTownUI(UI) {
     c.save(); c.translate(p.pos.x * sc, p.pos.z * sc); c.rotate(-p.yaw);
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr; const r = 8 * dpr;
     c.beginPath(); c.moveTo(0, -r); c.lineTo(r * 0.7, r * 0.7); c.lineTo(0, r * 0.3); c.lineTo(-r * 0.7, r * 0.7); c.closePath(); c.fill(); c.stroke(); c.restore();
+  };
+
+  // ---- looting a body or someone who gave up -----------------------------------
+  P.r_loot = function ({ v }) {
+    const g = this.app.game, T = g.town;
+    const list = T.lootList(v);
+    const name = (it) => it.id === 'coins' ? t('loot.coins', { n: it.n }) : it.id === 'horse' ? t('loot.horse') : t('item.' + it.id);
+    const rows = list.map((it, k) => `<div class="shop-row"><img src="${itemIcon(it.id)}" alt=""><span>${esc(name(it))}${it.n > 1 && it.id !== 'coins' ? ' ×' + it.n : ''}</span><b></b>
+      <button class="btn small primary" data-k="${k}">${t('loot.take')}</button></div>`).join('') || `<p class="muted">${t('loot.empty')}</p>`;
+    const panel = this.panel(t('loot.title', { name: v.name }), `<div class="shop">${rows}</div>${list.length > 1 ? `<div class="row end"><button class="btn primary" id="lall">${t('loot.all')}</button></div>` : ''}`, { wide: true, onBack: () => this.app.closePanel() });
+    panel.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => { T.takeLoot(v, list[+b.dataset.k]); this.show('loot', { v }); });
+    const all = panel.querySelector('#lall');
+    if (all) all.onclick = () => { for (const it of T.lootList(v)) T.takeLoot(v, it); this.app.closePanel(); };
+  };
+
+  // ---- an invitation home -----------------------------------------------------------
+  P.r_invite = function ({ v }) {
+    const T = this.app.game.town;
+    const body = `<div class="who"><b>${esc(v.name)}</b></div><p class="say">“${esc(t('guest.inviteLine'))}”</p>
+      <p class="muted small">${t('guest.inviteNote')}</p>
+      <div class="row end"><button class="btn ghost" id="ino">${t('guest.decline')}</button><button class="btn primary" id="iyes">${t('guest.accept')}</button></div>`;
+    this.panel(t('guest.inviteTitle'), body, { back: false });
+    this.root.querySelector('#iyes').onclick = () => { T.acceptInvite(v); this.app.closePanel(); };
+    this.root.querySelector('#ino').onclick = () => { T.declineInvite(); this.app.closePanel(); };
+  };
+  // ---- a guest at someone's home: Eat, Chat, Leave, or rob them ----------------------
+  P.r_guest = function ({ rob = false } = {}) {
+    const T = this.app.game.town, G = T.guest;
+    if (!G) { this.app.closePanel(); return; }
+    const host = T.folk.list[G.host];
+    const body = rob
+      ? `<p>${t('guest.robWhat')}</p><div class="menu"><button class="btn" data-r="food">${t('guest.robFood')}</button><button class="btn" data-r="guns">${t('guest.robGuns')}</button>
+         <button class="btn danger" data-r="all">${t('guest.robAll')}</button><button class="btn ghost" data-r="no">${t('menu.cancel')}</button></div><p class="muted small">${t('guest.robNote')}</p>`
+      : `<div class="who"><b>${esc(host ? host.name : '')}</b></div><p class="say">“${esc(t('guest.offer'))}”</p>
+         <div class="menu"><button class="btn primary" data-a="eat">${t('guest.eat')}</button><button class="btn" data-a="chat">${t('guest.chat')}</button>
+         <button class="btn" data-a="leave">${t('guest.leave')}</button><button class="btn ghost danger" data-a="rob">${t('guest.rob')}</button></div>`;
+    this.panel(t('guest.title'), body, { back: false });
+    this.root.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => {
+      const a = b.dataset.a;
+      if (a === 'rob') { this.show('guest', { rob: true }); return; }
+      T.guestAction(a); this.app.closePanel();
+    });
+    this.root.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { if (b.dataset.r !== 'no') T.guestAction('rob', b.dataset.r); this.app.closePanel(); });
   };
 }

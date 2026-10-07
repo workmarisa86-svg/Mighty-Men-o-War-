@@ -65,6 +65,7 @@ export class Input {
 
   setupTouch(root) {
     root.classList.add('active');
+    document.body.classList.add('touchui');
     const stick = root.querySelector('.stick'), knob = root.querySelector('.knob');
     let stickId = null, lookId = null, sx = 0, sy = 0, lx = 0, ly = 0, tapT = 0, tapMove = 0;
     const R = 50;
@@ -79,6 +80,8 @@ export class Input {
           continue;
         }
         if (t.target.closest('.hotbar')) continue;
+        // a swipe down from the top edge (used to leave the zoom)
+        if (t.clientY < 36) { this.swipeId = t.identifier; this.swipeY = t.clientY; }
         if (t.clientX < innerWidth * 0.4 && stickId === null) {
           stickId = t.identifier; sx = t.clientX; sy = t.clientY;
           stick.style.left = (sx - 60) + 'px'; stick.style.top = (sy - 60) + 'px'; stick.classList.add('show');
@@ -93,7 +96,9 @@ export class Input {
           const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; }
           knob.style.transform = `translate(${dx}px, ${dy}px)`;
           this.move.x = dx / R; this.move.y = dy / R;
-        } else if (t.identifier === lookId) {
+        }
+        if (t.identifier === this.swipeId && t.clientY - this.swipeY > 70) { this.touchPressed.add('swipeDown'); this.swipeId = null; }
+        if (t.identifier === lookId) {
           this.mouse.dx += (t.clientX - lx) * 2.2; this.mouse.dy += (t.clientY - ly) * 2.2; tapMove += Math.abs(t.clientX - lx) + Math.abs(t.clientY - ly);
           lx = t.clientX; ly = t.clientY;
         }

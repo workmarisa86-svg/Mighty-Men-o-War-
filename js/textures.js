@@ -14,6 +14,7 @@ const TILE_NAMES = [
   'ladder', 'ladder_top',
   // War headquarters rooms
   'med_side', 'med_top', 'rack', 'map_top',
+  'door',
 ];
 // season currently painted into the seasonal tiles (grass, leaves): null = War look
 let SEASON = null;
@@ -265,6 +266,14 @@ const PAINT = {
     p.rect(0, 0, 32, 3, [70, 56, 38]); p.rect(0, 29, 32, 3, [70, 56, 38]);
     p.rect(9, 11, 14, 10, [200, 186, 140]);           // stencilled ration label
     p.rect(12, 14, 8, 1, [60, 50, 34]); p.rect(12, 17, 8, 1, [60, 50, 34]);
+  },
+  // a plank house door: frame, cross brace and an iron handle
+  door(p) {
+    p.fill([92, 64, 40], 12);
+    for (let x = 0; x < 32; x += 8) p.rect(x, 0, 1, 32, [62, 42, 26]);
+    p.rect(0, 0, 32, 2, [56, 38, 24]); p.rect(0, 30, 32, 2, [56, 38, 24]);
+    for (let i = 0; i < 28; i++) p.px(2 + i, 3 + i, [70, 48, 30]);
+    p.rect(24, 15, 3, 3, [40, 40, 38]);
   },
   // first-aid cabinet: pale enamel, a dark green cross
   med_side(p) {

@@ -127,7 +127,21 @@ function knife() {
   return g;
 }
 
-const BUILDERS = { rifle: () => rifle(false), sniper: () => rifle(true), smg, pistol, knife };
+// Double-barrel shotgun (Town Life): side-by-side barrels, walnut stock.
+function shotgun() {
+  const M = gunMats(), g = new THREE.Group();
+  B(g, 0.05, 0.11, 0.24, M.wood, 0, -0.06, 0.2, -0.14);
+  B(g, 0.04, 0.055, 0.12, M.wood, 0, -0.015, 0.03);
+  B(g, 0.05, 0.04, 0.22, M.wood, 0, -0.012, -0.2);
+  C(g, 0.026, 0.12, M.steel, 0, 0.025, -0.04);
+  for (const x of [-0.013, 0.013]) C(g, 0.013, 0.6, M.steel, x, 0.035, -0.38, 0.013);
+  B(g, 0.012, 0.03, 0.05, M.steel, 0, -0.045, -0.02);
+  g.userData.muzzle = new THREE.Vector3(0, 0.035, -0.68);
+  g.userData.length = 1.0;
+  return g;
+}
+
+const BUILDERS = { rifle: () => rifle(false), sniper: () => rifle(true), smg, pistol, knife, shotgun };
 export function hasGunModel(id) { return !!BUILDERS[id]; }
 // a fresh group (geometry and materials are shared, so this is cheap)
 export function gunModel(id) { return BUILDERS[id] ? BUILDERS[id]() : null; }

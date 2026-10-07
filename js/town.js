@@ -13,6 +13,8 @@ import { startFolk, stopFolk } from './folk.js';
 import { t } from './i18n.js';
 import { saveTown } from './storage.js';
 import { TOWN_LAYOUT } from './towngen.js';
+import { WEAPONS } from './weapons.js';
+import * as THREE from 'three';
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
@@ -21,10 +23,11 @@ export const SHOPS = {
   general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, glass: 3, fence: 2 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
   butcher: { sells: { meat_cooked: 6, meat_raw: 4 }, buys: { meat_raw: 3, meat_cooked: 4 } },
-  hunting: { sells: { knife: 10, pistol: 45, rifle: 80, sniper: 140 }, buys: { hide: 7, bear_hide: 65, meat_raw: 2 } },
+  hunting: { sells: { knife: 10, pistol: 45, shotgun: 55, rifle: 80, sniper: 140, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, meat_raw: 2 } },
+  stable: { sells: { horse: 60 }, buys: { wheat: 3 } },
   market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2 } },
 };
-const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30 };
+const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40 };
 const JOBS = [
   { item: 'wood', n: 6, pay: 8 }, { item: 'stone', n: 6, pay: 8 }, { item: 'meat_raw', n: 2, pay: 10 }, { item: 'egg', n: 3, pay: 8 },
   { item: 'milk', n: 1, pay: 6 }, { item: 'wheat', n: 4, pay: 9 }, { item: 'clay', n: 4, pay: 8 }, { item: 'hide', n: 1, pay: 12 },
@@ -43,6 +46,11 @@ export class TownLife {
     this.job = saved.job || saved.favor || null;      // (older saves called jobs "favors")
     this.jobCd = saved.jobCd || saved.favorCd || {};
     this.stolen = saved.stolen || {};
+    this.restock = saved.restock || [];
+    this.rapport = saved.rapport || {};            // how much each household likes you
+    this.inviteT = 60 + Math.random() * 60;
+    this.charges = [];                             // lit dynamite at a door
+    this.doorT = 0;
     this.st = Object.assign({ days: 0, earned: 0, jobs: 0, jailed: 0, harvested: 0 }, saved.st || {});
     if (this.st.favors != null) { this.st.jobs += this.st.favors; delete this.st.favors; }
     this.village = g.world.sites.find((s) => s.type === 'village');
@@ -101,14 +109,16 @@ export class TownLife {
 
   // ---- money, honor, bounty ---------------------------------------------
   price(item, buy, base) {
-    const k = buy ? 1.25 - this.honor / 200 : 0.75 + this.honor / 400;
+    // a household that likes you gives a better price (up to 15%)
+    const fam = this.shopKeeper ? Math.min(3, this.rapport[this.shopKeeper.homeIdx] || 0) * 0.05 : 0;
+    const k = buy ? 1.25 - this.honor / 200 - fam : 0.75 + this.honor / 400 + fam;
     return buy ? Math.max(1, Math.ceil(base * k)) : Math.max(1, Math.floor(base * k));
   }
   addHonor(n) { this.honor = Math.max(0, Math.min(100, this.honor + n)); }
   greetingKey(v) {
     if (this.bounty > 0) return v.role === 'sheriff' ? 'say.sheriffWanted' : 'say.wanted';
     if (v.role === 'keeper') return this.honor >= 65 ? 'say.keeperWarm' : this.honor < 35 ? 'say.keeperCold' : 'say.keeper';
-    const k = this.honor >= 65 ? 'warm' : this.honor < 35 ? 'cold' : 'hi';
+    const k = this.honor >= 65 || (this.rapport[v.homeIdx] || 0) >= 3 ? 'warm' : this.honor < 35 ? 'cold' : 'hi';
     return 'say.' + k + (1 + Math.floor(Math.random() * 3));
   }
 
@@ -122,6 +132,9 @@ export class TownLife {
       const type = { chicken: 'chicken', piglet: 'pig', calf: 'cow' }[item];
       g.animals.addLivestock(type, this.cottage.pen, 'player');
       g.hud.toast(t('shop.livestock', { item: t('item.' + item) }));
+    } else if (item === 'horse') {
+      const st = this.village.buildings.find((b) => b.type === 'stable');
+      g.horses.add(st.hitch.x, st.hitch.y, st.hitch.z, 'player'); g.hud.toast(t('horse.bought'), 'pick');
     } else if (item === 'bucket' && g.has('bucket_water')) { g.give('bucket', 1); }
     else g.give(item, 1);
     sfx.coins();
@@ -235,17 +248,20 @@ export class TownLife {
   // the posse: townspeople (the sheriff first), more of them for a bigger bounty
   formPosse(lastSeen) {
     const g = this.game, F = this.folk;
-    const size = Math.min(6, 1 + Math.floor(this.bounty / 35));
+    // men only (the sheriff first), 6 to 20 of them depending on the bounty
+    const size = Math.min(20, 6 + Math.floor(this.bounty / 25));
     if (!this.posse) this.posse = { members: [], lastSeen: lastSeen.clone(), seenT: 3, hostile: false, talked: false, arrived: false, checked: false };
     else { this.posse.lastSeen = lastSeen.clone(); this.posse.checked = false; }
     const P = this.posse;
     const hall = this.village.buildings.find((b) => b.type === 'hall');
-    const pool = F.list.filter((v) => v.alive && !v.posse && !v.reportTo && v.role !== 'keeper')
+    const pool = F.list.filter((v) => v.alive && !v.posse && !v.reportTo && !v.fight && !v.surrendered && v.role !== 'keeper' && !v.female)
       .sort((a, b) => (b.role === 'sheriff') - (a.role === 'sheriff') || a.pos.distanceTo(hall.door) - b.pos.distanceTo(hall.door));
     while (P.members.filter((m) => m.alive).length < size && pool.length) {
       const v = pool.shift();
       v.posse = true; v.route = []; v.planT = 0; v.idleT = 0;
-      F.armed(v, v.role === 'sheriff' ? 'pistol' : 'rifle');
+      v.hp = Math.max(v.hp, 170);                                    // tougher than ordinary townsfolk
+      F.armed(v, F.bestGun(v) || (Math.random() < 0.5 ? 'rifle' : 'shotgun'));
+      if (g.horses && P.members.filter((m) => m.horse).length < 12) g.horses.mountFor(v);   // they ride
       P.members.push(v);
       F.say(v, 'say.posseJoin');
     }
@@ -265,17 +281,18 @@ export class TownLife {
       }
     }
     const idx = P.members.indexOf(v);
-    const spread = { x: Math.cos(idx * 2.1) * 3, z: Math.sin(idx * 2.1) * 3 };
+    const fl = P.hostile ? 9 : 3, spread = { x: Math.cos(idx * 2.1) * fl, z: Math.sin(idx * 2.1) * fl };   // hostile: spread out to the flanks
     if (P.hostile) {
-      // take cover and shoot
+      // close in: riders get down (the horse stays there), take cover, flank and shoot
+      if (v.horse && d < 35) { const h = v.horse; h.rider = null; v.lastHorse = h; v.horse = null; }
       v.coverT = (v.coverT || 0) - dt;
       if (P.seenT < 3 && d < 45) {
         if (!v.cover || v.coverT <= 0) { v.cover = F.coverSpot(v); v.coverT = 7; v.route = []; }
-        if (v.cover && Math.hypot(v.cover.x - v.pos.x, v.cover.z - v.pos.z) > 0.7) { F.goDirect(v, v.cover, 4.6, dt, 0.5); v.crouch = false; }
+        if (v.cover && Math.hypot(v.cover.x - v.pos.x, v.cover.z - v.pos.z) > 0.7) { F.goDirect(v, v.cover, (v.horse ? 1.9 : 1) * (4.6), dt, 0.5); v.crouch = false; }
         else { v.speed = 0; v.peekT = (v.peekT || 0) - dt; if (v.peekT <= 0) { v.peeking = !v.peeking; v.peekT = v.peeking ? 1.8 : 1.2; } v.crouch = !!v.cover && !v.peeking; }
         v.yaw = Math.atan2(-(pl.x - v.pos.x), -(pl.z - v.pos.z));
         if (!v.crouch) F.shootAt(v, dt);
-      } else { F.goDirect(v, { x: P.lastSeen.x + spread.x, y: P.lastSeen.y, z: P.lastSeen.z + spread.z }, 4.8, dt, 1.5); v.crouch = false; }
+      } else { F.goDirect(v, { x: P.lastSeen.x + spread.x, y: P.lastSeen.y, z: P.lastSeen.z + spread.z }, (v.horse ? 1.9 : 1) * (4.8), dt, 1.5); v.crouch = false; }
       return;
     }
     v.crouch = false;
@@ -284,14 +301,14 @@ export class TownLife {
       // approach and question first
       const leader = P.members.find((m) => m.alive);
       if (v === leader && d < 4.5 && !g.overlay && !g.dead) { this.question(); return; }
-      F.goDirect(v, v === leader ? pl : { x: pl.x + spread.x, y: pl.y, z: pl.z + spread.z }, 4.4, dt, v === leader ? 3.2 : 2);
+      F.goDirect(v, v === leader ? pl : { x: pl.x + spread.x, y: pl.y, z: pl.z + spread.z }, (v.horse ? 1.9 : 1) * (4.4), dt, v === leader ? 3.2 : 2);
       return;
     }
     // search the area where you were last seen: the leader checks the very
     // spot first (into the house, if that's where you went)
     if (!P.arrived && Math.hypot(P.lastSeen.x - v.pos.x, P.lastSeen.z - v.pos.z) < 8) P.arrived = true;
     if (idx === 0 && !P.checked) {
-      if (F.goDirect(v, P.lastSeen, d > 60 ? 5 : 4, dt, 1.2)) P.checked = true;
+      if (F.goDirect(v, P.lastSeen, (v.horse ? 1.9 : 1) * (d > 60 ? 5 : 4), dt, 1.2)) P.checked = true;
       if (v.far && v.route.length) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
       return;
     }
@@ -302,7 +319,7 @@ export class TownLife {
       v.search = { x: P.lastSeen.x + Math.cos(a) * r, y: P.lastSeen.y, z: P.lastSeen.z + Math.sin(a) * r };
       v.route = [];
     }
-    F.goDirect(v, v.search, d > 60 ? 5 : 3.4, dt, 1.2);
+    F.goDirect(v, v.search, (v.horse ? 1.9 : 1) * (d > 60 ? 5 : 3.4), dt, 1.2);
     if (v.far && v.route.length) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
   }
   goHostile() {
@@ -320,7 +337,11 @@ export class TownLife {
   disband(msgKey = 'law.gaveUp') {
     const P = this.posse;
     if (!P) return;
-    for (const m of P.members) { m.posse = false; m.route = []; m.idleT = 0; m.cover = null; this.folk.armed(m, null); if (m.alive && msgKey === 'law.gaveUp') this.folk.say(m, 'say.posseLost'); }
+    for (const m of P.members) {
+      m.posse = false; m.route = []; m.idleT = 0; m.cover = null; this.folk.armed(m, null);
+      if (m.alive && msgKey === 'law.gaveUp') this.folk.say(m, 'say.posseLost');
+      if (m.horse) { const h = m.horse; m.horse = null; h.rider = null; h.alive = false; h.deadT = 999; }   // they ride home (the horse goes back)
+    }
     this.posse = null;
     this.game.hud.toast(t(msgKey));
   }
@@ -436,11 +457,213 @@ export class TownLife {
     g.app.saveGame(true);
   }
 
+  // ---- aim and use: Town Life's own targets (see aimuse.js) ---------------------
+  // riding: Dismount; a gun pointed at a person: Hold up; a body or a
+  // surrendered person: Loot; a horse: Ride; a house door: Knock (or, with
+  // dynamite in hand, Blow it open)
+  aimTarget(hit, eye, dir) {
+    const g = this.game, F = this.folk, p = g.player, sel = g.selected();
+    const W = WEAPONS[sel], gun = W && !W.melee && !W.throw;
+    const v = F.raycast(eye, dir, gun ? 14 : 3.4);
+    const blockD = hit ? Math.hypot(hit.x + 0.5 - eye.x, hit.y + 0.5 - eye.y, hit.z + 0.5 - eye.z) : 99;
+    if (v && v.dist < blockD) {
+      const u = v.villager;
+      if (gun && u.alive && !u.surrendered && !u.posse && !u.fight) return { a: 'holdup', label: t('use.holdup'), run: () => this.holdUp(u) };
+      if (v.dist < 3.4 && (u.surrendered > 0 || !u.alive) && !u.looted) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: u }) };
+    }
+    // a dead body nearby (lying low, the ray passes over it)
+    const body = F.list.find((u) => !u.alive && !u.away && !u.looted && Math.hypot(u.pos.x - p.pos.x, u.pos.z - p.pos.z) < 2.4);
+    if (body && p.pitch < -0.35) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: body }) };
+    if (p.riding) return { a: 'dismount', label: t('use.dismount'), run: () => g.horses.dismount() };
+    const hr = g.horses.raycast(eye, dir, 3.6);
+    if (hr && hr.dist < blockD && !hr.horse.rider) {
+      const h = hr.horse;
+      return { a: 'mount', label: t(h.owner === 'player' ? 'use.ride' : h.owner === 'posse' ? 'use.rideLoose' : 'use.steal'), run: () => g.horses.mount(h) };
+    }
+    if (hit && hit.id === B.HDOOR) {
+      const b = this.doorAt(hit.x, hit.y, hit.z);
+      if (!b) return null;
+      if (sel === 'dynamite') return { a: 'blow', label: t('use.blow'), run: () => this.lightDynamite(b, hit) };
+      return { a: 'knock', label: t('use.knock'), run: () => this.knock(b) };
+    }
+    return null;
+  }
+
+  // ---- hold-ups -------------------------------------------------------------------
+  // They hand over what they own, or fight back: it depends on whether they
+  // are armed, their nerve and station, and who is around to help.
+  holdUp(v) {
+    const g = this.game, F = this.folk;
+    const gun = F.bestGun(v);
+    const friends = F.list.filter((o) => o !== v && o.alive && !o.female && F.bestGun(o) && o.pos.distanceTo(v.pos) < 12).length;
+    const nerve = v.brave + (v.status === 'mansion' ? 0.12 : 0) + Math.min(3, friends) * 0.06 - (g.player.riding ? 0.08 : 0);
+    if (gun && !v.female && nerve > 0.78) {
+      v.fight = { armed: gun }; F.armed(v, gun); F.say(v, 'say.draw', null, 'warn');
+      for (const o of F.list) if (o !== v && o.alive && !o.female && F.bestGun(o) && o.pos.distanceTo(v.pos) < 12 && o.brave > 0.4) { o.fight = { armed: F.bestGun(o) }; F.armed(o, o.fight.armed); }
+    } else if (!gun && v.brave > 0.85) { v.scaredT = 20; F.say(v, 'say.flee', null, 'warn'); }
+    else { v.surrendered = 25; v.route = []; F.say(v, 'say.handsUp', null, 'warn'); }
+    sfx.alert();
+    this.crime('holdup', { victim: v });
+  }
+  // a body or someone who gave up: their money, guns, food, valuables, horse
+  lootList(v) {
+    const out = [];
+    if (v.money > 0) out.push({ id: 'coins', n: v.money });
+    for (const gname of v.guns || []) out.push({ id: gname, n: 1 });
+    for (const f of v.goods || []) out.push({ id: f, n: 1 });
+    if (v.status === 'mansion' && !v.goldTaken) out.push({ id: 'gold', n: 1 });
+    const h = v.horse || v.lastHorse;
+    if (h && h.alive && h.owner !== 'player') out.push({ id: 'horse', n: 1, horse: h });
+    return out;
+  }
+  takeLoot(v, item) {
+    const g = this.game;
+    if (item.id === 'coins') { this.money += v.money; v.money = 0; }
+    else if (item.id === 'horse') { item.horse.owner = 'player'; item.horse.rider = null; v.lastHorse = null; g.hud.toast(t('horse.claimed'), 'pick'); }
+    else {
+      g.give(item.id, item.n);
+      if (v.guns && v.guns.includes(item.id)) v.guns = v.guns.filter((x) => x !== item.id);
+      else if (item.id === 'gold') v.goldTaken = true;
+      else v.goods = (v.goods || []).filter((x, k, a) => a.indexOf(item.id) !== k || x !== item.id);
+    }
+    g.hud.dirtyHotbar = true;
+    if (!this.lootList(v).length) v.looted = true;
+    sfx.coins();
+  }
+
+  // ---- invitations and guests ---------------------------------------------------------
+  invite(dt) {
+    const g = this.game, F = this.folk;
+    this.inviteT -= dt;
+    if (this.inviteT > 0 || this.bounty > 0 || this.honor < 60 || this.posse || this.guest || g.overlay) return;
+    this.inviteT = 90 + Math.random() * 90 * (this.declined || 1);
+    const h = F.hour();
+    if (h < 9 || h > 19) return;
+    const v = F.list.find((o) => o.alive && !o.posse && !o.fight && !o.reportTo && o.role !== 'keeper' && o.role !== 'sheriff' && o.pos.distanceTo(g.player.pos) < 7);
+    if (!v) return;
+    F.say(v, 'say.invite');
+    g.app.openPanel('invite', { v });
+  }
+  acceptInvite(v) {
+    this.guest = { hi: v.homeIdx, home: v.home, host: v.i, until: this.game.time + 0.3, offered: false };
+    this.rapport[v.homeIdx] = (this.rapport[v.homeIdx] || 0) + 1;
+    this.declined = 1;
+    this.folk.routeTo(v, { b: v.home, pos: v.home.inside });
+    this.game.hud.toast(t('guest.go', { name: v.name }));
+  }
+  declineInvite() { this.declined = Math.min(3, (this.declined || 1) + 0.5); }
+  guestCheck() {
+    const g = this.game, G = this.guest;
+    if (!G) return;
+    if (G.until < g.time) { this.guest = null; return; }
+    const here = this.folk.houseAt(g.player.pos);
+    if (here >= 0 && this.village.buildings[here] === G.home && !G.offered && !g.overlay) { G.offered = true; g.app.openPanel('guest', {}); }
+  }
+  // the family at home (alive, in or near the house)
+  household(G) { return this.folk.list.filter((o) => o.alive && o.homeIdx === G.hi && o.pos.distanceTo(G.home.inside) < 14); }
+  guestAction(a, what) {
+    const g = this.game, F = this.folk, G = this.guest;
+    if (!G) return;
+    const fam = this.household(G);
+    if (a === 'eat') { g.player.hunger = Math.min(100, g.player.hunger + 45); this.rapport[G.hi] = (this.rapport[G.hi] || 0) + 1; g.hud.toast(t('guest.ate')); sfx.done(); return; }
+    if (a === 'chat') { this.rapport[G.hi] = (this.rapport[G.hi] || 0) + 1; this.addHonor(1); if (fam[0]) F.say(fam[0], 'say.chat' + (1 + Math.floor(Math.random() * 3))); return; }
+    if (a === 'leave') { this.guest = null; return; }
+    // robbing your hosts: they comply or fight back with their own guns
+    this.guest = null;
+    this.rapport[G.hi] = -5;
+    const fighters = fam.filter((o) => !o.female && F.bestGun(o) && o.brave > 0.4);
+    if (fighters.length) {
+      for (const o of fighters) { o.fight = { armed: F.bestGun(o) }; F.armed(o, o.fight.armed); F.say(o, 'say.draw', null, 'warn'); }
+      g.hud.alert(t('guest.fight'));
+    } else {
+      const take = (o) => {
+        if (what !== 'guns') for (const f of o.goods || []) g.give(f, 1), o.goods = [];
+        if (what !== 'food') { for (const gn of o.guns || []) g.give(gn, 1); o.guns = []; }
+        if (what === 'all') { this.money += o.money; o.money = 0; }
+      };
+      if (what !== 'guns') g.give('bread', 2), g.give('meat_cooked', 1);
+      fam.forEach(take);
+      for (const o of fam) { o.surrendered = 20; F.say(o, 'say.handsUp', null, 'warn'); }
+      g.hud.dirtyHotbar = true; sfx.coins();
+      g.hud.toast(t('guest.robbed'));
+    }
+    this.crime('robbery', { victim: fam[0] || null });
+  }
+
+  // ---- doors: households open their own doors; you knock -----------------------------
+  doorAt(x, y, z) { return this.village.buildings.find((b) => b.type === 'house' && b.doorCells && b.doorCells.some(([X, Y, Z]) => X === x && Y === y && Z === z)) || null; }
+  knock(b) {
+    const g = this.game, F = this.folk;
+    sfx.thump(); setTimeout(() => sfx.thump(), 180);
+    const hi = this.village.buildings.indexOf(b);
+    const home = F.list.filter((o) => o.alive && o.home === b && F.houseAt(o.pos) === hi);
+    if (!home.length) { g.hud.toast(t('door.nobody')); return; }
+    const host = home[0], trusted = (this.bounty === 0 && this.honor >= 45) || (this.guest && this.guest.home === b) || (this.rapport[host.homeIdx] || 0) >= 2;
+    if (trusted) { b.allowT = performance.now() / 1000 + 12; F.say(host, 'say.comeIn'); }
+    else F.say(host, this.bounty > 0 ? 'say.goAwayWanted' : 'say.goAway', null, 'warn');
+  }
+  lightDynamite(b, hit) {
+    const g = this.game;
+    if (!g.has('dynamite')) return;
+    g.take('dynamite', 1); g.hud.dirtyHotbar = true;
+    this.charges.push({ b, t: 3, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
+    g.hud.alert(t('door.lit')); sfx.alert();
+  }
+  // the blast takes only the door (and its frame): never the walls or the ground
+  blowDoor(c) {
+    const g = this.game, F = this.folk, b = c.b, w = g.world;
+    for (const [x, y, z] of b.doorCells) if (w.get(x, y, z) === B.HDOOR) w.set(x, y, z, B.AIR);
+    b.broken = g.time + 1;                                      // mended in a day
+    g.particles.burst(c.x, c.y, c.z, [0.35, 0.3, 0.24], 24, 4, 1.2);
+    sfx.explosion(Math.max(0.3, 1 - g.player.pos.distanceTo(new THREE.Vector3(c.x, c.y, c.z)) / 60), false);
+    g.shake = Math.max(g.shake, 0.5);
+    const pd = Math.hypot(g.player.pos.x - c.x, g.player.pos.z - c.z);
+    if (pd < 3) g.damage(Math.round(30 * (1 - pd / 3)), 'blast');
+    for (const o of F.list) if (o.alive && Math.hypot(o.pos.x - c.x, o.pos.z - c.z) < 3) F.hurt(o, 45);
+    this.hearShot(new THREE.Vector3(c.x, c.y, c.z));
+    // breaking in is a crime; the men of the house may fight back
+    const hi = this.village.buildings.indexOf(b);
+    for (const o of F.list) if (o.alive && o.home === b && !o.female && F.bestGun(o) && o.brave > 0.35 && o.pos.distanceTo(b.inside) < 16) { o.fight = { armed: F.bestGun(o) }; F.armed(o, o.fight.armed); }
+    this.crime('breakin', { pos: g.player.pos.clone() });
+    void hi;
+  }
+  updateDoors(dt) {
+    const g = this.game, F = this.folk, w = g.world, P = g.player.pos;
+    for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blowDoor(c); }
+    this.charges = this.charges.filter((c) => c.t > 0);
+    this.doorT -= dt;
+    if (this.doorT > 0) return;
+    this.doorT = 0.25;
+    const now = performance.now() / 1000;
+    for (const b of this.village.buildings) {
+      if (b.type !== 'house' || !b.doorCells) continue;
+      if (Math.hypot(b.inside.x - P.x, b.inside.z - P.z) > 90) continue;
+      const near = (p, r = 2.4) => Math.hypot(p.x - b.door.x, p.z - b.door.z) < r || Math.hypot(p.x - b.doorIn.x, p.z - b.doorIn.z) < r;
+      const broken = b.broken && b.broken > g.time;
+      // open for: anyone of the house (or a visitor) right at the door, a welcome
+      // guest, you from the inside, the posse; and a door blown open
+      const open = broken || (b.allowT || 0) > now || (near(P) && F.houseAt(P) === this.village.buildings.indexOf(b)) ||
+        // (only someone at the doorway on their way through: not the family sitting inside)
+        F.list.some((o) => o.alive && !o.away && (Math.hypot(o.pos.x - b.door.x, o.pos.z - b.door.z) < 1.8 || (o.route.length && Math.hypot(o.pos.x - b.doorIn.x, o.pos.z - b.doorIn.z) < 1.8))) ||
+        (this.posse && this.posse.members.some((m) => m.alive && near(m.pos, 3)));
+      if (open === b.isOpen && !(b.broken && !broken)) continue;
+      if (b.broken && !broken) b.broken = 0;
+      // never close on someone standing in the doorway
+      const inWay = (p) => b.doorCells.some(([x, , z]) => Math.abs(p.x - (x + 0.5)) < 0.8 && Math.abs(p.z - (z + 0.5)) < 0.8);
+      if (!open && (inWay(P) || F.list.some((o) => o.alive && inWay(o.pos)))) continue;
+      b.isOpen = open;
+      for (const [x, y, z] of b.doorCells) { const id = w.get(x, y, z); if (open && id === B.HDOOR) w.set(x, y, z, B.AIR); else if (!open && id === B.AIR) w.set(x, y, z, B.HDOOR); }
+    }
+  }
+
   // ---- interactions ------------------------------------------------------------
   // what can be done right here (buttons on phones, keys on computers)
   options() {
     const g = this.game, p = g.player.pos, out = [];
     const v = this.folk.nearest(p, 3.4, (x) => !x.posse && !x.reportTo);
+    // the shopkeeper counts even when a customer stands closer (that hid the Shop button)
+    const keeper = this.folk.nearest(p, 3.6, (x) => x.role === 'keeper' && !x.surrendered);
+    if (keeper && keeper !== v) out.push({ a: 'shop', label: t('ctx.shop'), v: keeper });
     if (v) {
       if (v.role === 'keeper') out.push({ a: 'shop', label: t('ctx.shop'), v });
       if (v.role === 'sheriff') out.push({ a: 'sheriff', label: t('ctx.sheriff'), v });
@@ -452,7 +675,7 @@ export class TownLife {
     if (carcass) out.push({ a: 'skin', label: t('ctx.skin'), carcass });
     const cow = g.animals.list.find((a) => a.owner === 'player' && a.type === 'cow' && a.state !== 'dead' && a.pos.distanceTo(p) < 2.6);
     if (cow && (g.has('bucket') || g.has('bucket_water'))) out.push({ a: 'milk', label: t('ctx.milk'), cow });
-    if (g.campfires.near(p)) out.push({ a: 'craft', label: t('ctx.craft') });
+    if (g.campfires.near(p) && !(g.aimUse && g.aimUse.target)) out.push({ a: 'craft', label: t('ctx.craft') });
     const bed = this.cottage.bed;
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
     return out;
@@ -460,7 +683,7 @@ export class TownLife {
   doAction(a) {
     const g = this.game, o = this.ctx.find((x) => x.a === a);
     if (!o || g.paused || g.overlay || g.dead) return;
-    if (a === 'shop') g.app.openPanel('shop', { shop: o.v.shop, v: o.v });
+    if (a === 'shop') { this.shopKeeper = o.v; g.app.openPanel('shop', { shop: o.v.shop, v: o.v }); }
     else if (a === 'sheriff') g.app.openPanel('sheriff', { v: o.v });
     else if (a === 'job') this.askJob(o.v);
     else if (a === 'skin') { g.animals.skin(o.carcass); g.vm.doSwing(); sfx.stab(); }
@@ -468,6 +691,7 @@ export class TownLife {
       if ((o.cow.milkT || 0) > g.time) { g.hud.toast(t('town.milkLater')); return; }
       o.cow.milkT = g.time + 1; g.give('milk', 1); sfx.splash();
     } else if (a === 'sleep') this.sleep();
+    else if (a === 'craft') g.app.openPanel('craft');      // (this case was missing: the Craft button did nothing)
     this.ctxT = 0;
   }
   updateContext(dt, input) {
@@ -477,12 +701,13 @@ export class TownLife {
       this.ctxT = 0.2;
       this.ctx = g.paused || g.overlay ? [] : this.options();
       const touch = g.app.input.touch;
-      const keys = ['E', 'R', 'G'];
+      // E belongs to what you aim at (aim and use); nearby actions then use R, G, T
+      const keys = g.aimUse && g.aimUse.target ? ['R', 'G', 'T'] : ['E', 'R', 'G'];
       const html = this.ctx.map((o, i) => `<button class="cb" data-a="${o.a}">${touch ? '' : `<kbd>${keys[i] || ''}</kbd>`}${o.label}${o.v ? `<small>${o.v.name}</small>` : ''}</button>`).join('');
       if (html !== this.ctxHtml) { this.ctxHtml = html; this.ctxEl.innerHTML = html; }
     }
     if (g.paused || g.overlay) return false;
-    const codes = ['KeyE', 'KeyR', 'KeyG'];
+    const codes = g.aimUse && g.aimUse.target ? ['KeyR', 'KeyG', 'KeyT'] : ['KeyE', 'KeyR', 'KeyG'];
     for (let i = 0; i < this.ctx.length && i < 3; i++) if (input.hit(codes[i])) { this.doAction(this.ctx[i].a); return true; }
     return false;
   }
@@ -516,12 +741,29 @@ export class TownLife {
       if (s && (this.sheriffT = (this.sheriffT || 0) - dt) <= 0) { this.sheriffT = 1; if (this.folk.sees(s, 30)) { this.folk.say(s, 'say.sheriffWanted', null, 'warn'); this.formPosse(g.player.pos); } }
     }
     this.livestock(dt);
+    this.updateDoors(dt);
+    this.invite(dt);
+    this.guestCheck();
     this.ambience(dt);
     this.updateBar();
   }
   // hens lay eggs in the pen
   livestock(dt) {
     const g = this.game;
+    // the village replaces livestock that was taken or killed (about 2 days)
+    this.stockT = (this.stockT || 0) - dt;
+    if (this.stockT <= 0) {
+      this.stockT = 5;
+      this.restock = this.restock || [];
+      const want = { cow: 2, pig: 3, chicken: 4 };
+      for (const [type, n] of Object.entries(want)) {
+        const have = g.animals.list.filter((a) => a.owner === 'village' && a.type === type && a.state !== 'dead').length;
+        const coming = this.restock.filter((r) => r.type === type).length;
+        for (let k = have + coming; k < n; k++) this.restock.push({ type, at: g.time + 2 });
+      }
+      for (const r of this.restock.filter((q) => q.at <= g.time)) g.animals.addLivestock(r.type, this.village.pens[0], 'village');
+      this.restock = this.restock.filter((q) => q.at > g.time);
+    }
     this.eggT = (this.eggT || 0) - dt;
     if (this.eggT > 0) return;
     this.eggT = 10;
@@ -572,8 +814,9 @@ export class TownLife {
       inv: g.inv, stats: g.stats, pickups: g.pickups.toSave(), rafts: g.rafts.map((r) => ({ x: r.x, z: r.z })), cabin: g.cabin.toSave(),
       town: {
         money: this.money, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
-        job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st,
+        job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport,
       },
     };
   }

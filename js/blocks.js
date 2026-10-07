@@ -11,6 +11,8 @@ export const B = {
   LADDER: 39,
   // War headquarters rooms
   MEDICAL: 40, ARMORY: 41, MAPTABLE: 42,
+  // Town Life: a house's front door (opened by the household; dynamite breaks it)
+  HDOOR: 43,
 };
 
 export const BLOCKS = [];
@@ -66,6 +68,7 @@ for (const [id, name] of [[B.SPROUT, 'sprout'], [B.WHEAT_G, 'wheat_g'], [B.WHEAT
 def(B.MEDICAL, { name: 'medical', tiles: { top: 'med_top', side: 'med_side', bottom: 'fort_top' }, hard: Infinity, fort: true, color: [0.75, 0.75, 0.7] });
 def(B.ARMORY, { name: 'armory', tiles: { top: 'planks', side: 'rack', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.4, 0.32, 0.22] });
 def(B.MAPTABLE, { name: 'maptable', tiles: { top: 'map_top', side: 'planks', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.6, 0.55, 0.42] });
+def(B.HDOOR, { name: 'hdoor', tiles: { top: 'planks', side: 'door', bottom: 'planks' }, hard: Infinity, color: [0.42, 0.3, 0.2] });
 def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'wood', color: [0.42, 0.32, 0.2] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 

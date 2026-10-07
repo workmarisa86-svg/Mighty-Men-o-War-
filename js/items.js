@@ -6,7 +6,8 @@ export const ITEMS = {
   shovel: { tool: 'shovel' },
   flint: { tool: 'flint' },
   knife: { weapon: true }, pistol: { weapon: true }, spistol: { weapon: true }, rifle: { weapon: true },
-  sniper: { weapon: true }, smg: { weapon: true },
+  sniper: { weapon: true }, smg: { weapon: true }, shotgun: { weapon: true },
+  dynamite: { tool: 'dynamite' },              // Town Life: blows open a locked door (only the door)
   grenade: { throwable: true }, smoke: { throwable: true },
   dirt: { block: B.DIRT, tiles: ['dirt_top', 'dirt'] },
   wood: { block: B.WOOD, tiles: ['planks', 'planks'] },
@@ -42,7 +43,7 @@ export const ITEMS = {
   chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
-export const WEAPON_IDS = ['knife', 'pistol', 'spistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
+export const WEAPON_IDS = ['knife', 'pistol', 'spistol', 'rifle', 'sniper', 'smg', 'shotgun', 'grenade', 'smoke'];
 export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 
 // Crafting happens at a campfire. Weapon times rise 2 s per level of
@@ -75,6 +76,8 @@ export const RECIPES = [
   { id: 'glass', cat: 'materials', needs: { sand: 2, charcoal: 1 }, time: 6, out: 2, town: true },
   { id: 'thatch', cat: 'materials', needs: { wheat: 2 }, time: 3, out: 2, town: true },
   { id: 'fence', cat: 'materials', needs: { wood: 2 }, time: 3, out: 3, town: true },
+  { id: 'shotgun', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 10, town: true },
+  { id: 'dynamite', cat: 'weapons', needs: { charcoal: 2, clay: 1, sand: 1 }, time: 8, town: true },
 ];
 // which recipes each game offers
 const WAR_ONLY = ['grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
@@ -121,6 +124,27 @@ const ICON_DRAW = {
     c.fillStyle = '#20221e'; c.fillRect(18, 14, 14, 5); c.fillRect(16, 15, 3, 3); c.fillRect(31, 15, 3, 3);
     c.fillStyle = '#6a8a9a'; c.fillRect(32, 15, 1, 3);
     c.clearRect(38, 18, 10, 4);
+  },
+  shotgun(c) {
+    c.fillStyle = '#6a4a2e'; c.beginPath(); c.moveTo(2, 30); c.lineTo(14, 25); c.lineTo(22, 25); c.lineTo(22, 29); c.lineTo(10, 35); c.fill();
+    c.fillStyle = '#2c2e28'; c.fillRect(20, 22, 26, 2); c.fillRect(20, 25, 26, 2);
+    c.fillStyle = '#5a4430'; c.fillRect(24, 27, 10, 3);
+  },
+  horse(c) {
+    c.fillStyle = '#6a4630';
+    c.fillRect(10, 20, 24, 10); c.fillRect(30, 12, 6, 12); c.fillRect(32, 8, 10, 6);
+    for (const x of [12, 17, 26, 31]) c.fillRect(x, 30, 3, 12);
+    c.fillStyle = '#2a201a'; c.fillRect(30, 10, 2, 10); c.fillRect(6, 20, 4, 10);
+    c.fillStyle = '#4a3020'; c.fillRect(16, 18, 10, 4);
+  },
+  coins(c) {
+    for (const [x, y] of [[16, 30], [26, 28], [21, 22]]) { c.fillStyle = '#c8a040'; c.beginPath(); c.ellipse(x, y, 9, 5, 0, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#7a5a20'; c.lineWidth = 1.5; c.stroke(); }
+  },
+  dynamite(c) {
+    c.fillStyle = '#a8442e'; for (const x of [14, 21, 28]) c.fillRect(x, 14, 6, 24);
+    c.fillStyle = '#d8c890'; c.fillRect(12, 22, 24, 4);
+    c.strokeStyle = '#2e2a24'; c.lineWidth = 2; c.beginPath(); c.moveTo(24, 14); c.quadraticCurveTo(30, 6, 36, 8); c.stroke();
+    c.fillStyle = '#ffcc55'; c.fillRect(35, 6, 3, 3);
   },
   smg(c) {
     c.fillStyle = '#2c2e28'; c.fillRect(8, 18, 32, 7); c.fillRect(38, 20, 8, 2);

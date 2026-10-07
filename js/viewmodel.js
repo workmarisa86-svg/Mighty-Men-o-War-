@@ -123,7 +123,7 @@ export class ViewModel {
     if (this.cache[id]) return this.cache[id];
     let g;
     const def = ITEMS[id] || {};
-    if (id === 'rifle' || id === 'sniper') g = BUILD.realRifle(id);
+    if (id === 'rifle' || id === 'sniper' || id === 'shotgun') g = BUILD.realRifle(id);
     else if (id === 'smg') { g = gunModel('smg'); g.scale.setScalar(0.6); }
     else if (id === 'pistol') { g = gunModel('pistol'); g.position.z = 0.02; }
     else if (id === 'spistol') {

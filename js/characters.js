@@ -436,6 +436,14 @@ export class Character {
     this.hips.position.y = hipY;
     this.legL.rotation.set(-thighL, 0, -0.02); this.legR.rotation.set(-thighR, 0, 0.02);
     this.kneeL.rotation.x = -kneeL; this.kneeR.rotation.x = -kneeR;   // knees flex backwards
+    // riding: seated in the saddle, thighs forward and apart around the
+    // horse's back, knees bent, feet down in the stirrups
+    if (st.ride) {
+      this.hips.position.y = RIG.hip;
+      this.legL.rotation.set(1.25, 0, -0.42); this.legR.rotation.set(1.25, 0, 0.42);
+      this.kneeL.rotation.x = -1.35; this.kneeR.rotation.x = -1.35;
+      lean = 0.12;
+    }
 
     // ----- swimming: body near horizontal, flutter kick and breast stroke
     if (s.swim > 0.01) {
@@ -455,6 +463,12 @@ export class Character {
     // ----- weapon placement (spine space)
     const g = this.gun;
     const shY = RIG.shoulderY;
+    if (st.ride && !st.aim && !this.weapon) {
+      // hands on the reins in front of the saddle
+      this.reach(this.armL, this.elbowL, V.set(-0.12, shY - 0.32, -0.32).clone(), new THREE.Vector3(-1, -1, 0.3));
+      this.reach(this.armR, this.elbowR, V.set(0.12, shY - 0.32, -0.32).clone(), new THREE.Vector3(1, -1, 0.3));
+      return;
+    }
     if (st.surrender) {
       g.visible = false;
       this.reach(this.armL, this.elbowL, V.set(-0.22, shY + 0.5, -0.05).clone(), new THREE.Vector3(-1, 0, 0.3));
