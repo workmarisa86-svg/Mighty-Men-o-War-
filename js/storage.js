@@ -14,9 +14,9 @@ import { STORE_PREFIX, OLD_PREFIX } from './config.js';
     if (st && typeof st === 'object' && 'minimapSize' in st && 'renderDist' in st) put('settings', st);
     const idx = get('saves');
     if (Array.isArray(idx)) {
-      const ours = idx.filter((m) => m && m.id && (m.mode === 'war' || m.mode === 'peace'));
+      const ours = idx.filter((m) => m && m.id && m.mode === 'war');
       const keep = [];
-      for (const m of ours) { const d = get('save-' + m.id); if (d && d.cfg && d.cfg.seed != null && (d.cfg.mode === 'war' || d.cfg.mode === 'peace')) { put('save-' + m.id, d); keep.push(m); } }
+      for (const m of ours) { const d = get('save-' + m.id); if (d && d.cfg && d.cfg.seed != null && d.cfg.mode === 'war') { put('save-' + m.id, d); keep.push(m); } }
       if (keep.length) put('saves', keep);
     }
     const stats = get('stats');
@@ -59,6 +59,17 @@ export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load
 export function saveSettings(s) { save('settings', s); }
 
 // ---- world save slots -------------------------------------------------------
+// Peace mode is gone: its saved worlds are deleted (nothing carries over).
+(function dropPeaceWorlds() {
+  try {
+    const idx = load('saves', []);
+    if (!Array.isArray(idx)) return;
+    const peace = idx.filter((m) => m && m.mode === 'peace');
+    if (!peace.length) return;
+    for (const m of peace) remove('save-' + m.id);
+    save('saves', idx.filter((m) => m && m.mode !== 'peace'));
+  } catch { /* storage unavailable */ }
+})();
 export function listSaves() {
   const idx = load('saves', []);
   return idx.sort((a, b) => b.updated - a.updated);

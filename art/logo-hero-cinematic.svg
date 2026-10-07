@@ -144,7 +144,7 @@
   </g>
 
   <!-- title -->
-  <text x="450" y="62" text-anchor="middle" font-size="64" letter-spacing="7" fill="url(#title)" stroke="#0b0805" stroke-width="3" paint-order="stroke">MIGHTY MAN O' WAR</text>
+  <text x="450" y="62" text-anchor="middle" font-size="64" letter-spacing="7" fill="url(#title)" stroke="#0b0805" stroke-width="3" paint-order="stroke">MIGHTY MEN O' WAR</text>
   <text x="450" y="86" text-anchor="middle" font-size="18" letter-spacing="12" fill="#f0c36a">NO ONE LEFT BEHIND</text>
 
   <rect width="900" height="560" fill="url(#vig)"/>

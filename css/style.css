@@ -240,7 +240,6 @@ body:not(.ingame) #touch { display: none; }
 .tbtns { position: absolute; display: flex; gap: 8px; }
 .tbtns.right { right: 14px; bottom: 70px; align-items: flex-end; }
 .tbtns .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-body:not(.peace) [data-btn=fly] { display: none; }
 .tbtns.top { right: 14px; top: 10px; }
 .tb {
   font-family: var(--stencil); font-size: 11px; color: var(--khaki); background: rgba(30, 32, 22, 0.6);
@@ -512,3 +511,40 @@ body.tb-s .cb { font-size: 12px; min-height: 38px; } body.tb-l .cb { font-size: 
   .art-screen .menu .btn { padding: 6px 8px; font-size: 13px; }
   .art-screen .menu { gap: 5px; }
 }
+
+/* phones: the radar is the map button (bigger touch area than the drawing) */
+#minimap.tappable { pointer-events: auto; cursor: pointer; }
+#minimap.tappable::after { content: ''; position: absolute; inset: -12px; border-radius: 50%; }
+.mappanel { position: relative; }
+.mappanel .icon-close { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; padding: 0; font-size: 20px; line-height: 1; border-radius: 50%; }
+
+/* phones in the scope / binoculars: keep the buttons on top of the dark scope
+   edge, with strong outlines, so Fire and Exit zoom stay visible and tappable */
+body.scoped #touch { z-index: 7; }
+body.scoped .tb { background: rgba(20, 22, 14, 0.85); border-color: #f0dc9a; color: #fff6d8; box-shadow: 0 0 0 2px rgba(0,0,0,0.85), 0 0 10px rgba(240,220,154,0.35); }
+body.scoped .tb[data-btn=zoom] { background: rgba(120, 40, 26, 0.9); }
+body.scoped .tbtns.top .tb:not([data-btn=pause]):not([data-btn=light]) { visibility: hidden; }
+body.scoped .stick { border-color: rgba(240,220,154,0.7); }
+/* phones: the DIVE button only while swimming; CROUCH hides then */
+[data-btn=dive] { display: none; }
+body.swimming [data-btn=dive] { display: inline-block; }
+body.swimming [data-btn=crouch] { display: none; }
+
+/* ---- start screen: pick War or Town Life -------------------------------- */
+.screen.art-screen.start-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow-y: auto; }
+.screen.art-screen.start-screen[hidden] { display: none; }
+.start-screen .pick { margin: 0; color: var(--khaki); letter-spacing: 3px; text-transform: uppercase; font-size: 14px; text-shadow: 0 1px 3px #000; }
+.gamecards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(10px, 2.5vw, 28px);
+  width: min(100%, 1100px, calc((100vh - 170px) * 2.8)); }
+.gamecard { display: flex; flex-direction: column; align-items: stretch; padding: 0; margin: 0; border: 3px solid var(--line); border-radius: 12px;
+  background: #15110b; color: #f1e6c8; font: inherit; cursor: pointer; overflow: hidden; text-align: center;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.55); transition: transform .12s ease, border-color .12s ease; -webkit-tap-highlight-color: transparent; }
+.gamecard:hover, .gamecard:focus-visible { transform: translateY(-3px); border-color: var(--khaki); outline: none; }
+.gamecard:active { transform: scale(0.98); }
+.gamecard img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; background: #2a2015; }
+.gamecard b { display: block; padding: 10px 8px 2px; font-size: clamp(15px, 2.6vw, 26px); letter-spacing: 1px; }
+.gamecard span { display: block; padding: 0 8px 12px; font-size: clamp(11px, 1.5vw, 14px); opacity: 0.75; }
+.start-screen .extras { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.start-screen .ver { position: absolute; }
+.soonart { display: block; width: min(100%, 420px); height: auto; margin: 0 auto 12px; border-radius: 10px; border: 2px solid var(--line); }

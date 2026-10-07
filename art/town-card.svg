@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Placeholder art for the "Town Life" card on the start screen.
+       Replace img/town-card.webp (800x600) with real art at any time. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3c98b"/><stop offset=".55" stop-color="#f7e2b5"/><stop offset="1" stop-color="#e9e4c4"/>
+    </linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fa457"/><stop offset="1" stop-color="#5d7434"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky)"/>
+  <circle cx="610" cy="170" r="58" fill="#fff4d6" opacity=".9"/>
+  <!-- far hills -->
+  <path d="M0 330 Q120 270 250 310 T520 300 T800 290 V600 H0Z" fill="#9db27a"/>
+  <path d="M0 370 Q160 320 330 360 T660 345 T800 350 V600 H0Z" fill="url(#field)"/>
+  <!-- furrows -->
+  <g stroke="#4d6229" stroke-width="5" opacity=".55">
+    <path d="M60 600 L300 400"/><path d="M160 600 L340 404"/><path d="M260 600 L380 408"/><path d="M360 600 L420 410"/>
+  </g>
+  <!-- cottage -->
+  <g transform="translate(470 300)">
+    <rect x="0" y="40" width="170" height="100" fill="#c9b38a" stroke="#5a4630" stroke-width="4"/>
+    <path d="M-16 46 L85 -18 L186 46Z" fill="#c8a24a" stroke="#6d5221" stroke-width="4"/>
+    <path d="M-16 46 L85 -18 L186 46" fill="none" stroke="#e2c46c" stroke-width="3" stroke-dasharray="8 6"/>
+    <rect x="120" y="-14" width="20" height="38" fill="#8c7356" stroke="#5a4630" stroke-width="3"/>
+    <rect x="70" y="80" width="32" height="60" fill="#6b4a2c" stroke="#3e2b19" stroke-width="3"/>
+    <rect x="18" y="68" width="34" height="30" fill="#f6e3a2" stroke="#5a4630" stroke-width="3"/>
+    <rect x="122" y="68" width="34" height="30" fill="#f6e3a2" stroke="#5a4630" stroke-width="3"/>
+  </g>
+  <!-- smoke -->
+  <g fill="#ffffff" opacity=".55"><circle cx="604" cy="262" r="12"/><circle cx="614" cy="238" r="15"/><circle cx="628" cy="210" r="18"/></g>
+  <!-- trees -->
+  <g><rect x="148" y="250" width="16" height="70" fill="#5a4026"/><circle cx="156" cy="236" r="44" fill="#4f6b2b"/><circle cx="130" cy="256" r="30" fill="#5b7a33"/>
+     <rect x="700" y="280" width="12" height="56" fill="#5a4026"/><circle cx="706" cy="268" r="32" fill="#4f6b2b"/></g>
+  <!-- fence -->
+  <g stroke="#6d5233" stroke-width="6" stroke-linecap="round">
+    <path d="M420 470 L780 470"/><path d="M420 448 L780 448"/>
+    <path d="M440 430 V490"/><path d="M520 430 V490"/><path d="M600 430 V490"/><path d="M680 430 V490"/><path d="M760 430 V490"/>
+  </g>
+  <rect width="800" height="600" fill="#2a1a08" opacity=".08"/>
+</svg>

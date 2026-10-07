@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Scope view (Z): sniper scope when holding the sniper rifle, binoculars
 // otherwise. Circular lens with a blurred dark surround, a fine reticle, a
 // lens glint, smooth zoom in/out and a breathing sway you can steady (Shift).
@@ -53,6 +54,14 @@ export class ScopeView {
     this.el.style.setProperty('--zoom', (1.12 - 0.12 * e).toFixed(3));
     this.el.className = this.shown === 'sniper' ? 'sniper' : 'binoc';
     this.el.style.display = e > 0.01 ? 'block' : 'none';
+    // phones: lift the touch buttons above the scope edge and relabel Zoom
+    const on = e > 0.3;
+    if (on !== this.bodyOn) {
+      this.bodyOn = on;
+      document.body.classList.toggle('scoped', on);
+      const zb = document.querySelector('[data-btn=zoom]');
+      if (zb) zb.textContent = t(on ? 'touch.zoomOut' : 'touch.zoom');
+    }
   }
   ease() { const t = this.t; return t * t * (3 - 2 * t); }
   fov(base) { return base + (FOV[this.shown || 'binoc'] - base) * this.ease(); }

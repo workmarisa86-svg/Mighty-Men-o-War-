@@ -75,9 +75,9 @@ export class Animals {
     this.list = [];
     this.herds = [];
     const w = game.world;
-    const mul = game.peace ? 1.3 : DIFF[game.cfg.difficulty].animals;
+    const mul = DIFF[game.cfg.difficulty].animals;
     this.target = Math.max(4, Math.round(w.W * w.D / 9000 * mul));
-    this.respawnEvery = game.peace ? 60 : DIFF[game.cfg.difficulty].animalRespawn;
+    this.respawnEvery = DIFF[game.cfg.difficulty].animalRespawn;
     this.respawnTimer = this.respawnEvery;
     this.r = Math.random;
     for (let i = 0; i < this.target; i++) this.spawnHerd(false);

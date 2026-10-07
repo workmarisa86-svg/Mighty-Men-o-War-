@@ -12,6 +12,16 @@ export class Minimap {
     this.wrap = document.getElementById('minimap');
     this.canvas = this.wrap.querySelector('canvas');
     this.ctx = this.canvas.getContext('2d');
+    // phones: tap the radar to open the full war map (there is no Map button)
+    if (game.app.input.touch) {
+      this.wrap.classList.add('tappable');
+      this.wrap.addEventListener('touchend', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const g = this.game;
+        if (!g.paused && !g.overlay && !g.dead) g.app.openPanel('map', { from: 'game' });
+      }, { passive: false });
+      this.wrap.addEventListener('touchstart', (e) => { e.stopPropagation(); }, { passive: true });
+    }
     this.t = 0; this.timer = 0;
     this.applySettings();
   }

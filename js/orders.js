@@ -10,7 +10,7 @@ import { sfx } from './audio.js';
 import { FORMATIONS } from './soldiers.js';
 
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack'];
-export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'formation'];
+export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack'];
 const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', formation: '&#8942;' };
 
 export class OrderWheel {
@@ -37,7 +37,7 @@ export class OrderWheel {
     this.closeBtn.addEventListener('touchend', (e) => { e.preventDefault(); this.close(); });
     this.el.appendChild(this.closeBtn);
   }
-  get enabled() { const g = this.game; return g.cfg.sub === 'allies' && !g.peace; }
+  get enabled() { const g = this.game; return g.cfg.sub === 'allies'; }
 
   // What the player is aiming at: a soldier, a spot on the ground, a fort.
   aimInfo() {
@@ -125,7 +125,7 @@ export class OrderWheel {
     const who = sel.length ? t('order.toSelected', { n: sel.length }) : one ? one.name : t('order.toSquad', { n: E.squadMembers().length });
     const tgt = this.at && this.at.fort ? this.at.fort.name : '';
     this.center.innerHTML = `<b>${t('order.title2')}</b><span>${who}</span>${tgt ? `<span class="muted">${tgt}</span>` : ''}` +
-      (one && !sel.length ? `<span class="muted small"><kbd>9</kbd> ${t('order.talk')}</span>` : '');
+      (one && !sel.length && !this.game.app.input.touch ? `<span class="muted small"><kbd>9</kbd> ${t('order.talk')}</span>` : '');
     this.items.forEach((b, i) => {
       const cmd = ORDERS[i];
       const label = cmd === 'formation' ? t('ord.formation', { f: t('form.' + (g.settings.formation || 'loose')) }) : t('ord.' + cmd);

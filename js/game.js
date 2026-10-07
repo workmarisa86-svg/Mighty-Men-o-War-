@@ -10,7 +10,7 @@ import { Player } from './player.js';
 import { Sky } from './sky.js';
 import { Raft } from './raft.js';
 import { Particles } from './particles.js';
-import { ITEMS, UNLIMITED, RECIPES, WEAPON_IDS } from './items.js';
+import { ITEMS, RECIPES, WEAPON_IDS } from './items.js';
 import { Animals } from './animals.js';
 import { Pickups } from './pickups.js';
 import { Campfires } from './campfire.js';
@@ -27,11 +27,12 @@ import { ContextBar } from './context.js';
 import { Mission } from './missions.js';
 import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
-import { sfx, setRain } from './audio.js';
+import { sfx, setRain, setMuffled } from './audio.js';
 import { HUD } from './hud.js';
 import { t } from './i18n.js';
 
 const REACH = BODY.reach;
+const AIR = 20;                       // seconds of air under water without scuba gear
 const HUNGER_DAYS = 4;              // a full stomach empties in about 4 in-game days
 const CRAFT_RANGE = 4.5;            // walk further than this from the fire and crafting stops
 
@@ -40,11 +41,9 @@ export class Game {
     this.app = app;
     this.save = save;
     this.cfg = save.cfg;
-    this.peace = this.cfg.mode === 'peace';
-    // Time of day: full day/night cycle, or always daytime (Peace is always day)
-    this.dayOnly = this.peace || this.cfg.timeMode === 'day';
-    document.body.classList.toggle('peace', this.peace);
-    document.body.classList.toggle('allies', this.cfg.sub === 'allies' && !this.peace);
+    // Time of day: full day/night cycle, or always daytime
+    this.dayOnly = this.cfg.timeMode === 'day';
+    document.body.classList.toggle('allies', this.cfg.sub === 'allies');
     this.settings = app.settings;
     this.quality = QUALITY[this.settings.quality] || QUALITY.medium;
     setCharacterQuality(this.settings.quality);
@@ -119,12 +118,12 @@ export class Game {
     const ps = save.player;
     if (ps) {
       this.player.pos.set(ps.x, ps.y, ps.z); this.player.yaw = ps.yaw; this.player.pitch = ps.pitch;
-      this.player.health = ps.health; this.player.hunger = ps.hunger; this.player.flying = !!ps.flying && this.peace;
+      this.player.health = ps.health; this.player.hunger = ps.hunger;
     } else {
       const s = this.world.spawn;
       this.player.pos.set(s.x, s.y, s.z);
     }
-    this.breath = 15;
+    this.breath = AIR;
 
     // inventory
     this.inv = save.inv ? JSON.parse(JSON.stringify(save.inv)) : this.defaultInventory();
@@ -169,20 +168,14 @@ export class Game {
 
   defaultInventory() {
     const inv = { counts: {}, hotbar: Array(9).fill(null), sel: 0 };
-    if (this.peace) {
-      // relaxed mode: plenty of hunting weapons from the start
-      inv.hotbar = ['shovel', 'knife', 'rifle', 'flint', 'dirt', 'wood', 'stone', 'sandbag', 'raft'];
-      for (const w of ['knife', 'pistol', 'rifle', 'sniper', 'smg']) inv.counts[w] = 1;
-    } else {
-      inv.hotbar[0] = 'shovel'; inv.hotbar[1] = 'flint';
-    }
+    inv.hotbar[0] = 'shovel'; inv.hotbar[1] = 'flint';
     return inv;
   }
 
   // ---------------------------------------------------------------- inventory
-  count(id) { return this.peace && UNLIMITED.includes(id) ? Infinity : (this.inv.counts[id] || 0); }
+  count(id) { return this.inv.counts[id] || 0; }
   has(id, n = 1) { return this.count(id) >= n; }
-  take(id, n = 1) { if (this.peace && UNLIMITED.includes(id)) return; this.inv.counts[id] = Math.max(0, (this.inv.counts[id] || 0) - n); }
+  take(id, n = 1) { this.inv.counts[id] = Math.max(0, (this.inv.counts[id] || 0) - n); }
   armor() { return (this.has('helmet') ? ITEMS.helmet.armor : 0) + (this.has('vest') ? ITEMS.vest.armor : 0); }
   give(id, n = 1, quiet = false) {
     if (!id || n <= 0) return;
@@ -271,15 +264,19 @@ export class Game {
     if (playing) this.handleKeys(input);
 
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
-    const env = { rain: this.peace ? 0 : this.weather.rain, speedMul: inWire ? 0.4 : 1 };
+    const env = { rain: this.weather.rain, speedMul: inWire ? 0.4 : 1 };
+    const wasDiving = p.diving;
     const res = p.update(dt, this.world, this.obstacles(), it, env);
+    if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
-    // breath underwater
-    if (p.headInWater) {
-      this.breath -= dt;
-      if (this.breath <= 0) { this.breath = 1; this.damage(8); }
-    } else this.breath = Math.min(15, this.breath + dt * 4);
+    // air under water: about 20 s without scuba gear, unlimited with it;
+    // when it runs out, health drains until you surface
+    if (p.headInWater && !this.has('scuba')) {
+      this.breath = Math.max(0, this.breath - dt);
+      if (this.breath <= 0) { this.drownT = (this.drownT || 0) - dt; if (this.drownT <= 0) { this.drownT = 1; this.damage(8, 'drown'); } }
+    } else this.breath = Math.min(AIR, this.breath + dt * 5);
+    this.underwaterFx(dt, p.headInWater);
 
     if (playing) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
@@ -317,13 +314,13 @@ export class Game {
     }
     this.camera.far = (this.settings.renderDist + 1.5) * CHUNK + 40;
 
-    this.sky.update(dt, this.time % 1, this.peace ? 0 : this.weather.rain, this.camera.position, this.dayOnly);
+    this.sky.update(dt, this.time % 1, this.weather.rain, this.camera.position, this.dayOnly);
     // how much daylight reaches the player's eyes (dark in tunnels)
     this.eyeSkyT = (this.eyeSkyT || 0) - dt;
     if (this.eyeSkyT <= 0) { this.eyeSkyT = 0.3; this.eyeSky = skyAt(this.world, eye.x, eye.y, eye.z); }
     this.glowUniform.value = 0.2 + 0.65 * (1 - this.sky.daylight);
     this.flashlight.on = this.lightOn;
-    this.flashlight.update(1 - this.sky.daylight, this.peace ? 0 : this.weather.rain);
+    this.flashlight.update(1 - this.sky.daylight, this.weather.rain);
 
     this.updateChunks(dt);
     this.vm.set(scoped ? null : this.selected());
@@ -340,7 +337,6 @@ export class Game {
   }
 
   updateWeather(dt) {
-    if (this.peace) { this.weather.rain = 0; setRain(0); return; }
     const w = this.weather;
     w.timer -= dt;
     if (w.timer <= 0) {
@@ -371,11 +367,21 @@ export class Game {
       document.querySelector('[data-btn=run]').classList.toggle('on', !!this.touchRun);
       document.querySelector('[data-btn=crouch]').classList.toggle('on', !!this.touchCrouch);
     }
-    const crouch = k('KeyC') || k('ControlLeft') || !!this.touchCrouch;
+    const swim = this.player.swimming;
+    // in the water the CROUCH toggle is ignored on phones (DIVE is held instead)
+    const crouch = k('KeyC') || k('ControlLeft') || (!!this.touchCrouch && !swim);
     const jumpHeld = k('Space') || input.tdown('jump');
+    // double-tap Space / JUMP in deep water: dive under or swim at the surface
+    let toggleDive = false;
+    if (swim) {
+      if (input.doubleSpace) toggleDive = true;
+      if (input.thit('jump')) { const now = performance.now(); if (now - (this.jumpTapT || 0) < 320) { toggleDive = true; this.jumpTapT = 0; } else this.jumpTapT = now; }
+    }
+    if (input.touch && swim !== this.swimUi) { this.swimUi = swim; document.body.classList.toggle('swimming', swim); }
     return {
       fwd, strafe, run: k('ShiftLeft') || k('ShiftRight') || !!this.touchRun,
-      crouch: crouch && !this.player.flying, crouchHeld: crouch, jump: jumpHeld, jumpHeld,
+      crouch, crouchHeld: crouch, jump: jumpHeld, jumpHeld,
+      dive: input.tdown('dive'), toggleDive,
     };
   }
 
@@ -387,12 +393,8 @@ export class Game {
       this.lightOn = !this.lightOn; sfx.toggle();
       this.hud.toast(t(this.lightOn ? 'hud.lightOn' : 'hud.lightOff'));
     }
-    if (this.peace && (input.doubleSpace || input.thit('fly'))) {
-      this.player.flying = !this.player.flying; this.player.vel.y = 0;
-      this.hud.toast(t(this.player.flying ? 'hud.flyOn' : 'hud.flyOff'));
-    }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
-    if (input.hit('KeyM') || input.thit('map')) this.app.openPanel('map', { from: 'game' });
+    if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
     if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
@@ -443,7 +445,6 @@ export class Game {
     const key = hit.x + ',' + hit.y + ',' + hit.z;
     if (this.dig.key !== key) { this.dig.key = key; this.dig.progress = 0; this.dig.tick = 0; }
     let speed = BODY.digSpeed / def.hard;
-    if (this.peace) speed *= 3;
     if (this.player.swimming) speed *= 0.5;
     this.dig.progress += dt * speed;
     this.dig.tick -= dt;
@@ -537,6 +538,8 @@ export class Game {
     const want = input.mouse.rightPressed || input.thit('place') || ((input.mouse.right || input.tdown('place')) && this.placeCooldown <= 0);
     if (!want) return;
     this.placeCooldown = 0.25;
+    // a ration crate or the cabin chest: right-click / USE works like E
+    if ((input.mouse.rightPressed || input.thit('place')) && this.useSupply()) return;
     const item = this.selected();
     if (!item) return;
     const def = ITEMS[item];
@@ -646,7 +649,6 @@ export class Game {
   }
 
   updateHunger(dt) {
-    if (this.peace) { this.player.hunger = 100; return; }
     const p = this.player;
     const rate = 100 / (HUNGER_DAYS * DAY_SECONDS) * (p.running ? 1.5 : 1);
     p.hunger = Math.max(0, p.hunger - rate * dt);
@@ -735,8 +737,8 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ crafting
-  // Crafting needs a lit campfire nearby (Peace mode: anywhere).
-  craftFire() { return this.peace ? true : this.campfires.near(this.player.pos); }
+  // Crafting needs a lit campfire nearby.
+  craftFire() { return this.campfires.near(this.player.pos); }
   hasMaterials(r) { return Object.entries(r.needs).every(([id, n]) => this.has(id, n)); }
   canCraft(r) { return !r.later && !!this.craftFire() && this.hasMaterials(r); }
   startCraft(r) {
@@ -745,14 +747,14 @@ export class Game {
     for (const [id, n] of Object.entries(r.needs)) this.take(id, n);
     const fire = this.craftFire();
     const at = fire === true ? this.player.pos.clone() : new THREE.Vector3(fire.x + 0.5, fire.y, fire.z + 0.5);
-    this.craft = { r, t: 0, total: this.peace ? 0.3 : r.time, at, tick: 0 };
+    this.craft = { r, t: 0, total: r.time, at, tick: 0 };
     this.hud.dirtyHotbar = true;
     return true;
   }
   updateCraft(dt) {
     const c = this.craft;
     if (!c) return;
-    const fireGone = !this.peace && !this.campfires.near(c.at, 0.8);
+    const fireGone = !this.campfires.near(c.at, 0.8);
     if (Math.hypot(this.player.pos.x - c.at.x, this.player.pos.z - c.at.z) > CRAFT_RANGE || fireGone) {
       for (const [id, n] of Object.entries(c.r.needs)) this.give(id, n, true); // materials returned
       this.craft = null; this.hud.toast(t('hud.craftCancel')); sfx.error(); return;
@@ -769,7 +771,7 @@ export class Game {
   }
 
   damage(n, cause = 'hurt', from = null) {
-    if (this.peace || this.dead || n <= 0) return;
+    if (this.dead || n <= 0) return;
     this.player.health = Math.max(0, this.player.health - n * (1 - this.armor()));
     this.hud.flash();
     if (from) {
@@ -789,6 +791,7 @@ export class Game {
     if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
     if (this.mission) this.mission.playerDied();
     this.stats.aloneSince = this.time;
+    this.inv.counts.scuba = 0;          // scuba gear is lost every time you are defeated
     const carried = WEAPON_IDS.filter((w) => this.inv.counts[w] > 0);
     let lost = [];
     if (cause === 'starve') {
@@ -799,7 +802,7 @@ export class Game {
       lost = carried;
     }
     this.respawn();
-    this.player.health = 100; this.breath = 15;
+    this.player.health = 100; this.breath = AIR;
     this.scopeView.close();
     this.enemies.playerDied();
     this.craft = null;
@@ -809,19 +812,38 @@ export class Game {
   }
 
   // ----------------------------------------------------------------- saving
+  // Under water: blue tint (HUD), short murky view, bubbles, muffled sound.
+  underwaterFx(dt, under) {
+    if (!this.scene.fog) this.scene.fog = new THREE.Fog(0x1d4656, 1e5, 2e5);   // invisible until you dive
+    const f = this.scene.fog;
+    if (under !== this.wasUnder) {
+      this.wasUnder = under;
+      setMuffled(under);
+      if (under) { f.near = 0.5; f.far = 20; } else { f.near = 1e5; f.far = 2e5; }
+    }
+    if (under) {
+      f.color.setRGB(0.07 + 0.08 * this.sky.daylight, 0.18 + 0.14 * this.sky.daylight, 0.24 + 0.16 * this.sky.daylight);
+      this.bubbleT = (this.bubbleT || 0) - dt;
+      if (this.bubbleT <= 0) {
+        this.bubbleT = this.has('scuba') ? 0.35 : 0.8;
+        const e = this.player.eye(this.tmpV.clone()), d = this.player.lookDir(this.tmpD.clone());
+        this.particles.burst(e.x + d.x * 0.8, e.y - 0.25, e.z + d.z * 0.8, [0.75, 0.88, 0.95], 3, 0.4, 0.9, -6);
+      }
+    }
+  }
+
   // push this world's progress into the lifetime statistics
   flushStats() {
-    if (this.peace && !this.mission) { this.statsFlushed = { ...this.stats, time: this.time }; return; }
     const f = this.statsFlushed, s = this.stats, d = {};
     for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals']) d[k] = (s[k] || 0) - (f[k] || 0);
     d.days = Math.max(0, this.time - (f.time || 0));
     const maxes = this.cfg.sub === 'alone' ? { longestAlone: this.time - (s.aloneSince || 0) } : {};
-    addStats(this.peace ? null : this.cfg.difficulty, d, maxes);
+    addStats(this.cfg.difficulty, d, maxes);
     this.statsFlushed = { ...this.stats, time: this.time };
   }
   missionEnded(result) {
     this.flushStats();
-    if (result.ok) recordMission(this.peace ? null : this.cfg.difficulty, this.mission.id, result.medal);
+    if (result.ok) recordMission(this.cfg.difficulty, this.mission.id, result.medal);
     sfx[result.ok ? 'done' : 'warn']();
     this.app.saveGame(true);
     this.app.openPanel('missionEnd', result);
@@ -832,7 +854,7 @@ export class Game {
     return {
       v: SAVE_FORMAT, id: this.save.id, name: this.save.name, created: this.save.created, updated: Date.now(),
       cfg: this.cfg, time: this.time, weather: this.weather,
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger, flying: p.flying },
+      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger },
       inv: this.inv, stats: this.stats, pickups: this.pickups.toSave(),
       forts: this.forts.toSave(), followers: this.enemies.followers().length,
       rafts: this.rafts.map((r) => ({ x: r.x, z: r.z })),
@@ -849,7 +871,7 @@ export class Game {
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
-    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose();
+    this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose(); document.body.classList.remove('scoped');
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());

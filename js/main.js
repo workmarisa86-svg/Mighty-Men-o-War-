@@ -1,8 +1,8 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
-import { GAME_VERSION, SAVE_FORMAT, DIFF, PEACE_SIZE, QUALITY } from './config.js';
+import { GAME_VERSION, SAVE_FORMAT, DIFF, QUALITY } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave } from './storage.js';
-import { setLang, t, applyI18n, onLang } from './i18n.js';
+import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
@@ -14,6 +14,8 @@ class App {
     this.version = GAME_VERSION;
     this.settings = loadSettings();
     onLang(() => applyI18n());
+    // phones/tablets and computers get their own control descriptions
+    setDevice(matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ? 'touch' : 'pc');
     setLang(this.settings.lang);
     document.body.classList.add('tb-' + (this.settings.touchSize || 'm'));
     this.canvas = document.getElementById('game');
@@ -27,7 +29,7 @@ class App {
     this.ui = new UI(this);
     this.game = null;
     this.applySettings();
-    this.ui.show('main');
+    this.ui.show('start');
 
     addEventListener('resize', () => this.resize());
     // the menu music downloads after the page (and the splash art) have loaded
@@ -66,12 +68,12 @@ class App {
     if (this.game) this.game.resize();
   }
 
-  newGame({ mode, sub, difficulty, timeMode = 'cycle', name, gameType = 'open', mission = null }) {
-    const size = mode === 'peace' ? PEACE_SIZE : DIFF[difficulty].size;
+  newGame({ mode = 'war', sub, difficulty, timeMode = 'cycle', name, gameType = 'open', mission = null }) {
+    const size = DIFF[difficulty].size;
     const now = Date.now();
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode: mode === 'peace' ? 'day' : timeMode, gameType, mission },
+      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode, gameType, mission },
     });
   }
   loadGame(id) {

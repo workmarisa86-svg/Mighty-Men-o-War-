@@ -52,6 +52,14 @@ for (const w of [640, 1280, 1920]) {
 await shot(sized(hero, 360, 224), 360, 224);
 out('img/mightyman-hero-placeholder.webp', ['-resize', '32x20', '-blur', '0x1', '-quality', '50']);
 
+// --- start-screen cards (placeholders: replace img/war-card.webp and
+// img/town-card.webp, 800x600, with any art; nothing else needs to change)
+await shot(hero.replace('viewBox="0 0 900 560"', 'viewBox="76 0 747 560"').replace('<svg ', '<svg width="800" height="600" preserveAspectRatio="xMidYMid slice" '), 800, 600);
+webp('img/war-card.webp', 78);
+const town = fs.readFileSync(root + 'art/town-card.svg', 'utf8');
+await shot(town.replace('<svg ', '<svg width="800" height="600" '), 800, 600);
+webp('img/town-card.webp', 80);
+
 // --- app icons
 const square = (svg, s, scale = 1, bg = '#100e0a') =>
   `<div style="width:${s}px;height:${s}px;background:radial-gradient(circle at 50% 45%,#3a3226,${bg} 75%);display:flex;align-items:center;justify-content:center">${svg.replace('<svg ', `<svg width="${Math.round(s * scale)}" height="${Math.round(s * scale)}" `)}</div>`;

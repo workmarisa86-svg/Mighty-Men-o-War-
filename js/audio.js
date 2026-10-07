@@ -1,5 +1,5 @@
 // Every sound is synthesized live with the Web Audio API (no audio files).
-let ctx = null, master = null, noiseBuf = null;
+let ctx = null, master = null, noiseBuf = null, muffle = null;
 let volume = 0.7;
 let rainNode = null, rainGain = null;
 
@@ -7,12 +7,16 @@ export function initAudio() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    master = ctx.createGain(); master.gain.value = volume; master.connect(ctx.destination);
+    master = ctx.createGain(); master.gain.value = volume;
+    muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.Q.value = 0.7;
+    master.connect(muffle); muffle.connect(ctx.destination);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { ctx = null; }
 }
+// under water every sound is muffled
+export function setMuffled(on) { if (muffle) muffle.frequency.setTargetAtTime(on ? 650 : 20000, ctx.currentTime, 0.12); }
 export function setVolume(v) { volume = v; if (master) master.gain.value = v; }
 
 function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 0.005, freqEnd = null, delay = 0 } = {}) {

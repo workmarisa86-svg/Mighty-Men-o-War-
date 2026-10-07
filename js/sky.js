@@ -47,7 +47,7 @@ export class Sky {
     this.daylight = 1;
   }
 
-  // tod: 0..1 (0.5 = noon). rain: 0..1. alwaysDay: Peace mode.
+  // tod: 0..1 (0.5 = noon). rain: 0..1. alwaysDay: the always-daytime setting.
   update(dt, tod, rain, camPos, alwaysDay) {
     if (alwaysDay) tod = 0.45;
     const ang = (tod - 0.25) * Math.PI * 2;

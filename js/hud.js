@@ -43,7 +43,7 @@ export class HUD {
       const s = e.target.closest('.slot');
       if (s) { game.inv.sel = +s.dataset.i; this.dirtyHotbar = true; }
     };
-    this.keyhint.textContent = game.app.input.touch ? '' : t('help.keys');
+    this.keyhint.textContent = game.app.input.touch ? '' : t('help.keys');   // phones: the pause menu lists the buttons
     this.keyhint.classList.remove('fade');
     clearTimeout(HUD.hintTimer);
     HUD.hintTimer = setTimeout(() => this.keyhint.classList.add('fade'), 12000);
@@ -70,9 +70,9 @@ export class HUD {
 
     this.hp.style.width = p.health + '%';
     this.food.style.width = p.hunger + '%';
-    const showBreath = g.breath < 15;
+    const showBreath = g.breath < 19.9 && !g.has('scuba');
     this.breath.hidden = !showBreath;
-    if (showBreath) this.breathFill.style.width = (g.breath / 15 * 100) + '%';
+    if (showBreath) this.breathFill.style.width = (g.breath / 20 * 100) + '%';
 
     this.statusTimer -= dt;
     if (this.statusTimer <= 0) {
@@ -81,8 +81,8 @@ export class HUD {
       const tod = g.dayOnly ? 0.45 : g.time % 1;
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const parts = [t('hud.day', { n: day }), g.peace ? t('hud.peace') : g.dayOnly ? t('hud.daylight') : clock];
-      if (!g.peace && g.weather.rain > 0.15) parts.push(t('hud.rain'));
+      const parts = [t('hud.day', { n: day }), g.dayOnly ? t('hud.daylight') : clock];
+      if (g.weather.rain > 0.15) parts.push(t('hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
 
@@ -106,15 +106,17 @@ export class HUD {
     let hint = '';
     if (!g.overlay && !g.paused && !scoped) {
       if (g.defusing) hint = t('hint.defusing');
+      else if (p.swimming) hint = t('hint.dive');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
-      else if (g.campfires.near(p.pos) && !g.peace) hint = t(g.app.input.touch ? 'hint.fireTouch' : 'hint.fire');
+      else if (g.campfires.near(p.pos)) hint = t('hint.fire');
+      else if (this.rationsAimed()) hint = t('hint.rations');
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');
       else if (g.selected() === 'flint') hint = t('hint.flint');
       else if (ITEMS[g.selected()] && (ITEMS[g.selected()].food || ITEMS[g.selected()].heal)) hint = t('hint.eat');
     }
     if (hint !== this.hintText) { this.hintText = hint; this.hint.textContent = hint; }
-    const hs = g.peace ? '' : p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
+    const hs = p.hunger <= 0 ? t('hud.sickShort') : p.hunger < 20 ? t('hud.hungryShort') : '';
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.updateMarkers();
     this.updateSquadList(dt);
@@ -220,6 +222,17 @@ export class HUD {
     this.radioEl.innerHTML = '';
   }
 
+  // looking at one of your forts' ration crates (checked a few times a second)
+  rationsAimed() {
+    const g = this.game, now = performance.now();
+    if (now - (this.rationT || 0) < 250) return this.rationHit;
+    this.rationT = now;
+    const { eye, dir } = g.aim();
+    const hit = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 5.6);
+    this.rationHit = !!hit && hit.id === 18 && !(g.cabin && g.cabin.isChest(hit.x, hit.y, hit.z));
+    return this.rationHit;
+  }
+
   // current mission: name, objective, time left
   updateMission(dt) {
     const m = this.game.mission;
@@ -241,7 +254,7 @@ export class HUD {
     this.squadT -= dt;
     if (this.squadT > 0) return;
     this.squadT = 0.3;
-    const members = g.cfg.sub === 'allies' && !g.peace && E ? E.squadMembers() : [];
+    const members = g.cfg.sub === 'allies' && E ? E.squadMembers() : [];
     if (!members.length) { this.squadEl.hidden = true; return; }
     this.squadEl.hidden = false;
     const MAX = 8;

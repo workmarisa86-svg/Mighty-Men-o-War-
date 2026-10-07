@@ -5,7 +5,8 @@ import { DIFFICULTIES, SAVE_FORMAT, SEA } from './config.js';
 import { listSaves, deleteSave, deleteAllSaves } from './storage.js';
 import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
-import { MANUAL, MANUAL_CATS } from './manual.js';
+import { MANUAL, MANUAL_CATS, MANUAL_DEVICE } from './manual.js';
+import { getDevice } from './i18n.js';
 import { missionsFor, missionInfo } from './missions.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
@@ -16,7 +17,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 export function heroArt() {
   return `<picture class="art"><source type="image/webp" sizes="(min-aspect-ratio: 155/100) 161vh, 100vw"
     srcset="img/mightyman-hero-640.webp 640w, img/mightyman-hero-1280.webp 1280w, img/mightyman-hero-1920.webp 1920w">
-    <img src="img/mightyman-hero-1280.jpg" width="1280" height="796" alt="Mighty Man o' War — No one left behind" decoding="async"></picture>`;
+    <img src="img/mightyman-hero-1280.jpg" width="1280" height="796" alt="Mighty Men o' War — No one left behind" decoding="async"></picture>`;
 }
 
 export class UI {
@@ -62,12 +63,44 @@ export class UI {
     });
   }
 
-  // ------------------------------------------------------------------ main
+  // ----------------------------------------------------------- start
+  // Two games share this engine: War (Mighty Men o' War) and Town Life.
+  // The card pictures are plain files: img/war-card.webp, img/town-card.webp.
+  r_start() {
+    this.root.classList.add('art-screen', 'start-screen');
+    const card = (go, img, name, sub) => `<button class="gamecard" data-go="${go}">
+        <img src="img/${img}" width="800" height="600" alt="" decoding="async"><b>${name}</b><span>${sub}</span></button>`;
+    this.root.innerHTML = `<h1 class="sr-only">Mighty Men o' War</h1>
+      <p class="pick">${t('start.pick')}</p>
+      <div class="gamecards">${card('main', 'war-card.webp', "Mighty Men o' War", t('start.warSub'))}${card('town', 'town-card.webp', 'Town Life', t('start.townSub'))}</div>
+      <div class="extras">${this.langSwitch()}
+      <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
+      ${this.speakerBtn()}</div>
+      <p class="ver">v${this.app.version}</p>`;
+    this.app.bindInstall(this.root.querySelector('#installbtn'));
+    this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go));
+    this.bindLang(this.root);
+    this.bindSpeaker();
+  }
+  // Town Life: built in the next stage
+  r_town() {
+    this.panel('Town Life', `<img class="soonart" src="img/town-card.webp" width="800" height="600" alt="">
+      <p>${t('town.soon')}</p>`, { onBack: () => this.show('start') });
+  }
+  speakerBtn() {
+    return `<button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button>`;
+  }
+  bindSpeaker() {
+    const spk = this.root.querySelector('#spk');
+    if (spk) spk.onclick = () => { const s = this.app.settings; s.musicMute = !s.musicMute; this.app.applySettings(); spk.classList.toggle('off', s.musicMute); };
+  }
+
+  // ------------------------------------------------------------- War menu
   r_main() {
     const hasSaves = listSaves().length > 0;
     this.root.classList.add('art-screen');
     this.root.innerHTML = `${heroArt()}
-      <h1 class="sr-only">Mighty Man o' War</h1>
+      <h1 class="sr-only">Mighty Men o' War</h1>
       <div class="menu-zone">
       <div class="menu">
         <button class="btn" data-go="newgame">${t('menu.new')}</button>
@@ -75,17 +108,17 @@ export class UI {
         <button class="btn" data-go="settings">${t('menu.settings')}</button>
         <button class="btn" data-go="manual">${t('menu.manual')}</button>
         <button class="btn" data-go="stats">${t('menu.stats')}</button>
+        <button class="btn ghost" data-go="start">${t('menu.games')}</button>
       </div>
       <div class="extras">${this.langSwitch()}
       <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
-      <button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button></div>
+      ${this.speakerBtn()}</div>
       </div>
       <p class="ver">v${this.app.version}</p>`;
     this.app.bindInstall(this.root.querySelector('#installbtn'));
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go, { what: b.dataset.what, from: 'main' }));
     this.bindLang(this.root);
-    const spk = this.root.querySelector('#spk');
-    if (spk) spk.onclick = () => { const s = this.app.settings; s.musicMute = !s.musicMute; this.app.applySettings(); spk.classList.toggle('off', s.musicMute); };
+    this.bindSpeaker();
   }
 
   // Manual: search, sort A-Z / Z-A, filter by category, open/close entries.
@@ -106,7 +139,11 @@ export class UI {
     const norm = (x) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const draw = () => {
       const words = norm(state.q).split(/\s+/).filter(Boolean);
-      let items = MANUAL.filter((m) => state.cat === 'all' || m.cat === state.cat).map((m) => ({ m, x: m[L] || m.en }))
+      const dev = MANUAL_DEVICE[getDevice()] || {};
+      let items = MANUAL.filter((m) => state.cat === 'all' || m.cat === state.cat).map((m) => {
+        const base = m[L] || m.en, o = dev[m.id];
+        return { m, x: o ? { title: base.title, text: o[L] || o.en } : base };
+      })
         .filter(({ x }) => words.every((w) => norm(x.title + ' ' + x.text).includes(w)));
       if (state.sort === 'cat') items.sort((a, b) => cats.indexOf(a.m.cat) - cats.indexOf(b.m.cat));
       else items.sort((a, b) => a.x.title.localeCompare(b.x.title, L) * (state.sort === 'za' ? -1 : 1));
@@ -145,24 +182,20 @@ export class UI {
 
   // -------------------------------------------------------------- new game
   r_newgame(p) {
-    const st = Object.assign({ step: 'mode', mode: null, sub: null, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', mission: null }, p);
+    const st = Object.assign({ step: 'sub', mode: 'war', sub: null, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', mission: null }, p);
     const go = (patch) => this.show('newgame', Object.assign({}, st, patch));
     let body = '';
-    if (st.step === 'mode') {
-      body = `<p class="label">${t('new.mode')}</p><div class="choices">
-        <div class="choice" data-v="war"><h3>${t('new.war')}</h3><p>${t('new.warDesc')}</p></div>
-        <div class="choice" data-v="peace"><h3>${t('new.peace')}</h3><p>${t('new.peaceDesc')}</p></div></div>`;
-    } else if (st.step === 'sub') {
+    if (st.step === 'sub') {
       body = `<p class="label">${t('new.how')}</p><div class="choices">
         <div class="choice" data-v="alone"><h3>${t('new.alone')}</h3><p>${t('new.aloneDesc')}</p></div>
         <div class="choice" data-v="allies"><h3>${t('new.allies')}</h3><p>${t('new.alliesDesc')}</p></div></div>`;
     } else {
       const n = listSaves().length + 1;
-      body = (st.mode === 'war' ? `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
+      body = `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
         <div class="choice small ${st.difficulty === d ? 'on' : ''}" data-d="${d}">
           <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>
         <p class="label">${t('new.time')}</p><div class="choices">${['cycle', 'day'].map((m) => `
-        <div class="choice small ${st.timeMode === m ? 'on' : ''}" data-tm="${m}"><h3>${t('new.time.' + m)}</h3><p>${t('new.time.' + m + 'Desc')}</p></div>`).join('')}</div>` : '') +
+        <div class="choice small ${st.timeMode === m ? 'on' : ''}" data-tm="${m}"><h3>${t('new.time.' + m)}</h3><p>${t('new.time.' + m + 'Desc')}</p></div>`).join('')}</div>` +
         `<p class="label">${t('new.type')}</p><div class="choices">${['open', 'mission'].map((m) => `
         <div class="choice small ${st.gameType === m ? 'on' : ''}" data-gt="${m}"><h3>${t('new.type.' + m)}</h3><p>${t('new.type.' + m + 'Desc')}</p></div>`).join('')}</div>` +
         (st.gameType === 'mission' ? this.missionList(st) : '') +
@@ -170,15 +203,13 @@ export class UI {
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
     const back = () => {
-      if (st.step === 'mode') this.show('main');
-      else if (st.step === 'sub') go({ step: 'mode' });
-      else go({ step: st.mode === 'war' ? 'sub' : 'mode' });
+      if (st.step === 'sub') this.show('main');
+      else go({ step: 'sub' });
     };
     const panel = this.panel(t('new.title'), body, { onBack: back, wide: true });
     panel.querySelectorAll('.choice[data-v]').forEach((c) => c.onclick = () => {
       const v = c.dataset.v;
-      if (st.step === 'mode') go(v === 'war' ? { step: 'sub', mode: 'war' } : { step: 'final', mode: 'peace', sub: null });
-      else go({ step: 'final', sub: v });
+      go({ step: 'final', sub: v });
     });
     panel.querySelectorAll('.choice[data-tm]').forEach((c) => c.onclick = () => {
       st.timeMode = c.dataset.tm;
@@ -198,7 +229,7 @@ export class UI {
     if (sb) sb.onclick = () => {
       const name = panel.querySelector('#wname').value.trim() || t('new.defaultName', { n: 1 });
       if (st.gameType === 'mission' && !st.mission) { const el = panel.querySelector('.missions'); if (el) el.classList.add('need'); sfx.error && sfx.error(); return; }
-      this.app.newGame({ mode: st.mode, sub: st.mode === 'war' ? st.sub : null, difficulty: st.mode === 'war' ? st.difficulty : null, timeMode: st.mode === 'war' ? st.timeMode : 'day', name,
+      this.app.newGame({ mode: 'war', sub: st.sub, difficulty: st.difficulty, timeMode: st.timeMode, name,
         gameType: st.gameType, mission: st.gameType === 'mission' ? st.mission : null });
     };
   }
@@ -206,7 +237,7 @@ export class UI {
   // ------------------------------------------------------------------ load
   r_load() {
     const saves = listSaves();
-    const modeLabel = (m) => (m.mode === 'peace' ? t('mode.peace') : `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)} · ${t('new.time.' + (m.timeMode || 'cycle'))}`) +
+    const modeLabel = (m) => `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)} · ${t('new.time.' + (m.timeMode || 'cycle'))}` +
       ' · ' + (m.gameType === 'mission' && m.mission ? `${t('new.type.mission')}: ${t('ms.' + m.mission + '.name')}${m.missionDone ? (m.missionDone.ok ? ' ✓' : ' ✗') : ''}` : t('new.type.open'));
     const body = saves.length ? `<div class="saves">${saves.map((m) => `
       <div class="save">
@@ -253,8 +284,7 @@ export class UI {
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
-      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
-      <div class="field"><span>${t('set.formation')}</span>${seg('formation', [['loose', t('form.loose')], ['line', t('form.line')], ['column', t('form.column')]])}</div>`;
+      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => from === 'pause' ? this.show('pause') : this.show('main') });
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;
@@ -285,7 +315,7 @@ export class UI {
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t('menu.quit')}</button></div>
-      <p class="muted small keys">${this.app.input.touch ? '' : t('help.keys')}</p></div>`;
+      <p class="muted small keys">${t('help.keys')}</p></div>`;
     const $ = (s) => this.root.querySelector(s);
     $('#presume').onclick = () => this.app.resume();
     $('#psave').onclick = () => this.app.saveGame(false);
@@ -304,7 +334,7 @@ export class UI {
       if (d.gear || d.armor) return false;
       return d.tool || g.count(id) > 0 || MATERIALS.includes(id);
     });
-    const gear = (g.peace ? [] : ['flashlight', 'compass', 'binoculars']).concat(['helmet', 'vest'].filter((id) => g.has(id)));
+    const gear = ['flashlight', 'compass', 'binoculars'].concat(['helmet', 'vest', 'scuba'].filter((id) => g.has(id)));
     const cell = (id, cls = '') => {
       const d = ITEMS[id];
       const c = g.count(id);
@@ -361,7 +391,7 @@ export class UI {
       }
       body += '</div>';
     }
-    const panel = this.panel(t(fire && !g.peace ? 'craft.titleFire' : 'craft.title'), body, { wide: true, onBack: () => this.app.closePanel() });
+    const panel = this.panel(t(fire ? 'craft.titleFire' : 'craft.title'), body, { wide: true, onBack: () => this.app.closePanel() });
     panel.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => {
       const r = RECIPES.find((x) => x.id === b.dataset.r);
       if (g.startCraft(r)) this.app.closePanel();
@@ -467,8 +497,15 @@ export class UI {
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend"><span><i style="background:${OWNER_COLORS.ally}"></i>${t('map.ally')}</span><span><i style="background:${OWNER_COLORS.enemy}"></i>${t('map.enemy')}</span>
       <span><i style="background:${OWNER_COLORS.none}"></i>${t('map.none')}</span><span><i class="you"></i>${t('map.you')}</span>${g.mission ? `<span><i class="obj"></i>${t('map.objective')}</span>` : ''}</div>`;
-    const panel = this.panel(t('menu.map'), body, { wide: true, onBack: () => from === 'pause' ? this.show('pause') : this.app.closePanel() });
+    const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
+    const panel = this.panel(t('menu.map'), body, { wide: true, onBack: close });
+    panel.classList.add('mappanel');
+    // a clear Close button; on phones tapping the map itself closes it too
+    const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
+    x.onclick = close; panel.appendChild(x);
+    const back = panel.querySelector('[data-act=back]'); if (back) back.textContent = t('map.close');
     const cv = panel.querySelector('#wmap'), w = g.world;
+    if (this.app.input.touch) cv.addEventListener('click', close);
     const S = Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
