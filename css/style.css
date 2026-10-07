@@ -594,3 +594,14 @@ body:not(.townlife) [data-btn=craft] { display: none !important; }
 .sides .flags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .sides .flags img { height: 22px; width: auto; border: 1px solid rgba(0,0,0,0.6); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 .choice.locked { opacity: 0.5; cursor: default; }
+/* Town Life loading: the town card picture fills the screen */
+.screen.town-loading .art img { width: 100vw; height: 100vh; object-fit: cover; }
+.screen.town-loading { background: #2a3420; }
+.screen.town-loading .menu-zone { top: auto; height: 120px; }
+/* ---- binoculars: two round lenses, a bridge, a range scale ---- */
+#scopeview .binoc-svg { display: none; position: absolute; inset: 0; transform: scale(var(--zoom, 1)); transform-origin: 50% 50%; }
+#scopeview .binoc-svg svg { width: 100%; height: 100%; display: block; }
+#scopeview.binoc .binoc-svg { display: block; }
+#scopeview.binoc .mask, #scopeview.binoc .lens, #scopeview.binoc .reticle { display: none !important; }
+.zbtn { display: none; }
+body.binoc .zbtn { display: inline-block; min-width: 46px; font-size: 22px; font-weight: bold; }

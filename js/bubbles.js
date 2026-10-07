@@ -21,7 +21,8 @@ export class Bubbles {
     const g = this.game;
     const d = who.pos.distanceTo(g.camera.position);
     if (d > (opts.range || 32)) return;
-    this.active = this.active.filter((b) => b.who !== who);
+    // one bubble per speaker: a new line replaces the old one (element and all)
+    this.clearFor(who);
     let el = this.pool.pop();
     if (!el) { el = document.createElement('div'); el.className = 'bubble'; el.appendChild(document.createElement('b')); el.appendChild(document.createElement('span')); }
     el.className = 'bubble ' + (opts.kind || '');
@@ -40,7 +41,8 @@ export class Bubbles {
     const g = this.game, cam = g.camera;
     for (const b of this.active.slice()) {
       b.t -= dt;
-      if (b.t <= 0 || (b.who.alive === false && b.t > 0.5)) { this.drop(b); continue; }
+      // gone, faded, or left behind (you walked away / they left the area)
+      if (b.t <= 0 || (b.who.alive === false && b.t > 0.5) || b.who.away || b.who.pos.distanceTo(cam.position) > 40) { this.drop(b); continue; }
       V.set(b.who.pos.x, b.who.pos.y + b.h, b.who.pos.z).project(cam);
       if (V.z > 1 || Math.abs(V.x) > 1.1 || Math.abs(V.y) > 1.1) { b.el.style.display = 'none'; continue; }
       b.el.style.display = '';

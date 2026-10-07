@@ -1,6 +1,6 @@
 // Town Life: the peacetime countryside game. Owns the seasons (snow, ice,
 // autumn colours), money, honor, the law (witnesses, bounty, the posse,
-// jail), shops, favors, the farm and livestock, and saving the one
+// jail), shops, jobs, the farm and livestock, and saving the one
 // persistent world. Built on the same engine as War (blocks, controls,
 // saving, settings, language).
 import { B } from './blocks.js';
@@ -12,6 +12,7 @@ import { sfx, setWind } from './audio.js';
 import { startFolk, stopFolk } from './folk.js';
 import { t } from './i18n.js';
 import { saveTown } from './storage.js';
+import { TOWN_LAYOUT } from './towngen.js';
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
@@ -24,7 +25,7 @@ export const SHOPS = {
   market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2 } },
 };
 const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30 };
-const FAVORS = [
+const JOBS = [
   { item: 'wood', n: 6, pay: 8 }, { item: 'stone', n: 6, pay: 8 }, { item: 'meat_raw', n: 2, pay: 10 }, { item: 'egg', n: 3, pay: 8 },
   { item: 'milk', n: 1, pay: 6 }, { item: 'wheat', n: 4, pay: 9 }, { item: 'clay', n: 4, pay: 8 }, { item: 'hide', n: 1, pay: 12 },
   { item: 'carrot', n: 3, pay: 8 }, { courier: true, pay: 6 },
@@ -39,10 +40,11 @@ export class TownLife {
     this.bounty = saved.bounty ?? 0;
     this.lastCrime = saved.lastCrime ?? -9;
     this.decayDay = saved.decayDay ?? Math.floor(g.time);
-    this.favor = saved.favor || null;
-    this.favorCd = saved.favorCd || {};
+    this.job = saved.job || saved.favor || null;      // (older saves called jobs "favors")
+    this.jobCd = saved.jobCd || saved.favorCd || {};
     this.stolen = saved.stolen || {};
-    this.st = Object.assign({ days: 0, earned: 0, favors: 0, jailed: 0, harvested: 0 }, saved.st || {});
+    this.st = Object.assign({ days: 0, earned: 0, jobs: 0, jailed: 0, harvested: 0 }, saved.st || {});
+    if (this.st.favors != null) { this.st.jobs += this.st.favors; delete this.st.favors; }
     this.village = g.world.sites.find((s) => s.type === 'village');
     this.cottage = g.world.sites.find((s) => s.type === 'cabin');
     this.folk = new Townsfolk(g, saved.folk || {});
@@ -138,43 +140,44 @@ export class TownLife {
     return true;
   }
 
-  // ---- favors ------------------------------------------------------------------
-  askFavor(v) {
-    const g = this.game, f = this.favor;
+  // ---- jobs (paid work) ------------------------------------------------------------------
+  askJob(v) {
+    const g = this.game, f = this.job;
     if (f) {
       if (f.giver === v.i && !f.courier) {
-        if (g.has(f.item, f.n)) { g.take(f.item, f.n); this.payFavor(v, f); return; }
-        this.folk.say(v, 'favor.waiting', { n: f.n, item: t('item.' + f.item) }); return;
+        if (g.has(f.item, f.n)) { g.take(f.item, f.n); this.payJob(v, f); return; }
+        this.folk.say(v, 'job.waiting', { n: f.n, item: t('item.' + f.item) }); return;
       }
-      if (f.courier && f.to === v.i) { this.payFavor(v, f); return; }
-      this.folk.say(v, 'favor.busy'); return;
+      if (f.courier && f.to === v.i) { this.payJob(v, f); return; }
+      this.folk.say(v, 'job.busy'); return;
     }
-    if (this.bounty > 0 || this.honor < 25) { this.folk.say(v, 'favor.refuse'); return; }
-    if ((this.favorCd[v.i] || 0) > g.time) { this.folk.say(v, 'favor.later'); return; }
-    const pick = FAVORS[Math.floor(Math.random() * FAVORS.length)];
+    if (this.bounty > 0 || this.honor < 25) { this.folk.say(v, 'job.refuse'); return; }
+    if ((this.jobCd[v.i] || 0) > g.time) { this.folk.say(v, 'job.later'); return; }
+    const pick = JOBS[Math.floor(Math.random() * JOBS.length)];
     const offer = { giver: v.i, pay: pick.pay + Math.floor(this.honor / 25), until: g.time + 2 };
     if (pick.courier) {
       const others = this.folk.list.filter((o) => o.alive && o !== v && o.role !== 'sheriff');
       const to = others[Math.floor(Math.random() * others.length)];
       Object.assign(offer, { courier: true, to: to.i, toName: to.name });
     } else Object.assign(offer, { item: pick.item, n: pick.n });
-    g.app.openPanel('favor', { v, offer });
+    g.app.openPanel('job', { v, offer });
   }
-  acceptFavor(offer) { this.favor = offer; this.game.hud.toast(t('favor.accepted')); }
-  payFavor(v, f) {
+  acceptJob(offer) { this.job = offer; this.game.hud.toast(t('job.accepted')); }
+  payJob(v, f) {
     const g = this.game;
-    this.money += f.pay; this.st.earned += f.pay; this.st.favors++;
+    this.money += f.pay; this.st.earned += f.pay; this.st.jobs++;
     this.addHonor(5); this.bounty = Math.max(0, this.bounty - 15);
-    this.favorCd[f.giver] = g.time + 0.5;
-    this.favor = null;
-    this.folk.say(v, 'favor.thanks', { n: f.pay });
-    g.hud.toast(t('favor.paid', { n: f.pay }), 'pick');
+    this.jobCd[f.giver] = g.time + 0.5;
+    this.job = null;
+    this.folk.say(v, 'job.thanks', { n: f.pay });
+    g.hud.toast(t('job.paid', { n: f.pay }), 'pick');
     sfx.coins();
   }
 
   // ---- the law ---------------------------------------------------------------
   // A crime only counts if someone saw it. Witnesses run to the sheriff.
-  crime(kind, { victim = null, value = 0, pos = null } = {}) {
+  // dead: the person just killed (a body left in a house is then already known)
+  crime(kind, { victim = null, value = 0, pos = null, dead = null } = {}) {
     const g = this.game, P = g.player.pos;
     const amount = BOUNTY[kind] + value;
     // a flurry of blows counts as one assault
@@ -182,6 +185,7 @@ export class TownLife {
     this.lastCrime = g.time;
     // the posse is the law: if they see it, it counts at once
     if (this.posse && this.posse.members.some((m) => m.alive && (m === victim || this.folk.sees(m, 45)))) {
+      if (dead && dead.body) dead.body.known = true;
       this.addBounty(amount, kind);
       this.posse.lastSeen = P.clone(); this.posse.seenT = 0;
       if (kind !== 'theft') this.goHostile();
@@ -189,6 +193,7 @@ export class TownLife {
     }
     const seen = this.folk.list.filter((v) => v.alive && !v.posse && (v === victim || this.folk.sees(v, 32)));
     if (!seen.length) { g.hud.toast(t('law.unseen')); return; }
+    if (dead && dead.body) dead.body.known = true;
     seen.sort((a, b) => a.pos.distanceTo(P) - b.pos.distanceTo(P));
     const sheriff = seen.find((v) => v.role === 'sheriff');
     if (sheriff) { this.folk.say(sheriff, 'say.sheriffSaw', null, 'warn'); this.reported(sheriff, { kind, amount, pos: P.clone() }); return; }
@@ -207,6 +212,20 @@ export class TownLife {
     g.hud.alert(t('law.reported', { name: v.name, n: this.bounty }));
     sfx.warn();
     this.formPosse(c.pos);
+  }
+  // someone visiting a house found a body: they run to the sheriff (if a
+  // witness already reported that killing, it is not counted twice)
+  bodyFound(v, victim, bd, asleep = false) {
+    const g = this.game, home = this.village.buildings[bd.h];
+    if (bd.known) { if (!asleep) this.folk.say(v, 'say.foundBody', { name: victim.name }, 'warn'); return; }
+    bd.known = true;
+    const c = { kind: 'murder', amount: BOUNTY.murder, pos: g.player.pos.clone().set(home.door.x, home.door.y, home.door.z) };
+    if (asleep) { this.found = (this.found || 0) + 1; this.reported(v, c); return; }
+    this.folk.say(v, 'say.foundBody', { name: victim.name }, 'warn');
+    v.reportTo = c; v.route = []; v.scaredT = 0;
+    this.witnesses = this.witnesses.filter((x) => x !== v).concat(v);
+    g.hud.alert(t('law.bodyFound', { name: v.name, victim: victim.name }));
+    sfx.alert();
   }
   addBounty(n, kind) {
     this.bounty += n;
@@ -373,15 +392,47 @@ export class TownLife {
     g.hud.dirtyHotbar = true;
     g.hud.bigMessage(t('town.woke'), t(cause === 'starve' ? 'town.wokeStarve' : 'town.wokeHurt'));
   }
-  // sleep in your bed: evening or night, to the next morning
+  // sleep in your bed, at any time of day: until night or until morning.
+  // Time passes for everyone: crops grow, witnesses reach the sheriff, a
+  // posse that lost you gives up (or tracks you to the cottage), bodies may
+  // be found, newcomers grow up, and a bounty slowly fades.
   sleep() {
-    const g = this.game, h = (g.time % 1) * 24;
-    if (this.posse) { g.hud.toast(t('town.noSleepPosse')); sfx.error(); return; }
-    if (h > 6 && h < 18) { g.hud.toast(t('town.notTired')); return; }
-    g.time = Math.floor(g.time) + (h >= 18 ? 1 : 0) + 6 / 24;
-    g.player.health = Math.min(100, g.player.health + 40);
-    g.player.hunger = Math.max(5, g.player.hunger - 12);
-    g.hud.bigMessage(t('town.morning'), t('season.' + this.seasonName()) + ' · ' + t('hud.day', { n: Math.floor(g.time) + 1 }));
+    const g = this.game, P = this.posse;
+    if (P && P.members.some((m) => m.alive && m.pos.distanceTo(g.player.pos) < 25 && this.folk.sees(m, 30))) { g.hud.toast(t('town.noSleepPosse')); sfx.error(); return; }
+    g.app.openPanel('sleep', {});
+  }
+  sleepUntil(which) {
+    const g = this.game, F = this.folk, c = this.cottage;
+    let to = Math.floor(g.time) + (which === 'night' ? 21 : 6) / 24;
+    if (to <= g.time + 0.01) to += 1;
+    const hours = (to - g.time) * 24;
+    g.time = to;
+    // a posse already out: if they lost you near home they find you at the
+    // cottage door, otherwise they gave up while you slept
+    const P = this.posse;
+    let atDoor = false;
+    if (P) {
+      if (Math.hypot(P.lastSeen.x - c.x, P.lastSeen.z - c.z) < 40) {
+        atDoor = true;
+        P.members.filter((m) => m.alive).forEach((m, k) => { m.pos.set(c.door.x + Math.cos(k * 1.3) * 3, c.door.y, c.door.z + Math.sin(k * 1.3) * 3); m.route = []; });
+        P.lastSeen.copy(g.player.pos); P.seenT = 0; P.arrived = true; P.checked = false;
+      } else this.disband('law.gaveUp');
+    }
+    // witnesses on their way got to the sheriff
+    for (const w of this.witnesses.slice()) if (w.alive && w.reportTo) { const cr = w.reportTo; w.reportTo = null; w.route = []; this.reported(w, cr); }
+    this.found = 0;
+    F.fastForward(hours);
+    // lying low: the bounty slowly fades while you sleep
+    if (this.bounty > 0 && !this.posse) {
+      const quiet = Math.max(0, Math.min(hours, (g.time - this.lastCrime) * 24 - 2));
+      this.bounty = Math.floor(this.bounty * Math.pow(0.98, quiet));
+      if (this.bounty < 5) { this.bounty = 0; g.hud.toast(t('law.layLow')); }
+    }
+    g.player.health = Math.min(100, g.player.health + Math.min(40, hours * 4));
+    g.player.hunger = Math.max(5, g.player.hunger - hours);
+    g.hud.bigMessage(t(which === 'night' ? 'town.evening' : 'town.morning'), t('season.' + this.seasonName()) + ' · ' + t('hud.day', { n: Math.floor(g.time) + 1 }));
+    if (this.found) g.hud.alert(t('law.bodyFoundAsleep'));
+    if (atDoor) g.hud.alert(t('town.posseAtDoor'));
     g.app.saveGame(true);
   }
 
@@ -393,9 +444,9 @@ export class TownLife {
     if (v) {
       if (v.role === 'keeper') out.push({ a: 'shop', label: t('ctx.shop'), v });
       if (v.role === 'sheriff') out.push({ a: 'sheriff', label: t('ctx.sheriff'), v });
-      const f = this.favor;
-      if (f && ((f.giver === v.i && !f.courier) || (f.courier && f.to === v.i))) out.push({ a: 'favor', label: t(f.courier ? 'ctx.deliver' : 'ctx.handOver'), v });
-      else out.push({ a: 'favor', label: t('ctx.favor'), v });
+      const f = this.job;
+      if (f && ((f.giver === v.i && !f.courier) || (f.courier && f.to === v.i))) out.push({ a: 'job', label: t(f.courier ? 'ctx.deliver' : 'ctx.handOver'), v });
+      else out.push({ a: 'job', label: t('ctx.job'), v });
     }
     const carcass = g.animals.nearestCarcass(p);
     if (carcass) out.push({ a: 'skin', label: t('ctx.skin'), carcass });
@@ -411,7 +462,7 @@ export class TownLife {
     if (!o || g.paused || g.overlay || g.dead) return;
     if (a === 'shop') g.app.openPanel('shop', { shop: o.v.shop, v: o.v });
     else if (a === 'sheriff') g.app.openPanel('sheriff', { v: o.v });
-    else if (a === 'favor') this.askFavor(o.v);
+    else if (a === 'job') this.askJob(o.v);
     else if (a === 'skin') { g.animals.skin(o.carcass); g.vm.doSwing(); sfx.stab(); }
     else if (a === 'milk') {
       if ((o.cow.milkT || 0) > g.time) { g.hud.toast(t('town.milkLater')); return; }
@@ -457,7 +508,7 @@ export class TownLife {
         this.bounty = Math.floor(this.bounty * 0.8);
         if (this.bounty < 5) { this.bounty = 0; g.hud.toast(t('law.layLow')); }
       }
-      if (this.favor && this.favor.until < g.time) { this.favor = null; this.addHonor(-3); g.hud.toast(t('favor.expired')); }
+      if (this.job && this.job.until < g.time) { this.job = null; this.addHonor(-3); g.hud.toast(t('job.expired')); }
     }
     // the sheriff spots a wanted player
     if (this.bounty > 0 && !this.posse) {
@@ -482,7 +533,7 @@ export class TownLife {
   }
   spawnLivestock(saved) {
     const g = this.game, A = g.animals;
-    for (const s of saved || []) { const a = A.addLivestock(s.type, this.cottage.pen, 'player', { x: s.x, z: s.z }); a.milkT = s.milk; a.eggT = s.egg; }
+    for (const s of saved || []) { const a = A.addLivestock(s.type, this.cottage.pen, 'player', s.x != null ? { x: s.x, z: s.z } : null); a.milkT = s.milk; a.eggT = s.egg; }
     const pen = this.village.pens[0];
     for (const [type, n] of [['cow', 2], ['pig', 3], ['chicken', 4]]) for (let i = 0; i < n; i++) A.addLivestock(type, pen, 'village');
   }
@@ -504,7 +555,7 @@ export class TownLife {
       `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
-      (this.favor ? `<span class="job">${this.favor.courier ? t('town.jobCourier', { name: this.favor.toName }) : t('town.jobBring', { n: this.favor.n, item: t('item.' + this.favor.item) })}</span>` : '');
+      (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '');
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
@@ -516,12 +567,12 @@ export class TownLife {
   toSave() {
     const g = this.game, p = g.player;
     return {
-      v: 1, seed: g.cfg.seed, time: g.time, weather: g.weather,
+      v: 1, layout: TOWN_LAYOUT, seed: g.cfg.seed, time: g.time, weather: g.weather,
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger },
       inv: g.inv, stats: g.stats, pickups: g.pickups.toSave(), rafts: g.rafts.map((r) => ({ x: r.x, z: r.z })), cabin: g.cabin.toSave(),
       town: {
         money: this.money, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
-        favor: this.favor, favorCd: this.favorCd, stolen: this.stolen, st: this.st,
+        job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st,
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
       },
     };

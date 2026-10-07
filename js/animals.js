@@ -151,6 +151,7 @@ export class Animals {
     for (const s of this.game.world.sites) {
       const r = s.type === 'village' ? s.radius + 8 : s.type === 'cabin' ? 22 : 0;
       if (r && Math.hypot(x - (s.cx ?? s.x), z - (s.cz ?? s.z)) < r) return false;
+      if (s.type === 'village') for (const b of s.buildings) if (b.type === 'house' && Math.hypot(x - b.inside.x, z - b.inside.z) < 18) return false;
     }
     return true;
   }

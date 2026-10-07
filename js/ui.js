@@ -300,7 +300,7 @@ export class UI {
     this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2><div class="menu">
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
-      <button class="btn" id="pmap">${t('menu.map')}</button>
+      <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t(this.app.game && this.app.game.town ? 'town.quit' : 'menu.quit')}</button></div>
@@ -444,7 +444,7 @@ export class UI {
     const L = loadTown();
     if (!L) return `<p class="label">Town Life</p><p class="muted small">${t('stats.townNone')}</p>`;
     const T = L.state.town || {}, st = T.st || {}, S = L.state.stats || {};
-    const rows = [['tdays', Math.floor(L.state.time || 0) + 1], ['tearned', st.earned || 0], ['tfavors', st.favors || 0], ['animals', S.animals || 0], ['tharvest', st.harvested || 0], ['tjailed', st.jailed || 0], ['tmoney', T.money || 0], ['thonor', Math.round(T.honor ?? 50)]];
+    const rows = [['tdays', Math.floor(L.state.time || 0) + 1], ['tearned', st.earned || 0], ['tjobs', (st.jobs ?? st.favors) || 0], ['animals', S.animals || 0], ['tharvest', st.harvested || 0], ['tjailed', st.jailed || 0], ['tmoney', T.money || 0], ['thonor', Math.round(T.honor ?? 50)]];
     return `<p class="label">Town Life</p><div class="stats-wrap"><table class="stats"><tbody>${rows.map(([k, v]) => `<tr><td>${t('stats.' + k)}</td><td>${v}</td></tr>`).join('')}</tbody></table></div>`;
   }
   r_stats({ from } = {}) {
@@ -463,6 +463,7 @@ export class UI {
   // War map: the whole world, forts by owner, you, the cabin, the objective
   r_map({ from }) {
     const g = this.app.game;
+    if (g.town) { this.r_townmap({ from }); return; }
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend"><span><i style="background:${OWNER_COLORS.ally}"></i>${t('map.ally')}</span><span><i style="background:${OWNER_COLORS.enemy}"></i>${t('map.enemy')}</span>
       <span><i style="background:${OWNER_COLORS.none}"></i>${t('map.none')}</span><span><i class="you"></i>${t('map.you')}</span>${g.mission ? `<span><i class="obj"></i>${t('map.objective')}</span>` : ''}</div>`;
@@ -479,22 +480,9 @@ export class UI {
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
     const c = cv.getContext('2d');
-    if (!g.mapImage) {
-      // terrain shading, made once per world visit
-      const img = document.createElement('canvas'); img.width = w.W; img.height = w.D;
-      const x2 = img.getContext('2d'), id = x2.createImageData(w.W, w.D);
-      for (let z = 0; z < w.D; z++) for (let x = 0; x < w.W; x++) {
-        const y = w.surfaceY(x, z), b = w.get(x, y, z), k = (x + z * w.W) * 4;
-        let r, gg, bb;
-        if (b === 10 || y < SEA) { r = 52; gg = 70; bb = 78; }
-        else { const h = Math.min(1, (y - SEA) / 18); r = 86 + h * 50; gg = 82 + h * 40; bb = 56 + h * 30; if (b === 6 || b === 4) { r -= 22; gg -= 8; bb -= 20; } }
-        id.data[k] = r; id.data[k + 1] = gg; id.data[k + 2] = bb; id.data[k + 3] = 255;
-      }
-      x2.putImageData(id, 0, 0); g.mapImage = img;
-    }
     const sc = S * dpr / Math.max(w.W, w.D);
     c.imageSmoothingEnabled = false;
-    c.drawImage(g.mapImage, 0, 0, w.W * sc, w.D * sc);
+    c.drawImage(this.terrainImage(g), 0, 0, w.W * sc, w.D * sc);
     for (const f of g.forts.list) {
       const s = 13 * sc;
       c.fillStyle = OWNER_COLORS[f.owner] || OWNER_COLORS.none; c.strokeStyle = '#000'; c.lineWidth = 2 * dpr;
@@ -512,6 +500,26 @@ export class UI {
     c.beginPath(); c.moveTo(0, -r); c.lineTo(r * 0.7, r * 0.7); c.lineTo(0, r * 0.3); c.lineTo(-r * 0.7, r * 0.7); c.closePath(); c.fill(); c.stroke(); c.restore();
   }
 
+  // terrain shading for the maps, made once per world visit (paths and
+  // fields show too)
+  terrainImage(g) {
+    if (g.mapImage) return g.mapImage;
+    const w = g.world;
+    const img = document.createElement('canvas'); img.width = w.W; img.height = w.D;
+    const x2 = img.getContext('2d'), id = x2.createImageData(w.W, w.D);
+    for (let z = 0; z < w.D; z++) for (let x = 0; x < w.W; x++) {
+      const y = w.surfaceY(x, z), b = w.get(x, y, z), k = (x + z * w.W) * 4;
+      let r, gg, bb;
+      if (b === 10 || b === 25 || y < SEA) { r = 52; gg = 70; bb = 78; }
+      else if (b === 29) { r = 150; gg = 128; bb = 88; }
+      else if (b === 28 || (b >= 31 && b <= 38)) { r = 112; gg = 88; bb = 52; }
+      else { const h = Math.min(1, (y - SEA) / 18); r = 86 + h * 50; gg = 82 + h * 40; bb = 56 + h * 30; if (b === 6 || b === 4) { r -= 22; gg -= 8; bb -= 20; } }
+      id.data[k] = r; id.data[k + 1] = gg; id.data[k + 2] = bb; id.data[k + 3] = 255;
+    }
+    x2.putImageData(id, 0, 0);
+    return (g.mapImage = img);
+  }
+
   r_gameover({ days }) {
     this.root.innerHTML = `<div class="panel narrow center"><h2>${t('over.title')}</h2>
       <p>${t('over.starved')}</p><p class="big">${t('over.days', { n: days })}</p>
@@ -521,9 +529,12 @@ export class UI {
     this.root.querySelector('#gomenu').onclick = () => this.show('main');
   }
 
-  r_loading() {
+  // War: the battlefield art; Town Life: the town picture from its card
+  r_loading({ town = false } = {}) {
     this.root.classList.add('art-screen');
-    this.root.innerHTML = `${heroArt()}<div class="menu-zone"><p class="loading-text">${t('hud.loading')}</p><div class="loadbar"><div class="fill"></div></div></div>`;
+    if (town) this.root.classList.add('town-loading');
+    const art = town ? `<picture class="art"><img src="img/town-card.webp" width="800" height="600" alt="Town Life" decoding="async"></picture>` : heroArt();
+    this.root.innerHTML = `${art}<div class="menu-zone"><p class="loading-text">${t(town ? 'hud.loadingTown' : 'hud.loading')}</p><div class="loadbar"><div class="fill"></div></div></div>`;
   }
   setLoading(f) { const el = this.root.querySelector('.loadbar .fill'); if (el) el.style.width = Math.round(f * 100) + '%'; }
 

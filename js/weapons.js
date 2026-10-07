@@ -78,7 +78,7 @@ export class Combat {
     else if (hit.tank) hit.tank.hurt(damage, false);
     else if (hit.villager) {
       const v = hit.villager, killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
-      g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v });
+      g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v, dead: killed ? v : null });
     }
     g.hud.hitMarker(hit.head);
     sfx.hitMark();

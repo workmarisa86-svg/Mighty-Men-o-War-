@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
-import { TOWN_SIZE } from './towngen.js';
+import { TOWN_SIZE, TOWN_LAYOUT } from './towngen.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
 import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
@@ -76,6 +76,15 @@ class App {
   startTown(fresh = false) {
     if (fresh) deleteTown();
     const L = fresh ? null : loadTown();
+    this.townRebuilt = false;
+    if (L && (L.state.layout || 1) < TOWN_LAYOUT) {
+      // an older town layout: keep coins, honor, belongings and stats; the
+      // world, the farm, the people and where you stand are made anew
+      const s = L.state, tw = s.town || {};
+      L.state = { v: s.v, layout: TOWN_LAYOUT, seed: s.seed, time: s.time, weather: s.weather, inv: s.inv, stats: s.stats,
+        town: { money: tw.money, honor: tw.honor, bounty: 0, st: tw.st, livestock: (tw.livestock || []).map((a) => ({ type: a.type })) } };
+      L.edits = null; this.townRebuilt = true;
+    }
     const cfg = { mode: 'town', sub: 'town', difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: L ? L.state.seed : (Math.random() * 2 ** 31) | 0 };
     const save = L ? Object.assign({ id: 'town', name: 'Town Life' }, L.state, { cfg, edits: L.edits }) : { id: 'town', name: 'Town Life', cfg };
     this.townRestored = !!(L && L.restored);
@@ -106,7 +115,7 @@ class App {
   }
   async startGame(save) {
     stopMusic();
-    this.ui.show('loading');
+    this.ui.show('loading', { town: save.cfg && save.cfg.mode === 'town' });
     await new Promise((r) => setTimeout(r, 30));
     this.game = new Game(this, save);
     document.body.classList.add('ingame');
@@ -120,6 +129,7 @@ class App {
     this.input.enabled = true;
     this.saveGame(true);
     if (this.game.town && this.townRestored) this.game.hud.toast(t('town.restored'), 'warn');
+    if (this.game.town && this.townRebuilt) this.game.hud.bigMessage(t('town.rebuiltTitle'), t('town.rebuilt'));
     if (this.input.touch) this.resume(); else this.ui.show('clickToPlay');
   }
 

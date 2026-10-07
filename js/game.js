@@ -413,7 +413,7 @@ export class Game {
   handleKeys(input) {
     const inv = this.inv;
     if (!this.orders.eatKeys) for (let i = 0; i < 9; i++) if (input.hit('Digit' + (i + 1))) { inv.sel = i; this.hud.dirtyHotbar = true; }
-    if (input.mouse.wheel) { inv.sel = (inv.sel + (input.mouse.wheel > 0 ? 1 : 8)) % 9; this.hud.dirtyHotbar = true; }
+    if (input.mouse.wheel && this.scopeView.kind !== 'binoc') { inv.sel = (inv.sel + (input.mouse.wheel > 0 ? 1 : 8)) % 9; this.hud.dirtyHotbar = true; }
     if (input.hit('KeyF') || input.thit('light')) {
       this.lightOn = !this.lightOn; sfx.toggle();
       this.hud.toast(t(this.lightOn ? 'hud.lightOn' : 'hud.lightOff'));

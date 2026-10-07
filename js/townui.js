@@ -1,5 +1,5 @@
 // Town Life screens: its own menu (one persistent world: Continue / Start
-// over), shops, favors, the posse's questions, the sheriff and jail.
+// over), shops, jobs, the posse's questions, the sheriff and jail.
 import { t } from './i18n.js';
 import { itemIcon } from './items.js';
 import { hasTown } from './storage.js';
@@ -58,15 +58,15 @@ export function installTownUI(UI) {
     panel.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => { if (T.sell(shop, b.dataset.sell, +b.dataset.n)) this.show('shop', { shop, v, tab }); });
   };
 
-  // ---- a favor offered by a villager ---------------------------------------
-  P.r_favor = function ({ v, offer }) {
+  // ---- a job offered by a villager ---------------------------------------
+  P.r_job = function ({ v, offer }) {
     const g = this.app.game, T = g.town;
-    const what = offer.courier ? t('favor.courier', { name: offer.toName, n: offer.pay }) : t('favor.bring', { n: offer.n, item: t('item.' + offer.item), pay: offer.pay });
+    const what = offer.courier ? t('job.courier', { name: offer.toName, n: offer.pay }) : t('job.bring', { n: offer.n, item: t('item.' + offer.item), pay: offer.pay });
     const body = `<div class="who"><b>${esc(v.name)}</b></div><p class="say">“${esc(what)}”</p>
-      <p class="muted small">${t('favor.note')}</p>
-      <div class="row end"><button class="btn ghost" id="fno">${t('favor.decline')}</button><button class="btn primary" id="fyes">${t('favor.accept')}</button></div>`;
-    this.panel(t('favor.title'), body, { back: false });
-    this.root.querySelector('#fyes').onclick = () => { T.acceptFavor(offer); this.app.closePanel(); };
+      <p class="muted small">${t('job.note')}</p>
+      <div class="row end"><button class="btn ghost" id="fno">${t('job.decline')}</button><button class="btn primary" id="fyes">${t('job.accept')}</button></div>`;
+    this.panel(t('job.title'), body, { back: false });
+    this.root.querySelector('#fyes').onclick = () => { T.acceptJob(offer); this.app.closePanel(); };
     this.root.querySelector('#fno').onclick = () => this.app.closePanel();
   };
 
@@ -95,13 +95,13 @@ export function installTownUI(UI) {
       <div class="menu">
         ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
         <button class="btn" id="sturn">${t('law.turnIn')}</button>` : ''}
-        <button class="btn" id="sfavor">${t('ctx.favor')}</button>
+        <button class="btn" id="sjob">${t('ctx.job')}</button>
       </div><p class="muted small">${t('law.clearWays')}</p>`;
     this.panel(t('law.sheriffTitle'), body, { onBack: () => this.app.closePanel() });
     const $ = (s) => this.root.querySelector(s);
     if ($('#spay')) $('#spay').onclick = () => { T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
     if ($('#sturn')) $('#sturn').onclick = () => { this.app.closePanel(); T.jail(); };
-    $('#sfavor').onclick = () => { this.app.closePanel(); T.askFavor(v); };
+    $('#sjob').onclick = () => { this.app.closePanel(); T.askJob(v); };
   };
 
   // ---- after jail ---------------------------------------------------------------
@@ -109,5 +109,61 @@ export function installTownUI(UI) {
     const body = `<p>${t('law.jailText')}</p>
       <ul class="steps"><li>${t('law.jailFine', { n: paid, f: fine })}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t('law.jailCrops')}</li></ul>`;
     this.panel(t('law.jailTitle'), body, { onBack: () => this.app.closePanel() });
+  };
+
+  // ---- sleep: until night or until morning ----------------------------------
+  P.r_sleep = function () {
+    const g = this.app.game, T = g.town, h = (g.time % 1) * 24;
+    const night = h >= 21 || h < 6;
+    const body = `<p class="muted">${t('sleep.note')}</p><div class="menu">
+      ${night ? '' : `<button class="btn" data-s="night">${t('sleep.night')}</button>`}
+      <button class="btn primary" data-s="morning">${t('sleep.morning')}</button>
+      <button class="btn ghost" data-s="no">${t('sleep.cancel')}</button></div>`;
+    this.panel(t('sleep.title'), body, { onBack: () => this.app.closePanel() });
+    this.root.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => { const w = b.dataset.s; this.app.closePanel(); if (w !== 'no') T.sleepUntil(w); });
+  };
+
+  // ---- the town map: the center, the homes and paths, your cottage, people ----
+  P.r_townmap = function ({ from }) {
+    const g = this.app.game, T = g.town, V = T.village;
+    const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
+    const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
+    const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
+      <div class="legend">${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
+    const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
+    const panel = this.panel(t('menu.townMap'), body, { wide: true, onBack: close });
+    panel.classList.add('mappanel');
+    const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
+    x.onclick = close; panel.appendChild(x);
+    const back = panel.querySelector('[data-act=back]'); if (back) back.textContent = t('map.close');
+    const cv = panel.querySelector('#wmap'), w = g.world;
+    if (this.app.input.touch) cv.addEventListener('click', close);
+    const S = Math.min(560, Math.floor(Math.min(innerWidth - 60, innerHeight - 240)));
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.drawImage(this.terrainImage(g), 0, 0, S * dpr, S * dpr);
+    const sc = S * dpr / Math.max(w.W, w.D);
+    const box = (b, col) => {
+      c.fillStyle = col; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr;
+      c.fillRect(b.x0 * sc, b.z0 * sc, (b.x1 - b.x0 + 1) * sc, (b.z1 - b.z0 + 1) * sc);
+      c.strokeRect(b.x0 * sc, b.z0 * sc, (b.x1 - b.x0 + 1) * sc, (b.z1 - b.z0 + 1) * sc);
+    };
+    for (const b of V.buildings) box(b, b.type === 'house' ? C.home : b.type === 'hall' || b.type === 'jail' ? C.law : C.shop);
+    const cot = T.cottage;
+    box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
+    c.fillStyle = '#f0e8cc'; c.font = `${11 * dpr}px Oswald, Arial`; c.textAlign = 'center';
+    c.fillText(t('tmap.center'), V.cx * sc, (V.cz - 17) * sc);
+    c.fillText(t('tmap.cottage'), cot.x * sc, (cot.z - 5) * sc);
+    for (const v of T.folk.list) {
+      if (!v.alive || v.away) continue;
+      c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
+      c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    const p = g.player;
+    c.save(); c.translate(p.pos.x * sc, p.pos.z * sc); c.rotate(-p.yaw);
+    c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr; const r = 8 * dpr;
+    c.beginPath(); c.moveTo(0, -r); c.lineTo(r * 0.7, r * 0.7); c.lineTo(0, r * 0.3); c.lineTo(-r * 0.7, r * 0.7); c.closePath(); c.fill(); c.stroke(); c.restore();
   };
 }
