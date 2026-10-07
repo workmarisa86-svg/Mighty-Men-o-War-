@@ -9,6 +9,8 @@ import { t } from './i18n.js';
 export const WEAPONS = {
   knife:  { melee: true, damage: 35, range: 2.6, rate: 0.45, swim: true, reticle: 'dot' },
   pistol: { damage: 30, range: 45, rate: 0.22, spread: 0.012, loud: 30, swim: true, sound: 'pistol', kick: 0.6, reticle: 'cross' },
+  // suppressed pistol: heard only very close, no muzzle flash, a little weaker
+  spistol: { damage: 26, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
   rifle:  { damage: 70, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
   sniper: { damage: 130, range: 170, rate: 1.4, spread: 0.0015, loud: 55, sound: 'sniper', kick: 1.3, scope: true, reticle: 'cross' },
   smg:    { damage: 20, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
@@ -120,7 +122,7 @@ export class Combat {
     let end;
     if (hit) {
       end = hit.point;
-      this.applyHit(hit, W.damage);
+      this.applyHit(hit, W.damage, { silent: !!W.silent });
     } else {
       end = eye.clone().addScaledVector(dir, maxD);
       if (block) {
@@ -131,12 +133,13 @@ export class Combat {
     }
     const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     const start = eye.clone().addScaledVector(right, g.scopeView.sniper ? 0 : 0.18).addScaledVector(dir, 0.6); start.y -= g.scopeView.sniper ? 0.05 : 0.12;
+    if (!W.silent) g.shotT = 1.2;          // muzzle flash: you can be seen for a moment
     const tr = this.tracers[this.tracerI++ % this.tracers.length];
     const pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, start.x, start.y, start.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true;
     tr.l.geometry.computeBoundingSphere();
-    tr.l.visible = true; tr.t = 0.07;
-    g.vm.doRecoil(W.kick);
+    tr.l.visible = !W.silent; tr.t = 0.07;
+    g.vm.doRecoil(W.kick); if (W.silent) g.vm.flashT = 0;   // no muzzle flash
     p.pitch = Math.min(1.55, p.pitch + W.kick * (g.scopeView.sniper ? 0.025 : 0.012));
     sfx.shot(W.sound);
     g.animals.noise(p.pos, W.loud);

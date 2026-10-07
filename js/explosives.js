@@ -10,6 +10,8 @@ export const TNT_RADIUS = 4;
 export const TNT_POWER = 220;
 const GRENADE = { radius: 3.5, power: 95, fuse: 3 };
 const SHELL = { radius: 2.2, power: 55 };
+// craters from TNT and shells: small and shallow, with a cap on removed blocks
+export const CRATER = { radius: 2.4, depth: 1.3, maxBlocks: 36 };
 
 let smokeTex = null;
 function makeSmokeTex() {
@@ -28,6 +30,7 @@ export class Explosives {
     this.hits = new Map();       // world index -> bullet hits on a TNT crate
     this.projectiles = [];       // grenades, smoke grenades, shells
     this.smokes = [];
+    this.craters = [];           // recent craters: the blocks they removed (for Fill)
     this.flashLight = new THREE.PointLight(0xffb060, 0, 40, 1.2);
     game.scene.add(this.flashLight);
     this.blinkMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
@@ -91,17 +94,26 @@ export class Explosives {
 
   explode(cx, cy, cz, { radius, power, destroy = true, owner = 'player', destroyRadius = radius, door = 0 }) {
     const g = this.game, w = g.world;
-    if (destroy) {
-      const R = Math.ceil(destroyRadius);
-      for (let y = -R; y <= R; y++) for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) {
-        const d = Math.hypot(x, y, z);
-        if (d > destroyRadius + (Math.random() - 0.5) * 0.8) continue;
+    // at a fort door: only the door goes (never the ground under it)
+    const atDoor = g.forts && g.forts.list.some((f) => Math.hypot(cx - f.doorCenter.x, cy - f.doorCenter.y, cz - f.doorCenter.z) < 4.5);
+    if (destroy && !atDoor) {
+      // elsewhere: a small, shallow crater, capped in size (remembered so it can be filled)
+      const rH = Math.min(destroyRadius, CRATER.radius), R = Math.ceil(rH);
+      const cells = [];
+      for (let y = R; y >= -R; y--) for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) {
+        if (cells.length >= CRATER.maxBlocks) break;
+        const dyk = y < 0 ? y / CRATER.depth : y / rH;           // flatter below the blast
+        if (Math.hypot(x / rH, z / rH, dyk) > 1 + (Math.random() - 0.5) * 0.25) continue;
         const bx = Math.floor(cx + x), by = Math.floor(cy + y), bz = Math.floor(cz + z);
         const id = w.get(bx, by, bz);
-        if (id !== B.AIR && id !== B.WATER && Math.random() < 0.08) {
-          g.particles.burst(bx + 0.5, by + 0.5, bz + 0.5, BLOCKS[id].color, 3, 7, 1.2);
-        }
+        if (id === B.AIR || id === B.WATER || id === B.BEDROCK || w.isLocked(bx, by, bz) || BLOCKS[id].hard === Infinity) continue;
+        if (Math.random() < 0.08) g.particles.burst(bx + 0.5, by + 0.5, bz + 0.5, BLOCKS[id].color, 3, 7, 1.2);
+        if (id !== B.TNT && id !== B.CAMPFIRE) cells.push({ x: bx, y: by, z: bz, id });
         this.clearBlock(bx, by, bz);
+      }
+      if (cells.length > 2) {
+        this.craters.push({ cells, x: cx, y: cy, z: cz, r: rH + 0.8 });
+        if (this.craters.length > 40) this.craters.shift();
       }
     }
     const center = new THREE.Vector3(cx, cy, cz);
@@ -131,6 +143,29 @@ export class Explosives {
     const dist = g.camera.position.distanceTo(center);
     sfx.explosion(Math.max(0, 1 - dist / 140), power > 150);
     g.shake = Math.max(g.shake, Math.max(0, 1 - dist / 40) * (power > 150 ? 1 : 0.6));
+  }
+
+  // the crater around an aimed block, if it still has holes to fill
+  craterAt(x, y, z) {
+    const w = this.game.world;
+    for (let i = this.craters.length - 1; i >= 0; i--) {
+      const c = this.craters[i];
+      if (Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y, z + 0.5 - c.z) > c.r + 1) continue;
+      if (c.cells.some((q) => { const b = w.get(q.x, q.y, q.z); return b === B.AIR || b === B.WATER; })) return c;
+    }
+    return null;
+  }
+  // Fill: put back the blocks the blast removed (where nothing stands now)
+  fill(c) {
+    const g = this.game, w = g.world;
+    let n = 0;
+    for (const q of c.cells) {
+      const b = w.get(q.x, q.y, q.z);
+      if ((b !== B.AIR && b !== B.WATER) || g.blockOverlapsBodies(q.x, q.y, q.z)) continue;
+      w.set(q.x, q.y, q.z, q.id); n++;
+    }
+    this.craters = this.craters.filter((x) => x !== c);
+    return n;
   }
 
   // --------------------------------------------------------- projectiles

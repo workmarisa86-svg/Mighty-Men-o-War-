@@ -7,6 +7,8 @@ import { generate } from './worldgen.js';
 import { generateTown } from './towngen.js';
 import { TownLife } from './town.js';
 import { Bubbles } from './bubbles.js';
+import { AimUse } from './aimuse.js';
+import { UNIFORMS } from './nations.js';
 import { buildChunk, skyAt } from './mesher.js';
 import { buildAtlas, buildCracks } from './textures.js';
 import { Player } from './player.js';
@@ -27,7 +29,6 @@ import { ScopeView } from './scope.js';
 import { OrderWheel } from './orders.js';
 import { Cabin } from './cabin.js';
 import { ContextBar } from './context.js';
-import { Mission } from './missions.js';
 import { addStats, recordMission } from './stats.js';
 import { setCharacterQuality } from './characters.js';
 import { sfx, setRain, setMuffled } from './audio.js';
@@ -48,7 +49,7 @@ export class Game {
     // missions, orders) stay switched off there
     this.townMode = this.cfg.mode === 'town';
     // Time of day: full day/night cycle, or always daytime
-    this.dayOnly = this.cfg.timeMode === 'day';
+    this.dayOnly = false;               // day and night always cycle
     document.body.classList.toggle('allies', this.cfg.sub === 'allies');
     document.body.classList.toggle('townlife', this.townMode);
     this.settings = app.settings;
@@ -157,6 +158,7 @@ export class Game {
     this.pickups = new Pickups(this, save.pickups || []);
     this.animals = new Animals(this);
     this.vm = new ViewModel();
+    if (!this.townMode) this.vm.setUniform(UNIFORMS[(this.cfg.side || 'allies') === 'axis' ? 'de' : 'us'].tunic);
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
     this.forts = new Forts(this, save.forts);
@@ -172,7 +174,8 @@ export class Game {
     this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
     this.bubbles = new Bubbles(this);
-    this.mission = !this.townMode && this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
+    this.aimUse = this.townMode ? null : new AimUse(this);
+    this.mission = null;      // the old missions are gone (Battles come later)
     this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
@@ -270,11 +273,12 @@ export class Game {
     const playing = !this.paused && !this.overlay;
 
     this.time += dt / DAY_SECONDS;
+    this.shotT = Math.max(0, (this.shotT || 0) - dt);
     this.updateWeather(dt);
 
     if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
     this.ctx.update(dt, input, playing);
-    this.townKey = this.town ? this.town.updateContext(dt, input) : false;
+    this.townKey = this.town ? this.town.updateContext(dt, input) : this.aimUse.update(dt, input, playing);
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -416,7 +420,7 @@ export class Game {
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
     if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
-    if (this.townKey) { /* Town Life: E / R did the nearby action */ }
+    if (this.townKey) { /* E / tap used what you aim at (War) or a nearby action (Town Life) */ }
     else if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
@@ -683,7 +687,7 @@ export class Game {
       const b = w.get(x, y, z);
       if (!w.inside(x, y, z) || (b !== B.AIR && b !== B.LEAVES) || this.blockOverlapsBodies(x, y, z)) { this.hud.toast(t('hud.towerSpace')); sfx.error(); return; }
     }
-    for (let y = by; y <= by + 4; y++) w.set(cx - 1, y, cz - 1, B.LOG);          // climbable corner post
+    for (let y = by; y <= by + 4; y++) w.set(cx - 1, y, cz - 1, B.LADDER);       // ladder up the corner
     for (const [x, z] of [[cx + 1, cz - 1], [cx - 1, cz + 1], [cx + 1, cz + 1]]) for (let y = by; y < by + 4; y++) w.set(x, y, z, B.WOOD);
     for (let z = cz - 1; z <= cz + 1; z++) for (let x = cx - 1; x <= cx + 1; x++) if (!(x === cx - 1 && z === cz - 1)) w.set(x, by + 4, z, B.WOOD);
     for (const [x, z] of [[cx + 1, cz - 1], [cx + 1, cz], [cx + 1, cz + 1], [cx, cz + 1], [cx - 1, cz + 1]]) w.set(x, by + 5, z, B.WOOD);
@@ -946,7 +950,7 @@ export class Game {
   dispose() {
     setRain(0);
     if (this.town) this.town.dispose();
-    this.bubbles.dispose();
+    this.bubbles.dispose(); if (this.aimUse) this.aimUse.dispose();
     document.body.classList.remove('townlife');
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());

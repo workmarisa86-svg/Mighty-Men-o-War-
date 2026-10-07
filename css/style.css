@@ -578,3 +578,19 @@ body.townlife #squadlist, body.townlife #mission { display: none !important; }
 .say { font-style: italic; font-size: 16px; margin: 6px 0 12px; }
 .seg.tabs { margin-bottom: 10px; }
 @media (max-width: 760px) { #townbar { top: 48px; font-size: 11px; max-width: 92vw; } #townctx { bottom: 108px; } .bubble { font-size: 11px; max-width: 160px; } }
+/* War: things in the world are used by aiming at them (no Craft button) */
+body:not(.townlife) [data-btn=craft] { display: none !important; }
+#aimprompt { position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); pointer-events: auto; font-family: var(--body); font-size: 14px;
+  color: #f0e8cc; background: rgba(24, 26, 18, 0.8); border: 2px solid rgba(214, 190, 110, 0.9); border-radius: 18px; padding: 5px 14px; white-space: nowrap; }
+#aimprompt kbd { font-family: var(--body); font-size: 11px; opacity: 0.8; margin-right: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 3px; padding: 0 4px; }
+/* stealth awareness eye over enemies (fills, then turns red with "!") */
+.aware { position: absolute; left: 0; top: 0; width: 22px; height: 14px; margin: -7px 0 0 -11px; border: 2px solid rgba(240, 220, 140, 0.95);
+  border-radius: 50% / 60%; overflow: hidden; background: rgba(0,0,0,0.45); pointer-events: none; box-shadow: 0 0 3px #000; }
+.aware i { position: absolute; left: 0; right: 0; bottom: 0; background: #f0d060; }
+.aware.alert { border-color: #ff5a3a; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; }
+.aware.alert i { background: #e0402a; }
+.aware.alert::after { content: '!'; position: absolute; inset: 0; text-align: center; font: bold 13px/18px var(--body); color: #fff; }
+@media (pointer: coarse) { .aware { transform-origin: center; } .aware.alert::after { font-size: 14px; } }
+.sides .flags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.sides .flags img { height: 22px; width: auto; border: 1px solid rgba(0,0,0,0.6); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.choice.locked { opacity: 0.5; cursor: default; }

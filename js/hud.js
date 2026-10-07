@@ -111,8 +111,7 @@ export class HUD {
       if (g.defusing) hint = t('hint.defusing');
       else if (p.swimming) hint = t('hint.dive');
       else if (g.cabin && g.cabin.nearChest(p.pos)) hint = t('hint.chest');
-      else if (g.campfires.near(p.pos) && !g.town) hint = t('hint.fire');
-      else if (this.rationsAimed()) hint = t('hint.rations');
+      else if (g.aimUse && g.aimUse.target) hint = '';
       else if (W && W.scope) hint = t('hint.scope');
       else if (W && W.throw) hint = t('hint.throw');
       else if (g.selected() === 'flint') hint = t('hint.flint');
@@ -126,6 +125,7 @@ export class HUD {
     if (hs !== this.hsText) { this.hsText = hs; this.hungerEl.textContent = hs; }
     this.updateFps(dt);
     this.updateMarkers();
+    this.updateAware();
     this.updateSquadList(dt);
     this.updateMission(dt);
     this.minimap.update(dt);
@@ -134,6 +134,35 @@ export class HUD {
     if (this.dirtyHotbar) this.renderHotbar();
   }
 
+  // stealth: a small eye over nearby enemies that fills as they notice you
+  // and turns into "!" once they are on to you
+  updateAware() {
+    const g = this.game, E = g.enemies;
+    if (!this.awareEls) this.awareEls = [];
+    const on = g.settings.awareness !== false && E && E.enabled;
+    const P = g.player.pos, cam = g.camera, list = [];
+    if (on) for (const s of E.list) {
+      if (!s.alive || s.faction !== 'enemy' || s.surrender) continue;
+      const d = Math.hypot(s.pos.x - P.x, s.pos.z - P.z);
+      if (d > 40) continue;
+      const alert = s.target && s.target.kind === 'player';
+      if (!alert && !(s.aware > 0.05)) continue;
+      list.push({ s, alert, k: Math.min(1, s.aware || 0), d });
+      if (list.length >= 8) break;
+    }
+    while (this.awareEls.length < list.length) { const el = document.createElement('div'); el.className = 'aware'; el.innerHTML = '<i></i>'; this.markersEl.appendChild(el); this.awareEls.push(el); }
+    const V = this.tmpV || (this.tmpV = new THREE.Vector3());
+    this.awareEls.forEach((el, i) => {
+      const m = list[i];
+      if (!m) { el.style.display = 'none'; return; }
+      V.set(m.s.pos.x, m.s.pos.y + 2.25, m.s.pos.z).project(cam);
+      if (V.z > 1) { el.style.display = 'none'; return; }
+      el.style.display = 'block';
+      el.style.transform = `translate(${((V.x * 0.5 + 0.5) * innerWidth).toFixed(0)}px, ${((-V.y * 0.5 + 0.5) * innerHeight).toFixed(0)}px)`;
+      el.classList.toggle('alert', m.alert);
+      el.firstChild.style.height = (m.alert ? 100 : m.k * 100).toFixed(0) + '%';
+    });
+  }
   // hidden frame-rate counter: F3 on a computer, tap the clock three times on a phone
   updateFps(dt) {
     const input = this.game.app.input;
