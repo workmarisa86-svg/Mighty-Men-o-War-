@@ -9,9 +9,9 @@ import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { FORMATIONS } from './soldiers.js';
 
-const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract'];
-export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract'];
-const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', formation: '&#8942;' };
+const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract', 'disperse'];
+export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract', 'disperse'];
+const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
 
 export class OrderWheel {
   constructor(game) {
@@ -93,7 +93,7 @@ export class OrderWheel {
     }
     input.mouse.dx = input.mouse.dy = 0;
     for (let i = 0; i < ORDERS.length; i++) if (input.hit('Digit' + (i + 1))) { this.issue(i); break; }
-    if (input.hit('Digit9') && this.at && this.at.soldier) { this.close(); g.app.openPanel('orders', { soldier: this.at.soldier }); }
+    if (input.hit('Digit0') && this.at && this.at.soldier) { this.close(); g.app.openPanel('orders', { soldier: this.at.soldier }); }
     if (input.mouse.leftPressed) { if (this.sel >= 0) this.issue(this.sel); else this.close(); }
     if (input.mouse.rightPressed || input.hit('Escape')) this.close();
     input.mouse.leftPressed = input.mouse.rightPressed = false; input.mouse.left = false;
@@ -125,7 +125,7 @@ export class OrderWheel {
     const who = sel.length ? t('order.toSelected', { n: sel.length }) : one ? one.name : t('order.toSquad', { n: E.squadMembers().length });
     const tgt = this.at && this.at.fort ? this.at.fort.name : '';
     this.center.innerHTML = `<b>${t('order.title2')}</b><span>${who}</span>${tgt ? `<span class="muted">${tgt}</span>` : ''}` +
-      (one && !sel.length && !this.game.app.input.touch ? `<span class="muted small"><kbd>9</kbd> ${t('order.talk')}</span>` : '');
+      (one && !sel.length && !this.game.app.input.touch ? `<span class="muted small"><kbd>0</kbd> ${t('order.talk')}</span>` : '');
     this.items.forEach((b, i) => {
       const cmd = ORDERS[i];
       const label = cmd === 'formation' ? t('ord.formation', { f: t('form.' + (g.settings.formation || 'loose')) }) : t('ord.' + cmd);

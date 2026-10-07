@@ -275,7 +275,9 @@ function civVariant(L, skin) {
     v['fore' + side] = p.build();
   }
   p = new PartList();
-  p.add(caps(0.072, RIG.thigh - 0.12), mat4([0, -RIG.thigh / 2, 0]), L.dress ? sk : trousers, L.dress ? SKIN : FAB);
+  // with a dress the skirt drapes over the thighs (kneeling or sitting shows cloth, never bare legs)
+  p.add(caps(L.dress ? 0.082 : 0.072, RIG.thigh - 0.12), mat4([0, -RIG.thigh / 2, 0]), L.dress || trousers, FAB);
+  if (L.dress) p.add(sph(0.1), mat4([0, -RIG.thigh + 0.02, 0.01], 0, [1, 0.55, 1.1]), L.dress, FAB);   // the hem over the knee
   v.thigh = p.build();
   p = new PartList();
   p.add(caps(0.06, RIG.shin - 0.14), mat4([0, -RIG.shin / 2 + 0.02, 0]), L.dress ? (L.stockings ?? 0x5a4a40) : trousers, FAB);

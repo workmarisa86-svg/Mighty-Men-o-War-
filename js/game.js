@@ -545,7 +545,8 @@ export class Game {
     const inv = this.inv;
     // in a car: only driving and the gun in your hands (E gets out, L or F the headlights)
     if (this.player.car) {
-      if (input.hit('KeyE')) this.vehicles.exit();
+      // (not the same E press that just got you in)
+      if (input.hit('KeyE') && !this.townKey && performance.now() - (this.vehicles.enteredAt || 0) > 400) this.vehicles.exit();
       else if (input.hit('KeyL') || input.hit('KeyF') || input.thit('light')) this.vehicles.toggleLights();
       if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
       return;

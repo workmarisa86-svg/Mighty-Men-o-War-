@@ -291,6 +291,7 @@ export class Vehicles {
     if (!car.alive || p.car || car.side !== g.cfg.side) return;
     if (g.craft) { g.hud.toast(t('car.busyCraft'), 'warn'); return; }
     g.scopeView.close();
+    this.enteredAt = performance.now();
     p.car = car; p.crouch = false; p.vel.set(0, 0, 0); car.mine = true; car.home = null;
     this.lookOff = p.yaw - car.yaw;
     // up to three followers climb in
@@ -306,6 +307,7 @@ export class Vehicles {
   exit(quiet = false) {
     const g = this.game, p = g.player, car = p.car;
     if (!car) return;
+    if (!quiet && performance.now() - (this.enteredAt || 0) < 400) return;     // a double tap or click must not drop you straight out
     p.car = null; car.speed = 0;
     if (car.lights) this.toggleLights(car, true);
     if (this.engine) { this.engine.stop(); this.engine = null; }

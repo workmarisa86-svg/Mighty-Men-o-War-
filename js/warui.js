@@ -50,8 +50,12 @@ export function installWarUI(UI) {
     const c = COUNTRY[sel], r = C.rec(sel), wx = WEATHER[c.climate];
     const mine = r.owner === me;
     const hqMine = sel === here ? g.forts.list.filter((f) => f.owner === 'ally').length : r.hq ? r.hq.filter((s) => s === me).length : mine ? c.hqs : 0;
-    const avail = C.available();
-    const lo = Math.min(10, avail), hi = Math.min(30, avail);
+    // who comes along: your squad only, or your squad plus other allies in this
+    // country who are not in it (garrisons, soldiers in the field)
+    const avail = C.available(), squadN = g.enemies.followers().length;
+    if (this.mapAll == null || this.mapAllFor !== here) { this.mapAll = squadN === 0; this.mapAllFor = here; }
+    const all = this.mapAll && avail > squadN;
+    const lo = all ? Math.max(squadN, Math.min(10, avail)) : squadN, hi = all ? Math.max(lo, Math.min(30, avail)) : squadN;
     const n = Math.max(lo, Math.min(hi, this.mapN || Math.min(20, hi)));
     const go = sel !== here;
     const info = `<div class="cinfo">
@@ -60,8 +64,10 @@ export function installWarUI(UI) {
       <p>${t('wm.owner')}: <b class="${mine ? 'ally' : 'enemy'}">${t('side.' + r.owner)}</b>${sel === here ? ` · <i>${t('wm.youAreHere')}</i>` : ''}</p>
       <p>${t('wm.garrison')}: ${t('side.allies')} <b>${r.gar.allies}</b> · ${t('side.axis')} <b>${r.gar.axis}</b></p>
       <p>${t('wm.hqs', { n: c.hqs, mine: hqMine })} · ${esc(t('land.' + c.land))}</p>
-      ${go ? `<div class="bring"><label>${t('wm.bring')}: <b id="nval">${n}</b></label>
+      ${go ? `<div class="bring"><div class="seg tabs"><button data-who="squad" class="${all ? '' : 'on'}">${t('wm.squadOnly', { n: squadN })}</button><button data-who="all" class="${all ? 'on' : ''}" ${avail > squadN ? '' : 'disabled'}>${t('wm.withAllies')}</button></div>
+        <label>${t('wm.bring')}: <b id="nval">${n}</b></label>
         <input type="range" id="nrange" min="${lo}" max="${hi}" value="${n}" ${hi <= lo ? 'disabled' : ''}>
+        <p class="muted small">${t(all ? 'wm.withAlliesHint' : 'wm.squadOnlyHint')}</p>
         <p class="muted small">${t('wm.restStay', { n: Math.max(0, (C.here.gar[me] || 0) - n) })}</p></div>
       <div class="row"><button class="btn primary" data-go="plane">✈ ${t('wm.plane')}</button>
         <button class="btn" data-go="boat" ${c.coast ? '' : 'disabled'}>⚓ ${t('wm.boat')}</button></div>
@@ -75,6 +81,7 @@ export function installWarUI(UI) {
     panel.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => this.show('worldmap', { focus: b.dataset.pick, defend }));
     panel.classList.add('worldpanel');
     panel.querySelectorAll('.ctry').forEach((el) => el.addEventListener('click', () => { this.show('worldmap', { focus: el.dataset.c, defend }); }));
+    panel.querySelectorAll('[data-who]').forEach((b) => b.onclick = () => { this.mapAll = b.dataset.who === 'all'; this.mapN = null; this.show('worldmap', { focus: sel, defend, view: this.mapView }); });
     const rg = panel.querySelector('#nrange');
     if (rg) rg.oninput = () => { this.mapN = +rg.value; panel.querySelector('#nval').textContent = rg.value; };
     panel.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => {

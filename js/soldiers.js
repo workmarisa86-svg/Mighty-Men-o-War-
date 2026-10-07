@@ -630,6 +630,27 @@ export class Enemies {
       fort = at.fort && at.fort.owner === 'ally' ? at.fort : F.nearest(at.point || g.player.pos, 'ally');
       if (!fort) { g.hud.toast(t('order.noBase')); return 0; }
     }
+    // Disperse: they leave your squad and go back to duty (the nearest HQ of
+    // your side, or regroup where they stand if there is none)
+    if (cmd === 'disperse') {
+      let n = 0;
+      for (const s of group) {
+        if (!s.alive || s.faction !== 'ally') continue;
+        if (s.car && g.vehicles) g.vehicles.unseat(s, s.car);
+        if (s.selected) this.select(s, false);
+        s.spread = false; s.holdPos = null; s.dest = null;
+        const f = F && F.nearest(s.pos, 'ally');
+        if (f) this.joinGarrison(s, f);
+        else {
+          if (s.squad) s.squad.members = s.squad.members.filter((m) => m !== s);
+          const sq = this.newSquad(s.pos, 'ally'); sq.mode = 'regroup'; sq.wp = { x: s.pos.x, z: s.pos.z };
+          sq.members.push(s); s.squad = sq; s.setRole('scatter');
+        }
+        s.markPop = 1; n++;
+      }
+      g.hud.toast(t('order.dispersed', { n })); sfx.toggle();
+      return n;
+    }
     const point = at.point || g.player.pos.clone();
     let i = 0;
     for (const s of group) {
@@ -1524,7 +1545,8 @@ export class Enemies {
       // (stuck = no progress along the trail while behind his place)
       if (s.onSeq !== s.fsSeq || s.onSeq == null || s.onSeq >= s.slotSeq - 2) { s.fsSeq = s.onSeq; s.followStuck = 0; s.fsPath = false; }
       else s.followStuck = (s.followStuck || 0) + dt;
-      if (pdist > 70 || s.followStuck > 7) { this.behindPlayer(s); s.followStuck = 0; s.path = null; return; }
+      // (only a real dead end: they walk, climb and drop down blocks now, so this is rare)
+      if (pdist > 90 || s.followStuck > 14) { this.behindPlayer(s); s.followStuck = 0; s.path = null; return; }
       if (s.followStuck > 2.5) {
         // re-plan: a route over the blocks to his place, then back on the trail
         if (!s.fsPath) { const pth = this.findPath(s, slot.x, slot.y, slot.z); if (pth && pth.length) { s.path = pth; s.pathGoal = { x: slot.x, z: slot.z }; s.fsPath = true; } }
@@ -1750,6 +1772,15 @@ export class Enemies {
     }
     return true;
   }
+  // Walking: his feet may straddle a one-block step (up or down); only the
+  // body above knee height has to be clear (a two-block wall still stops him)
+  stepFree(x, y, z, r = 0.28) {
+    const w = this.game.world, y0 = Math.floor(y + 1.05), y1 = Math.floor(y + 1.75);
+    for (let yy = y0; yy <= y1; yy++) for (const [ox, oz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) {
+      if (SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) return false;
+    }
+    return true;
+  }
   // If a soldier (or a body) ends up overlapping blocks, move him to the
   // nearest free spot on the ground.
   unstick(s) {
@@ -1906,12 +1937,14 @@ export class Enemies {
       let gy = this.ground(nx, nz, s.pos.y), swim = false;
       if (gy == null && pass === 1) { const wv = this.water(nx, nz); if (wv) { gy = wv.y; swim = wv.swim; } }
       if (s.faction === 'enemy' && this.game.cabin && this.game.cabin.covers(nx, nz)) continue;   // nobody gets into the cabin
-      if (gy != null && !swim && !this.bodyFree(nx, gy, nz)) {
+      // the body is tested from the higher of the two floors: stepping down
+      // a block, his heels are still over the step (it must not block him)
+      if (gy != null && !swim && !this.stepFree(nx, Math.max(gy, s.pos.y), nz)) {
         // blocked: slide along the wall on one axis instead
         const sx = s.pos.x - Math.sin(a) * step, sz = s.pos.z - Math.cos(a) * step;
         const gx = this.ground(sx, s.pos.z, s.pos.y), gz = this.ground(s.pos.x, sz, s.pos.y);
-        if (gx != null && Math.abs(gx - s.pos.y) <= climb && this.bodyFree(sx, gx, s.pos.z)) { s.pos.x = sx; s.pos.y += (gx - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
-        if (gz != null && Math.abs(gz - s.pos.y) <= climb && this.bodyFree(s.pos.x, gz, sz)) { s.pos.z = sz; s.pos.y += (gz - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
+        if (gx != null && Math.abs(gx - s.pos.y) <= climb && this.stepFree(sx, Math.max(gx, s.pos.y), s.pos.z)) { s.pos.x = sx; s.pos.y += (gx - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
+        if (gz != null && Math.abs(gz - s.pos.y) <= climb && this.stepFree(s.pos.x, Math.max(gz, s.pos.y), sz)) { s.pos.z = sz; s.pos.y += (gz - s.pos.y) * Math.min(1, dt * 12); s.speed = speed * 0.7; s.stuckT += dt * 0.3; return false; }
         continue;
       }
       if (gy != null && gy - s.pos.y <= climb && gy - s.pos.y > -3) {
@@ -2172,9 +2205,12 @@ export class Enemies {
     if (s.post && s.type === 'officer') s.post.fort.officerDead = true;
     this.pending.push({ type: s.type === 'commander' ? 'officer' : s.type, faction: s.faction, t: 25 + Math.random() * 20 });
   }
-  blast(center, reach, falloff) {
+  blast(center, reach, falloff, owner = null) {
+    // no friendly fire from explosives: your TNT and grenades (and your
+    // soldiers') never hurt your own side, nor the enemy's theirs
+    const friend = owner === 'player' || owner === 'ally' ? 'ally' : owner === 'enemy' ? 'enemy' : null;
     for (const s of this.list) {
-      if (!s.alive) continue;
+      if (!s.alive || s.faction === friend) continue;
       const d = this.v.set(s.pos.x, s.pos.y + 0.9, s.pos.z).distanceTo(center);
       if (d < reach) this.hurt(s, falloff(d), { by: 'blast' });
     }
