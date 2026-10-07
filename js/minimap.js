@@ -94,6 +94,36 @@ export class Minimap {
       }
     }
 
+    // Town Life: shops (gold), houses, townspeople (green), the posse (red),
+    // witnesses on their way to the sheriff (flashing)
+    if (g.town) {
+      const vil = g.town.village;
+      for (const b of vil.buildings) {
+        const [x, y, d] = toRadar((b.x0 + b.x1) / 2 + 0.5, (b.z0 + b.z1) / 2 + 0.5);
+        if (d > RADAR_RANGE + 6) continue;
+        c.fillStyle = b.type === 'house' ? '#8a8270' : b.type === 'hall' ? '#7a8aa0' : '#d8b048'; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1;
+        c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8);
+      }
+      const marks = g.town.marks();
+      for (const v of g.town.folk.list) {
+        if (!v.alive || v.away) continue;
+        const [x, y, d] = toRadar(v.pos.x, v.pos.z);
+        if (d > RADAR_RANGE) continue;
+        const wit = marks.includes(v);
+        if (wit && Math.floor(this.t * 4) % 2) continue;
+        c.fillStyle = v.posse ? OWNER_COLORS.enemy : wit ? '#ffd040' : '#7ac860'; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;
+        c.beginPath(); c.arc(x, y, wit ? 4 : 2.6, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+    }
+    // incoming enemy grenades: flashing warning marks
+    if (g.explosives && Math.floor(this.t * 4) % 2 === 0) for (const pr of g.explosives.projectiles) {
+      if (pr.owner !== 'enemy' || pr.kind !== 'grenade') continue;
+      const [x, y, d] = toRadar(pr.pos.x, pr.pos.z);
+      if (d > RADAR_RANGE) continue;
+      c.fillStyle = '#ff5030'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(x, y, 5, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = '#fff'; c.fillRect(x - 0.75, y - 3, 1.5, 3.5); c.fillRect(x - 0.75, y + 1.5, 1.5, 1.5);
+    }
     // soldiers: small dots, smaller when the area is crowded
     const units = g.enemies ? g.enemies.list.filter((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < RADAR_RANGE) : [];
     const dot = units.length > 18 ? 2 : units.length > 9 ? 2.5 : 3;

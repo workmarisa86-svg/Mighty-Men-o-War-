@@ -1,5 +1,5 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.7.0';
+export const GAME_VERSION = '0.8.0';
 export const SAVE_FORMAT = 2;
 // every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
 export const STORE_PREFIX = 'blocks-mmow-';

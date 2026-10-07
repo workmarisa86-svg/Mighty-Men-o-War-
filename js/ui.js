@@ -2,7 +2,7 @@
 // inventory and field crafting.
 import { t, setLang, getLang } from './i18n.js';
 import { DIFFICULTIES, SAVE_FORMAT, SEA } from './config.js';
-import { listSaves, deleteSave, deleteAllSaves } from './storage.js';
+import { listSaves, deleteSave, deleteAllSaves, loadTown } from './storage.js';
 import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
 import { MANUAL, MANUAL_CATS, MANUAL_DEVICE } from './manual.js';
@@ -10,6 +10,7 @@ import { getDevice } from './i18n.js';
 import { missionsFor, missionInfo } from './missions.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
+import { installTownUI } from './townui.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -40,6 +41,7 @@ export class UI {
     this.root.className = 'screen ' + name;
     this.root.innerHTML = '';
     this['r_' + name](params);
+    if (!this.app.game && (name === 'start' || name === 'main') && this.app.menuMusic) this.app.menuMusic();
   }
   hide() { this.root.hidden = true; this.root.innerHTML = ''; this.current = null; }
   rerender() { if (this.current) this.show(this.current.name, this.current.params); }
@@ -81,11 +83,6 @@ export class UI {
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go));
     this.bindLang(this.root);
     this.bindSpeaker();
-  }
-  // Town Life: built in the next stage
-  r_town() {
-    this.panel('Town Life', `<img class="soonart" src="img/town-card.webp" width="800" height="600" alt="">
-      <p>${t('town.soon')}</p>`, { onBack: () => this.show('start') });
   }
   speakerBtn() {
     return `<button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button>`;
@@ -132,7 +129,7 @@ export class UI {
       <div class="man-cats">${[['all', t('man.all')], ...cats.map((c) => [c, MANUAL_CATS[c][L] || MANUAL_CATS[c].en])].map(([v, l]) => `<button data-c="${v}" class="${cat === v ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
       <div class="man-list" id="mlist"></div>
       <div class="row"><button class="btn ghost small" id="mexp">${t('man.expand')}</button><button class="btn ghost small" id="mcol">${t('man.collapse')}</button></div>`;
-    const panel = this.panel(t('menu.manual'), body, { wide: true, onBack: () => this.show(from === 'pause' ? 'pause' : 'main') });
+    const panel = this.panel(t('menu.manual'), body, { wide: true, onBack: () => this.show(from === 'pause' ? 'pause' : from === 'town' ? 'town' : 'main') });
     panel.classList.add('manual');
     const state = { q, sort, cat, open: new Set(open) };
     const list = panel.querySelector('#mlist');
@@ -284,8 +281,10 @@ export class UI {
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
-      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>`;
-    const panel = this.panel(t('set.title'), body, { onBack: () => from === 'pause' ? this.show('pause') : this.show('main') });
+      <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
+      <div class="field"><span>${t('set.perf')}</span>${seg('perf', [['normal', t('set.perfNormal')], ['smooth', t('set.perfSmooth')]])}</div>
+      <p class="muted small">${t('set.perfNote')}</p>`;
+    const panel = this.panel(t('set.title'), body, { onBack: () => this.show(from === 'pause' ? 'pause' : from === 'town' ? 'town' : 'main') });
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;
       let v = b.dataset.v;
@@ -314,8 +313,8 @@ export class UI {
       <button class="btn" id="pmap">${t('menu.map')}</button>
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
-      <button class="btn ghost" id="pquit">${t('menu.quit')}</button></div>
-      <p class="muted small keys">${t('help.keys')}</p></div>`;
+      <button class="btn ghost" id="pquit">${t(this.app.game && this.app.game.town ? 'town.quit' : 'menu.quit')}</button></div>
+      <p class="muted small keys">${t(this.app.game && this.app.game.town ? 'help.townKeys' : 'help.keys')}</p></div>`;
     const $ = (s) => this.root.querySelector(s);
     $('#presume').onclick = () => this.app.resume();
     $('#psave').onclick = () => this.app.saveGame(false);
@@ -332,7 +331,7 @@ export class UI {
     const owned = Object.keys(ITEMS).filter((id) => {
       const d = ITEMS[id];
       if (d.gear || d.armor) return false;
-      return d.tool || g.count(id) > 0 || MATERIALS.includes(id);
+      return (d.tool && (id === 'shovel' || id === 'flint')) || g.count(id) > 0 || (!g.town && MATERIALS.includes(id));
     });
     const gear = ['flashlight', 'compass', 'binoculars'].concat(['helmet', 'vest', 'scuba'].filter((id) => g.has(id)));
     const cell = (id, cls = '') => {
@@ -343,7 +342,8 @@ export class UI {
       return `<div class="cell ${cls} ${sel === id ? 'picked' : ''}" data-item="${id}" title="${t('item.' + id)}">
         <img src="${itemIcon(id)}" alt=""><b>${showCount ? (c === Infinity ? '∞' : c) : ''}</b><span>${t('item.' + id)}${worn}</span></div>`;
     };
-    const body = `<p class="muted small">${t('inv.hint')}</p>
+    const money = g.town ? `<p class="coins-line">${t('shop.youHave', { n: g.town.money })} · ${t('town.honor')} ${Math.round(g.town.honor)}${g.town.bounty ? ' · ' + t('town.bounty', { n: g.town.bounty }) : ''}</p>` : '';
+    const body = money + `<p class="muted small">${t('inv.hint')}</p>
       <p class="label">${t('inv.materials')}</p><div class="grid">${owned.map((id) => cell(id)).join('')}</div>
       ${gear.length ? `<p class="label">${t('inv.gear')}</p><div class="grid">${gear.map((id) => cell(id, 'gear')).join('')}</div>` : ''}
       <p class="label">1–9</p><div class="grid hb">${g.inv.hotbar.map((id, i) => `<div class="cell slot ${i === g.inv.sel ? 'sel' : ''}" data-slot="${i}"><i>${i + 1}</i>${id ? `<img src="${itemIcon(id)}" alt="">` : ''}</div>`).join('')}</div>`;
@@ -377,7 +377,9 @@ export class UI {
     let body = banner + busy + `<p class="muted small">${t('craft.exposed')}</p>`;
     for (const cat of RECIPE_CATS) {
       body += `<p class="label">${t('craft.cat.' + cat)}</p><div class="recipes">`;
-      for (const r of RECIPES.filter((x) => x.cat === cat)) {
+      const list = g.recipes().filter((x) => x.cat === cat);
+      if (!list.length) { body = body.slice(0, body.lastIndexOf('<p class="label">')); continue; }
+      for (const r of list) {
         let state, label;
         if (r.later) { state = 'locked'; label = '🔒 ' + t('craft.later'); }
         else if (!g.hasMaterials(r)) { state = 'locked'; label = '🔒 ' + t('craft.locked'); }
@@ -478,7 +480,15 @@ export class UI {
   }
 
   // Statistics: totals, and War stats per difficulty
-  r_stats() {
+  // Town Life: the statistics of its one world
+  townStats() {
+    const L = loadTown();
+    if (!L) return `<p class="label">Town Life</p><p class="muted small">${t('stats.townNone')}</p>`;
+    const T = L.state.town || {}, st = T.st || {}, S = L.state.stats || {};
+    const rows = [['tdays', Math.floor(L.state.time || 0) + 1], ['tearned', st.earned || 0], ['tfavors', st.favors || 0], ['animals', S.animals || 0], ['tharvest', st.harvested || 0], ['tjailed', st.jailed || 0], ['tmoney', T.money || 0], ['thonor', Math.round(T.honor ?? 50)]];
+    return `<p class="label">Town Life</p><div class="stats-wrap"><table class="stats"><tbody>${rows.map(([k, v]) => `<tr><td>${t('stats.' + k)}</td><td>${v}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  r_stats({ from } = {}) {
     const S = loadStats();
     const rows = [['days', (v) => v.toFixed(1)], ['fortsCaptured'], ['fortsLost'], ['enemies'], ['animals'], ['longestAlone', (v) => v.toFixed(1)], ['missions'], ['medals']];
     const val = (o, k, f) => k === 'medals' ? `<i class="medal gold"></i>${o.gold} <i class="medal silver"></i>${o.silver} <i class="medal bronze"></i>${o.bronze}` : f ? f(o[k] || 0) : (o[k] || 0);
@@ -486,8 +496,8 @@ export class UI {
     const body = `<div class="stats-wrap"><table class="stats"><thead><tr><th></th><th>${t('stats.total')}</th>${diffs.map((d) => `<th>${t('diff.' + d)}</th>`).join('')}</tr></thead><tbody>
       ${rows.map(([k, f]) => `<tr><td>${t('stats.' + k)}</td><td>${val(S.total, k, f)}</td>${diffs.map((d) => `<td>${val(S.byDiff[d], k, f)}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div><p class="muted small">${t('stats.note')}</p>
-      <div class="row"><button class="btn ghost danger" id="sreset">${t('stats.reset')}</button></div>`;
-    const panel = this.panel(t('menu.stats'), body, { wide: true });
+      <div class="row"><button class="btn ghost danger" id="sreset">${t('stats.reset')}</button></div>` + this.townStats();
+    const panel = this.panel(t('menu.stats'), body, { wide: true, onBack: () => this.show(from === 'town' ? 'town' : 'main') });
     panel.querySelector('#sreset').onclick = () => this.confirm(t('stats.confirmReset'), () => { resetStats(); this.show('stats'); }, () => this.show('stats'));
   }
 
@@ -565,3 +575,5 @@ export class UI {
 }
 
 export { esc };
+
+installTownUI(UI);

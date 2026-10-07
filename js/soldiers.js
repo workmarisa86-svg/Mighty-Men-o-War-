@@ -125,7 +125,7 @@ export class Enemies {
     this.tank = null;
     this.tankT = 60;
     this.callT = 0; this.callCd = {};
-    this.enabled = true;
+    this.enabled = !game.townMode;      // no soldiers in Town Life
     this.diff = game.cfg.difficulty || 'medium';
     this.allies = game.cfg.sub === 'allies';
     this.dispatchT = { enemy: 40 + Math.random() * 30, ally: 60 + Math.random() * 40 };
@@ -393,7 +393,10 @@ export class Enemies {
     }
     if (who && who.pos.distanceTo(g.player.pos) > 70) return;
     this.callT = now + 2.2; this.callCd[key] = now + (key.startsWith('ack') || key.startsWith('iron') || key.startsWith('item') ? 0 : 8);
-    g.hud.radio(who ? who.name : t('call.hq'), t('call.' + key), ['grenade', 'tnt', 'manDown'].includes(key) ? 'warn' : 'ally');
+    const warn = ['grenade', 'tnt', 'manDown'].includes(key);
+    g.hud.radio(who ? who.name : t('call.hq'), t('call.' + key), warn ? 'warn' : 'ally');
+    // the soldier's words also show over his head (text only, no voice)
+    if (who && who.alive && g.bubbles) g.bubbles.say(who, t('call.' + key), { name: who.name, kind: warn ? 'warn' : 'ally', silent: true, height: 2.35 });
   }
 
   // --------------------------------------------------------------- orders
@@ -709,10 +712,17 @@ export class Enemies {
     this.squads = this.squads.filter((sq) => sq.members.length || sq === this.psq);
     this.updateFormation(dt);
     // incoming enemy grenades: allies shout a warning
+    // incoming enemy grenades: an alarm tone, an on-screen warning and a radar
+    // marker (no voices); an ally nearby also calls it out in a text bubble
     for (const p of g.explosives.projectiles) {
       if (p.owner !== 'enemy' || p.kind !== 'grenade' || p.called) continue;
       const near = this.list.find((s) => s.alive && s.faction === 'ally' && s.pos.distanceTo(p.pos) < 8);
-      if (near) { p.called = true; this.callout(near, 'grenade'); }
+      const close = p.pos.distanceTo(g.player.pos) < 14;
+      if (near || close) {
+        p.called = true;
+        if (near) this.callout(near, 'grenade');
+        if (close || near) { g.hud.alert(t('hud.grenadeWarn')); sfx.alert(); }
+      }
     }
     this.updateLod(dt);
     for (const s of this.list.slice()) this.updateSoldier(s, dt);

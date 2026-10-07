@@ -4,13 +4,16 @@ import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate } from './worldgen.js';
+import { generateTown } from './towngen.js';
+import { TownLife } from './town.js';
+import { Bubbles } from './bubbles.js';
 import { buildChunk, skyAt } from './mesher.js';
 import { buildAtlas, buildCracks } from './textures.js';
 import { Player } from './player.js';
 import { Sky } from './sky.js';
 import { Raft } from './raft.js';
 import { Particles } from './particles.js';
-import { ITEMS, RECIPES, WEAPON_IDS } from './items.js';
+import { ITEMS, RECIPES, WEAPON_IDS, recipesFor } from './items.js';
 import { Animals } from './animals.js';
 import { Pickups } from './pickups.js';
 import { Campfires } from './campfire.js';
@@ -41,9 +44,13 @@ export class Game {
     this.app = app;
     this.save = save;
     this.cfg = save.cfg;
+    // Town Life runs on the same engine; War systems (forts, soldiers,
+    // missions, orders) stay switched off there
+    this.townMode = this.cfg.mode === 'town';
     // Time of day: full day/night cycle, or always daytime
     this.dayOnly = this.cfg.timeMode === 'day';
     document.body.classList.toggle('allies', this.cfg.sub === 'allies');
+    document.body.classList.toggle('townlife', this.townMode);
     this.settings = app.settings;
     this.quality = QUALITY[this.settings.quality] || QUALITY.medium;
     setCharacterQuality(this.settings.quality);
@@ -55,7 +62,8 @@ export class Game {
 
     // world
     this.world = new World(this.cfg);
-    generate(this.world);
+    if (this.townMode) generateTown(this.world); else generate(this.world);
+    this.season = () => (this.town ? this.town.season : 'summer');
     this.world.applyEdits(save.edits);
     this.world.onSet = (x, y, z, old, id) => {
       if (old === B.CAMPFIRE) this.campfires.remove(x, y, z);
@@ -144,6 +152,7 @@ export class Game {
     this.ctx = new ContextBar(this);
 
     this.stats = save.stats ? { ...save.stats } : { animals: 0, deaths: 0 };
+    if (this.townMode) this.time = save.time ?? 6.5 / 24;   // the first morning of spring
     this.campfires = new Campfires(this);
     this.pickups = new Pickups(this, save.pickups || []);
     this.animals = new Animals(this);
@@ -162,7 +171,9 @@ export class Game {
     if (this.stats.aloneSince == null) this.stats.aloneSince = this.time;
     this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
-    this.mission = this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
+    this.bubbles = new Bubbles(this);
+    this.mission = !this.townMode && this.cfg.gameType === 'mission' && this.cfg.mission ? new Mission(this, this.cfg.mission, save.mission) : null;
+    this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
 
@@ -210,7 +221,7 @@ export class Game {
   updateChunks(dt, budgetMs = 6) {
     const p = this.player.pos;
     const pcx = Math.floor(p.x / CHUNK), pcz = Math.floor(p.z / CHUNK);
-    const R = this.settings.renderDist;
+    const R = this.renderDist();
     // edited chunks near the player rebuild right away
     for (const key of this.world.dirty) {
       if (this.chunks.has(key)) this.rebuildChunk(key);
@@ -228,10 +239,12 @@ export class Game {
         if (!this.chunks.has(key)) this.buildQueue.push({ key, d: dx * dx + dz * dz });
       }
       this.buildQueue.sort((a, b) => b.d - a.d);
-      const lim = (R + 1.5) * (R + 1.5);
-      for (const ch of this.chunks.values()) {
-        const ddx = ch.cx - pcx, ddz = ch.cz - pcz;
-        const vis = ddx * ddx + ddz * ddz <= lim;
+      const lim = (R + 1.5) * (R + 1.5), far = (R + 4) * (R + 4);
+      for (const [key, ch] of this.chunks) {
+        const ddx = ch.cx - pcx, ddz = ch.cz - pcz, d2 = ddx * ddx + ddz * ddz;
+        // well out of range: free its memory (rebuilt when you come back)
+        if (d2 > far) { for (const k of ['solid', 'water']) if (ch[k]) { this.scene.remove(ch[k]); ch[k].geometry.dispose(); } this.chunks.delete(key); continue; }
+        const vis = d2 <= lim;
         if (ch.solid) ch.solid.visible = vis;
         if (ch.water) ch.water.visible = vis;
       }
@@ -242,6 +255,8 @@ export class Game {
     }
     return this.buildQueue.length;
   }
+  // the Smooth performance setting keeps the view a little shorter
+  renderDist() { return this.settings.perf === 'smooth' ? Math.min(4, this.settings.renderDist) : this.settings.renderDist; }
   // Called from the loading screen: build everything close to the player.
   prebuild() {
     this.queueTimer = 0;
@@ -259,6 +274,7 @@ export class Game {
 
     if (playing) this.orders.update(dt, input); else if (this.orders.isOpen) this.orders.close();
     this.ctx.update(dt, input, playing);
+    this.townKey = this.town ? this.town.updateContext(dt, input) : false;
     if (playing) this.handleLook(input);
     const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
@@ -290,10 +306,13 @@ export class Game {
       this.animals.update(dt); this.pickups.update(dt);
       this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
       if (this.mission) this.mission.update(dt);
+      if (this.town) this.town.update(dt);
       this.supplyT -= dt;
       this.updateDefuse(dt);
     }
     this.campfires.update(dt);
+    if (this.town && this.paused) this.town.update(dt);
+    this.bubbles.update(dt);
 
     // camera
     const eye = p.eye(this.tmpV);
@@ -312,7 +331,7 @@ export class Game {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
     }
-    this.camera.far = (this.settings.renderDist + 1.5) * CHUNK + 40;
+    this.camera.far = (this.renderDist() + 1.5) * CHUNK + 40;
 
     this.sky.update(dt, this.time % 1, this.weather.rain, this.camera.position, this.dayOnly);
     // how much daylight reaches the player's eyes (dark in tunnels)
@@ -341,11 +360,13 @@ export class Game {
     w.timer -= dt;
     if (w.timer <= 0) {
       w.timer = 120 + Math.random() * 260;
-      w.target = Math.random() < 0.42 ? 0.45 + Math.random() * 0.55 : 0;
+      w.target = Math.random() < (this.town ? this.town.weatherChance() : 0.42) ? 0.45 + Math.random() * 0.55 : 0;
     }
     w.rain += Math.sign(w.target - w.rain) * Math.min(Math.abs(w.target - w.rain), dt * 0.04);
-    setRain(this.paused ? 0 : w.rain);
-    if (!this.paused && w.rain > 0.75 && Math.random() < dt / 40) sfx.thunder();
+    const snow = !!(this.town && this.town.snowing());
+    this.sky.snow = snow;
+    setRain(this.paused || snow ? 0 : w.rain);
+    if (!this.paused && !snow && w.rain > 0.75 && Math.random() < dt / 40 && (!this.town || this.town.season === 'summer' || this.town.season === 'spring')) sfx.thunder();
   }
 
   handleLook(input) {
@@ -395,7 +416,8 @@ export class Game {
     }
     if (input.hit('KeyI') || input.hit('Tab') || input.thit('inv')) this.app.openPanel('inventory');
     if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' });
-    if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
+    if (this.townKey) { /* Town Life: E / R did the nearby action */ }
+    else if (input.hit('KeyE') && this.useSupply()) { /* fort rations */ }
     else if (input.hit('KeyK') || input.thit('craft') || (input.hit('KeyE') && this.campfires.near(this.player.pos))) this.app.openPanel('craft');
   }
 
@@ -464,6 +486,8 @@ export class Game {
     const id = w.get(x, y, z);
     const def = BLOCKS[id];
     if (id === B.LOG) { this.fellTree(x, y, z); return; }
+    if (this.town && def.crop) { this.harvestCrop(x, y, z, def); return; }
+    if (id === B.ICE) { w.set(x, y, z, B.WATER); sfx.breakBlock('stone'); this.particles.burst(x + 0.5, y + 0.8, z + 0.5, def.color, 10, 3, 0.6); return; }
     // still water: a block dug out from under water fills in place, nothing flows
     const above = w.get(x, y + 1, z);
     let sideWater = false;
@@ -472,6 +496,18 @@ export class Game {
     if (def.drop) this.give(def.drop, 1);
     this.particles.burst(x + 0.5, y + 0.5, z + 0.5, def.color, 14, 4, 0.7);
     sfx.breakBlock(def.name);
+  }
+
+  // Town Life: digging up a crop harvests it (village fields: theft)
+  harvestCrop(x, y, z, def) {
+    const res = this.town.farm.harvest(x, y, z);
+    this.world.set(x, y, z, B.AIR);
+    this.particles.burst(x + 0.5, y + 0.4, z + 0.5, def.color, 8, 2, 0.5);
+    sfx.breakBlock('leaves');
+    if (!res) return;
+    for (const [id, n] of res.items) { this.give(id, n); if (res.owner === 'v') this.town.stolen[id] = (this.town.stolen[id] || 0) + n; }
+    if (res.owner === 'v') this.town.crime('theft', { value: 2 });
+    else if (res.items.some(([id]) => !id.startsWith('seed_'))) this.town.st.harvested++;
   }
 
   fellTree(x, y, z) {
@@ -546,6 +582,7 @@ export class Game {
     if (def.weapon || def.throwable || def.food || def.heal) return;  // handled by combat / handleUse
     const { eye, dir } = this.aim();
     if (item === 'flint') { this.useFlint(eye, dir); return; }
+    if (this.town && this.townUse(item, def, eye, dir)) return;
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (def.place === 'watchtower') { this.placeWatchtower(hit); return; }
 
@@ -575,6 +612,41 @@ export class Game {
     this.take(item);
     sfx.place();
     this.hud.dirtyHotbar = true;
+  }
+
+  // Town Life: seeds, buckets
+  townUse(item, def, eye, dir) {
+    const T = this.town, w = this.world;
+    if (def.seed) {
+      const hit = w.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+      if (T.farm.plant(hit, def.seed) !== 'ok') { this.hud.toast(t('farm.plantWhere')); sfx.error(); return true; }
+      this.take(item); sfx.place(); this.hud.dirtyHotbar = true;
+      return true;
+    }
+    if (item === 'bucket') {
+      const water = this.surfaceAim(eye, dir) || w.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH, true);
+      if (!water || water.id !== B.WATER) { this.hud.toast(t('farm.fillWhere')); sfx.error(); return true; }
+      this.take('bucket'); this.give('bucket_water', 1, true); sfx.splash(); this.selectItem('bucket_water');
+      return true;
+    }
+    if (item === 'bucket_water') {
+      const hit = w.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
+      if (!hit) return true;
+      const y = BLOCKS[hit.id].crop ? hit.y : hit.y + 1;
+      const n = T.farm.water(hit.x, y, hit.z);
+      if (!n) { this.hud.toast(t('farm.waterWhere')); sfx.error(); return true; }
+      this.take('bucket_water'); this.give('bucket', 1, true); sfx.splash(); this.selectItem('bucket');
+      this.particles.burst(hit.x + 0.5, y + 0.3, hit.z + 0.5, [0.4, 0.55, 0.7], 10, 2, 0.5);
+      this.hud.toast(t('farm.watered', { n }));
+      return true;
+    }
+    return false;
+  }
+  // keep the same hotbar slot when an item turns into another (full/empty bucket)
+  selectItem(id) {
+    const inv = this.inv, i = inv.sel, other = inv.hotbar.indexOf(id);
+    if (other >= 0 && other !== i) inv.hotbar[other] = null;
+    inv.hotbar[i] = id; this.hud.dirtyHotbar = true;
   }
 
   // Flint and steel: light a campfire from 3 wood (firewood) on solid ground.
@@ -732,7 +804,8 @@ export class Game {
   }
   onEnemyTNT(x, y, z) {
     if (Math.hypot(x - this.player.pos.x, z - this.player.pos.z) < 40) {
-      this.hud.toast(t('hud.tntWarn'), 'warn'); sfx.warn();
+      // danger: alarm tone, on-screen warning, flashing radar marker (no voices)
+      this.hud.toast(t('hud.tntWarn'), 'warn'); this.hud.alert(t('hud.tntWarn')); sfx.alert();
     }
   }
 
@@ -741,6 +814,7 @@ export class Game {
   craftFire() { return this.campfires.near(this.player.pos); }
   hasMaterials(r) { return Object.entries(r.needs).every(([id, n]) => this.has(id, n)); }
   canCraft(r) { return !r.later && !!this.craftFire() && this.hasMaterials(r); }
+  recipes() { return recipesFor(this.townMode); }
   startCraft(r) {
     if (this.craft) { this.hud.toast(t('craft.busy')); sfx.error(); return false; }
     if (!this.canCraft(r)) { sfx.error(); return false; }
@@ -788,6 +862,7 @@ export class Game {
     if (this.dead) return;
     this.stats.deaths = (this.stats.deaths || 0) + 1;
     const alone = this.cfg.sub === 'alone';
+    if (this.town) { this.scopeView.close(); this.craft = null; this.breath = AIR; this.town.onDeath(cause); return; }
     if (cause === 'starve' && alone) { this.flushStats(); this.dead = true; this.app.gameOver(); return; }
     if (this.mission) this.mission.playerDied();
     this.stats.aloneSince = this.time;
@@ -834,6 +909,7 @@ export class Game {
 
   // push this world's progress into the lifetime statistics
   flushStats() {
+    if (this.town) return;            // Town Life keeps its own statistics
     const f = this.statsFlushed, s = this.stats, d = {};
     for (const k of ['fortsCaptured', 'fortsLost', 'enemies', 'animals']) d[k] = (s[k] || 0) - (f[k] || 0);
     d.days = Math.max(0, this.time - (f.time || 0));
@@ -850,6 +926,7 @@ export class Game {
   }
 
   toSave() {
+    if (this.town) return this.town.toSave();
     const p = this.player;
     return {
       v: SAVE_FORMAT, id: this.save.id, name: this.save.name, created: this.save.created, updated: Date.now(),
@@ -868,6 +945,9 @@ export class Game {
 
   dispose() {
     setRain(0);
+    if (this.town) this.town.dispose();
+    this.bubbles.dispose();
+    document.body.classList.remove('townlife');
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
     this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();

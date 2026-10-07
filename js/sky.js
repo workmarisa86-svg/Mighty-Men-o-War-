@@ -86,7 +86,9 @@ export class Sky {
     // rain streaks follow the camera
     this.rain.visible = rain > 0.02;
     if (this.rain.visible) {
-      this.rainY += dt * 22;
+      // snow (Town Life winter): short white flakes drifting down slowly
+      const snow = !!this.snow;
+      this.rainY += dt * (snow ? 2.6 : 22);
       const pos = this.rain.geometry.attributes.position.array;
       const n = Math.floor(this.rainCount * rain);
       for (let i = 0; i < this.rainCount; i++) {
@@ -95,11 +97,18 @@ export class Sky {
         const sx = this.rainSeeds[i * 3], sz = this.rainSeeds[i * 3 + 2];
         const y = 15 - ((this.rainSeeds[i * 3 + 1] + this.rainY) % 30);
         const x = camPos.x + sx, z = camPos.z + sz, yy = camPos.y + y;
-        pos[o] = x; pos[o + 1] = yy; pos[o + 2] = z;
-        pos[o + 3] = x + 0.08; pos[o + 4] = yy - 0.7; pos[o + 5] = z + 0.05;
+        if (snow) {
+          const drift = Math.sin(this.rainY * 0.7 + i) * 0.6;
+          pos[o] = x + drift; pos[o + 1] = yy; pos[o + 2] = z + drift * 0.5;
+          pos[o + 3] = x + drift + 0.05; pos[o + 4] = yy - 0.09; pos[o + 5] = z + drift * 0.5 + 0.04;
+        } else {
+          pos[o] = x; pos[o + 1] = yy; pos[o + 2] = z;
+          pos[o + 3] = x + 0.08; pos[o + 4] = yy - 0.7; pos[o + 5] = z + 0.05;
+        }
       }
       this.rain.geometry.attributes.position.needsUpdate = true;
-      this.rain.material.color.setScalar(0.35 + day * 0.35);
+      this.rain.material.color.setScalar(snow ? 0.75 + day * 0.25 : 0.35 + day * 0.35);
+      this.rain.material.opacity = snow ? 0.85 : 0.4;
     }
   }
 }

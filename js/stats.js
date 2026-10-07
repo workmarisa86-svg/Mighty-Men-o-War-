@@ -3,9 +3,13 @@
 import { load, save, remove } from './storage.js';
 
 const BLANK = () => ({ days: 0, fortsCaptured: 0, fortsLost: 0, enemies: 0, animals: 0, longestAlone: 0, missions: 0, gold: 0, silver: 0, bronze: 0 });
+// Peace mode is gone: its mission medals are dropped
+const PEACE_MISSIONS = ['shack', 'hunter', 'explore', 'bridgeb'];
 export function loadStats() {
   const s = load('stats', null) || {};
-  return { total: Object.assign(BLANK(), s.total), byDiff: s.byDiff || {}, best: s.best || {} };
+  const best = s.best || {};
+  for (const k of Object.keys(best)) if (PEACE_MISSIONS.includes(k.split(':')[0])) delete best[k];
+  return { total: Object.assign(BLANK(), s.total), byDiff: s.byDiff || {}, best };
 }
 export function resetStats() { remove('stats'); }
 // add a game's progress since the last flush

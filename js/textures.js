@@ -7,7 +7,13 @@ const TILE_NAMES = [
   'dirt', 'dirt_top', 'mud', 'rubble', 'log_side', 'log_top', 'planks', 'leaves',
   'stone', 'iron', 'tnt_side', 'tnt_top', 'water', 'bedrock', 'sandbag', 'sandbag_top',
   'wire', 'fort_wall', 'fort_top', 'fort_door', 'fort_lamp', 'supply', 'supply_top',
+  // Town Life
+  'grass_top', 'grass_side', 'sand', 'clay', 'brick', 'glass', 'thatch', 'ice',
+  'charcoal', 'gold', 'farmland', 'path', 'fence',
+  'sprout', 'wheat_g', 'wheat_r', 'carrot_g', 'carrot_r', 'cabbage_g', 'cabbage_r', 'wilted',
 ];
+// season currently painted into the seasonal tiles (grass, leaves): null = War look
+let SEASON = null;
 
 const clamp = (v) => Math.max(0, Math.min(255, v | 0));
 const rgb = (c, a = 1) => `rgba(${clamp(c[0])},${clamp(c[1])},${clamp(c[2])},${a})`;
@@ -263,6 +269,100 @@ const PAINT = {
     p.blobs(8, [18, 18, 18], 2, 6);
     p.blobs(4, [58, 56, 54], 1.5, 6);
   },
+  // ------------------------------------------------------------ Town Life
+  grass_top(p) {
+    const S = SEASON || 'summer';
+    if (S === 'winter') {           // snow layer
+      p.fill([228, 232, 236], 10); p.blobs(5, [208, 214, 224], 2.5, 6);
+      for (let i = 0; i < 18; i++) p.px(p.r() * 32 | 0, p.r() * 32 | 0, [250, 252, 255]);
+      return;
+    }
+    const base = S === 'autumn' ? [118, 112, 52] : S === 'spring' ? [86, 128, 52] : [80, 116, 46];
+    p.fill(base, 20);
+    p.blobs(6, mix(base, [40, 60, 20], 0.35), 2, 10);
+    for (let i = 0; i < 40; i++) { const x = p.r() * 32 | 0, y = p.r() * 31 | 0; p.px(x, y, mix(base, [180, 200, 110], 0.35)); p.px(x, y + 1, mix(base, [30, 50, 20], 0.3)); }
+    if (S === 'spring') for (let i = 0; i < 7; i++) p.px(p.r() * 32 | 0, p.r() * 32 | 0, p.r() < 0.5 ? [236, 220, 120] : [236, 236, 230]);   // flowers
+    if (S === 'autumn') for (let i = 0; i < 9; i++) p.rect(p.r() * 31 | 0, p.r() * 31 | 0, 2, 1, p.r() < 0.5 ? [176, 92, 36] : [198, 150, 50]); // fallen leaves
+  },
+  grass_side(p) {
+    PAINT.dirt(p);
+    const S = SEASON || 'summer';
+    const top = S === 'winter' ? [228, 232, 236] : S === 'autumn' ? [118, 112, 52] : S === 'spring' ? [86, 128, 52] : [80, 116, 46];
+    for (let x = 0; x < 32; x++) { const h = 3 + (p.r() * 4 | 0); for (let y = 0; y < h; y++) p.px(x, y, jit(top, p.r, 16)); }
+  },
+  sand(p) { p.fill([196, 178, 128], 16); for (let i = 0; i < 60; i++) p.px(p.r() * 32 | 0, p.r() * 32 | 0, p.r() < 0.5 ? [170, 150, 104] : [216, 200, 156]); },
+  clay(p) { p.fill([150, 146, 140], 10); p.blobs(5, [132, 128, 124], 2.5, 6); for (let y = 4; y < 32; y += 7) p.rect(0, y, 32, 1, [138, 134, 128], 0.6); },
+  brick(p) {
+    p.fill([170, 160, 146], 6);   // mortar
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 ? 8 : 0;
+      for (let b = -1; b < 2; b++) {
+        const x0 = b * 16 + off, y0 = row * 8, c = jit([140, 68, 50], p.r, 26);
+        for (let y = 1; y < 7; y++) for (let x = 1; x < 15; x++) p.px(x0 + x, y0 + y, jit(c, p.r, 12));
+      }
+    }
+  },
+  glass(p) {
+    p.clear();
+    const f = [96, 76, 52];
+    p.rect(0, 0, 32, 2, f); p.rect(0, 30, 32, 2, f); p.rect(0, 0, 2, 32, f); p.rect(30, 0, 2, 32, f);
+    p.rect(15, 0, 2, 32, f); p.rect(0, 15, 32, 2, f);
+    for (let i = 0; i < 4; i++) p.px(5 + i, 4 + i, [230, 240, 244], 0.9);   // glint (opaque enough to show)
+  },
+  thatch(p) {
+    p.fill([170, 142, 76], 18);
+    for (let i = 0; i < 70; i++) { const x = p.r() * 32 | 0, y = p.r() * 28 | 0, l = 3 + (p.r() * 5 | 0); for (let k = 0; k < l; k++) p.px(x, y + k, p.r() < 0.5 ? [196, 168, 96] : [128, 104, 54]); }
+    for (let y = 7; y < 32; y += 8) p.rect(0, y, 32, 1, [110, 88, 44]);
+  },
+  ice(p) {
+    p.fill([170, 206, 222], 10);
+    for (let i = 0; i < 5; i++) { let x = p.r() * 32, y = p.r() * 32; const dx = p.r() - 0.5, dy = p.r() - 0.5; for (let k = 0; k < 10; k++) { p.px(x | 0, y | 0, [226, 240, 248]); x += dx * 2; y += dy * 2; } }
+  },
+  charcoal(p) { p.fill([34, 33, 32], 10); p.blobs(6, [22, 22, 22], 2, 4); for (let i = 0; i < 14; i++) p.px(p.r() * 32 | 0, p.r() * 32 | 0, [70, 68, 66]); },
+  gold(p) {
+    PAINT.stone(p);
+    for (let i = 0; i < 4; i++) {
+      const cx = 4 + p.r() * 24 | 0, cy = 4 + p.r() * 24 | 0;
+      for (let k = 0; k < 5; k++) { const x = cx + (p.r() * 4 - 2 | 0), y = cy + (p.r() * 4 - 2 | 0); p.rect(x, y, 2, 2, p.r() < 0.6 ? [214, 176, 64] : [168, 132, 44]); }
+      p.px(cx, cy, [255, 246, 196]);   // the glint
+    }
+  },
+  farmland(p) {
+    p.fill([66, 48, 32], 12);
+    for (let y = 2; y < 32; y += 6) { p.rect(0, y, 32, 2, [48, 34, 22]); p.rect(0, y + 2, 32, 1, [86, 64, 44]); }
+  },
+  path(p) {
+    p.fill([128, 108, 76], 18);
+    for (let i = 0; i < 16; i++) { const x = p.r() * 30 | 0, y = p.r() * 30 | 0; p.rect(x, y, 2, 2, p.r() < 0.5 ? [150, 140, 122] : [100, 84, 60]); }
+  },
+  fence(p) {
+    p.clear();
+    const c = [104, 78, 50], d = [74, 54, 34];
+    p.rect(2, 0, 5, 32, c); p.rect(25, 0, 5, 32, c); p.rect(2, 0, 1, 32, d); p.rect(25, 0, 1, 32, d);
+    p.rect(0, 7, 32, 4, c); p.rect(0, 19, 32, 4, c); p.rect(0, 10, 32, 1, d); p.rect(0, 22, 32, 1, d);
+  },
+  sprout(p) { p.clear(); for (let i = 0; i < 6; i++) { const x = 4 + i * 5; p.rect(x, 24, 1, 8, [80, 130, 50]); p.rect(x - 1, 24, 3, 2, [100, 160, 60]); } },
+  wheat_g(p) { p.clear(); for (let i = 0; i < 9; i++) { const x = 2 + i * 3.4 | 0, h = 14 + (p.r() * 6 | 0); p.rect(x, 32 - h, 1, h, [96, 150, 58]); p.rect(x - 1, 32 - h, 3, 3, [120, 170, 70]); } },
+  wheat_r(p) { p.clear(); for (let i = 0; i < 9; i++) { const x = 2 + i * 3.4 | 0, h = 20 + (p.r() * 6 | 0); p.rect(x, 32 - h, 1, h, [190, 160, 70]); p.rect(x - 1, 32 - h, 3, 6, [222, 190, 92]); } },
+  carrot_g(p) { p.clear(); for (let i = 0; i < 5; i++) { const x = 3 + i * 6; for (let k = 0; k < 4; k++) p.rect(x - 2 + k, 18 + k * 2, 1, 14 - k * 2, [70, 140, 50]); } },
+  carrot_r(p) { PAINT.carrot_g(p); for (let i = 0; i < 5; i++) p.rect(2 + i * 6, 28, 4, 4, [214, 112, 40]); },
+  cabbage_g(p) { p.clear(); for (let i = 0; i < 3; i++) { const cx = 6 + i * 10; for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y < 16) p.px(cx + x, 27 + y, jit([96, 150, 70], p.r, 20)); } },
+  cabbage_r(p) { p.clear(); for (let i = 0; i < 2; i++) { const cx = 9 + i * 14; for (let y = -7; y <= 6; y++) for (let x = -7; x <= 7; x++) if (x * x + y * y < 46) p.px(cx + x, 24 + y, jit(x * x + y * y < 16 ? [170, 206, 130] : [110, 170, 90], p.r, 18)); } },
+  wilted(p) { p.clear(); for (let i = 0; i < 6; i++) { const x = 3 + i * 5; p.rect(x, 26, 1, 6, [110, 92, 54]); p.rect(x, 26, 3, 1, [96, 80, 46]); } },
+};
+// leaves: one look per season in Town Life (War keeps its own)
+const WAR_LEAVES = PAINT.leaves;
+PAINT.leaves = (p) => {
+  if (!SEASON) return WAR_LEAVES(p);
+  p.clear();
+  const cols = {
+    spring: [[96, 150, 62], [80, 132, 52], [118, 168, 74], [236, 230, 220]],
+    summer: [[66, 112, 44], [54, 96, 38], [82, 128, 52], [60, 104, 40]],
+    autumn: [[196, 104, 40], [214, 156, 54], [168, 66, 34], [140, 120, 48]],
+    winter: [[226, 230, 236], [120, 98, 72], [200, 206, 214], [96, 80, 60]],
+  }[SEASON];
+  const dens = SEASON === 'winter' ? 0.3 : 0.62;
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) if (p.r() < dens) p.px(x, y, jit(cols[p.r() * cols.length | 0], p.r, 14));
 };
 
 let atlas = null;
@@ -297,8 +397,25 @@ export function buildAtlas() {
     c.getContext('2d').drawImage(canvas, (i % COLS) * TILE, Math.floor(i / COLS) * TILE, TILE, TILE, 0, 0, TILE, TILE);
     return c;
   };
-  atlas = { canvas, uvs, tileCanvas };
+  atlas = { canvas, uvs, tileCanvas, ctx, version: 0 };
   return atlas;
+}
+
+// Repaint the seasonal tiles (grass, leaves) for a Town Life season, or
+// back to the War look (null). Returns true if anything changed; the caller
+// then flags its texture for upload (no chunk has to be rebuilt).
+export function paintSeason(season) {
+  const a = buildAtlas();
+  if (SEASON === season) return false;
+  SEASON = season;
+  for (const name of ['grass_top', 'grass_side', 'leaves']) {
+    const i = TILE_NAMES.indexOf(name);
+    const tx = (i % COLS) * TILE, ty = Math.floor(i / COLS) * TILE;
+    a.ctx.clearRect(tx, ty, TILE, TILE);
+    PAINT[name](painter(a.ctx, tx, ty, 1000 + i * 7919));
+  }
+  a.version++;
+  return true;
 }
 
 // Crack overlays shown while digging (5 stages).

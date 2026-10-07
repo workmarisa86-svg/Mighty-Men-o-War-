@@ -9,6 +9,7 @@ export const MANUAL_CATS = {
   forts: { en: 'Forts', es: 'Fuertes' },
   enemy: { en: 'The enemy', es: 'El enemigo' },
   missions: { en: 'Missions', es: 'Misiones' },
+  town: { en: 'Town Life', es: 'Town Life' },
   game: { en: 'Game & settings', es: 'Partida y ajustes' },
 };
 
@@ -119,8 +120,8 @@ export const MANUAL = [
     'Enemigos abatidos', 'Los enemigos abatidos vuelven cerca de uno de sus fuertes, caminan hasta él y atacan otra vez más tarde, así que su número no cambia. Si no les quedan fuertes, los supervivientes se dispersan, se reagrupan, fabrican armas y contraatacan.'),
   // ------------------------------------------------------------------ game
   E('modes', 'game', 'Two games',
-    'The start screen offers two games that share the same engine, settings and language: Mighty Men o\' War (War) and Town Life. In War you survive, build, hunt and fight, alone (you start in a cabin) or with allies, with its own menu and save slots. Town Life, a peacetime countryside game, is coming in the next update. The old Peace mode has been removed and its saved worlds deleted.',
-    'Dos juegos', 'La pantalla de inicio ofrece dos juegos que comparten el mismo motor, los ajustes y el idioma: Mighty Men o\' War (Guerra) y Town Life (Vida en el pueblo). En Guerra sobrevives, construyes, cazas y combates, solo (empiezas en una cabaña) o con aliados, con su propio menú y sus partidas guardadas. Town Life, un juego de campo en tiempos de paz, llegará en la próxima actualización. El antiguo modo Paz se ha eliminado y sus mundos guardados se han borrado.'),
+    'The start screen offers two games that share the same engine, settings and language: Mighty Men o\' War (War) and Town Life. In War you survive, build, hunt and fight, alone (you start in a cabin) or with allies, with its own menu and save slots. Town Life is a peacetime countryside game with one persistent world. The old Peace mode has been removed and its saved worlds deleted.',
+    'Dos juegos', 'La pantalla de inicio ofrece dos juegos que comparten el mismo motor, los ajustes y el idioma: Mighty Men o\' War (Guerra) y Town Life (Vida en el pueblo). En Guerra sobrevives, construyes, cazas y combates, solo (empiezas en una cabaña) o con aliados, con su propio menú y sus partidas guardadas. Town Life es un juego de campo en tiempos de paz con un único mundo persistente. El antiguo modo Paz se ha eliminado y sus mundos guardados se han borrado.'),
   E('timeofday', 'game', 'Time of day',
     'When you start a War game you choose "Day and night" (a full cycle: lighter enemy attacks by day, heavier at night) or "Day only" (always daylight, but the enemy attacks constantly at night-time strength). The choice is saved with the world.',
     'Hora del día', 'Al empezar una partida de Guerra eliges "Día y noche" (ciclo completo: ataques más ligeros de día y más fuertes de noche) o "Solo de día" (siempre hay luz, pero el enemigo ataca sin parar con la fuerza de la noche). La elección se guarda con el mundo.'),
@@ -137,6 +138,44 @@ export const MANUAL = [
     'English or Spanish, from the start screen, the War menu or Settings.',
     'Idioma', 'Inglés o español, desde la pantalla de inicio, el menú de Guerra o los Ajustes.'),
 
+  // ------------------------------------------------------------- Town Life
+  E('t_world', 'town', 'Town Life: your world',
+    'A peaceful 1940s countryside with one world that is always kept (no save slots). It saves itself about every minute and when you leave, writing only what changed, and keeps a backup of the last good save. "Start over" on the Town Life menu deletes it after you confirm. You start with no money, a shovel and flint and steel, in a cottage that cannot be destroyed, with an ever-burning fire, a bed, a storage chest, a fenced pen and a small garden.',
+    'Town Life: tu mundo', 'Un campo tranquilo de los años cuarenta con un único mundo que siempre se guarda (sin ranuras). Se guarda solo cada minuto más o menos y al salir, escribiendo solo lo que ha cambiado, y guarda una copia de seguridad de la última partida buena. "Empezar de cero" en el menú de Town Life lo borra tras confirmarlo. Empiezas sin dinero, con una pala y pedernal y eslabón, en una casa indestructible con un fuego que nunca se apaga, una cama, un baúl, un corral vallado y un pequeño huerto.'),
+  E('t_seasons', 'town', 'Seasons and weather',
+    'Days and nights pass, and every three days the season changes: spring, summer, autumn and winter. It rains in spring, summer and autumn; leaves turn orange in autumn; in winter snow covers the ground, lakes and rivers freeze (dig the ice to reach the water) and nothing grows.',
+    'Estaciones y tiempo', 'Pasan los días y las noches, y cada tres días cambia la estación: primavera, verano, otoño e invierno. Llueve en primavera, verano y otoño; en otoño las hojas se vuelven naranjas; en invierno la nieve cubre el suelo, lagos y ríos se hielan (cava el hielo para llegar al agua) y nada crece.'),
+  E('t_blocks', 'town', 'Materials',
+    'Grass over dirt, logs and planks, stone about three blocks down, iron in the stone, very rare gold that glints faintly, sand by the water, clay in river beds, glass, thatch, bricks, charcoal and fences. At a campfire: wood becomes charcoal, clay and charcoal become bricks, sand and charcoal become glass, wheat becomes thatch or bread.',
+    'Materiales', 'Hierba sobre tierra, troncos y tablones, piedra unos tres bloques bajo tierra, hierro en la piedra, oro muy escaso que brilla un poco, arena junto al agua, arcilla en los lechos de los ríos, vidrio, paja, ladrillos, carbón y vallas. En una hoguera: la madera da carbón, arcilla y carbón dan ladrillos, arena y carbón dan vidrio, el trigo da paja o pan.'),
+  E('t_farm', 'town', 'Farming',
+    'Buy seeds at the general store or the market (or take them from the village fields, which is theft). Sow them on grass, dirt or farmland. Crops need water: fill a bucket at any water and use it on the crops (rain waters them too). Crops left dry wilt and nearly die. Nothing grows in winter. Dig up ripe crops to harvest them; you also get seeds back.',
+    'Cultivar', 'Compra semillas en la tienda de ultramarinos o en el mercado (o cógelas de los campos del pueblo, que es robar). Siémbralas en hierba, tierra o tierra de cultivo. Los cultivos necesitan agua: llena un cubo en cualquier agua y úsalo sobre ellos (la lluvia también los riega). Sin agua se marchitan y casi mueren. En invierno nada crece. Cava los cultivos maduros para cosecharlos; también recuperas semillas.'),
+  E('t_animals', 'town', 'Livestock',
+    'Buy chickens, piglets and calves at the market stall: they go to your pen. Hens lay eggs in the pen, cows give milk once a day (with a bucket), pigs give meat. The village animals belong to the village: killing them is a crime.',
+    'Ganado', 'Compra gallinas, lechones y terneros en el puesto del mercado: van a tu corral. Las gallinas ponen huevos en el corral, las vacas dan leche una vez al día (con un cubo) y los cerdos dan carne. Los animales del pueblo son del pueblo: matarlos es un delito.'),
+  E('t_hunt', 'town', 'Hunting and skinning',
+    'Weapons are crafted at a campfire as in War, or bought at the hunting store. Deer and birds live in the woods and fields; when one is killed another turns up somewhere else. Bears are rare in summer and many in winter: they take several shots and fight back. Skin a carcass to get meat and a hide (a bear hide is worth a lot).',
+    'Caza y desollado', 'Las armas se fabrican en una hoguera como en Guerra, o se compran en la tienda de caza. Ciervos y pájaros viven en bosques y campos; cuando cae uno, aparece otro en otra parte. Los osos son raros en verano y abundan en invierno: aguantan varios disparos y atacan. Desuella una pieza para conseguir carne y piel (la de oso vale mucho).'),
+  E('t_shops', 'town', 'Shops and money',
+    'The butcher, the general store, the hunting store and the market stall are always open; their keepers stay at their shops. Buy, or sell what you have gathered, grown or hunted. Your honor changes the prices.',
+    'Tiendas y dinero', 'La carnicería, la tienda de ultramarinos, la tienda de caza y el puesto del mercado siempre están abiertos; sus tenderos se quedan en la tienda. Compra, o vende lo que hayas recogido, cultivado o cazado. Tu honor cambia los precios.'),
+  E('t_favors', 'town', 'Favors',
+    'Walk up to a villager and ask for a favor: bring them some goods or carry a letter to someone. Favors pay coins, raise your honor and lower your bounty. One job at a time, two days to finish it.',
+    'Favores', 'Acércate a un vecino y pídele un favor: llevarle algo o entregar una carta a alguien. Los favores dan monedas, suben tu honor y bajan la recompensa por tu cabeza. Un encargo cada vez, con dos días para terminarlo.'),
+  E('t_law', 'town', 'Honor, witnesses and the law',
+    'Honor changes prices, greetings and favors. A crime (stealing crops or animals, hurting or killing someone) only counts if someone sees it: a warning names the witness, who runs to the sheriff; stop them or let them report. A report adds to your bounty and a posse of townspeople forms (bigger bounty, bigger posse). They search where you were last seen, take cover and give up if you stay hidden long enough. They can come into your cottage. They question you first: Surrender, Pay the fine, Talk, Run or Fight; they only shoot if you resist or run. Jail costs the fine, your stolen goods and your scuba gear, and you wake at home a day later with your crops nearly dead. Clear your name by paying the fine (also to the sheriff), turning yourself in, laying low for a few quiet days or doing favors.',
+    'Honor, testigos y la ley', 'El honor cambia los precios, los saludos y los favores. Un delito (robar cultivos o animales, herir o matar a alguien) solo cuenta si alguien lo ve: un aviso nombra al testigo, que corre a ver al sheriff; puedes detenerlo o dejar que te denuncie. La denuncia aumenta la recompensa por tu cabeza y se forma una partida de vecinos (más recompensa, más vecinos). Buscan donde te vieron por última vez, se cubren y se rinden si te escondes el tiempo suficiente. Pueden entrar en tu casa. Primero te interrogan: Entregarte, Pagar la multa, Convencerlos, Huir o Pelear; solo disparan si te resistes o huyes. La cárcel te cuesta la multa, lo robado y el equipo de buceo, y despiertas en casa un día después con los cultivos casi muertos. Limpia tu nombre pagando la multa (también al sheriff), entregándote, pasando unos días tranquilos o haciendo favores.'),
+  E('t_death', 'town', 'Hunger, injury and sleep',
+    'There is no game over: if you are killed or starve you wake up in your cottage (scuba gear is lost). Sleep in your bed in the evening or at night to wake the next morning.',
+    'Hambre, heridas y sueño', 'No hay fin de partida: si mueres o te mueres de hambre, despiertas en tu casa (pierdes el equipo de buceo). Duerme en tu cama por la tarde o de noche para despertar a la mañana siguiente.'),
+  E('t_sound', 'town', 'Voices, music and sounds',
+    'Nobody speaks aloud in either game: townspeople and soldiers talk in text bubbles with a short mumble or radio tone. Town Life has its own calm folk music, made live by the game, plus birdsong, crickets, owls, wind and animal sounds. In War, grenades and lit charges sound an alarm, show a warning and flash on the radar.',
+    'Voces, música y sonidos', 'Nadie habla en voz alta en ningún juego: vecinos y soldados hablan con bocadillos de texto y un murmullo o un tono de radio. Town Life tiene su propia música folk tranquila, creada en directo por el juego, además de pájaros, grillos, búhos, viento y animales. En Guerra, las granadas y las cargas encendidas hacen sonar una alarma, muestran un aviso y parpadean en el radar.'),
+  E('t_perf', 'game', 'Performance',
+    'Settings > Performance: Smooth shortens the view and lightens effects for a steadier frame rate on phones. Only nearby areas are drawn, far ones are freed from memory, and far-away people and animals rest. A hidden frame counter: see Controls.',
+    'Rendimiento', 'Ajustes > Rendimiento: Fluido acorta la vista y aligera los efectos para que el móvil vaya más suave. Solo se dibuja lo cercano, lo lejano se libera de la memoria y la gente y los animales lejanos descansan. Hay un contador de fotogramas oculto: mira Controles.'),
+  E('t_controls', 'town', 'Town Life controls', 'Nearby actions appear on screen.', 'Controles de Town Life', 'Las acciones cercanas aparecen en pantalla.'),
   // ------------------------------------------------------------- additions
   E('controls', 'basics', 'Controls',
     'Keyboard and mouse: WASD move, Shift run, C crouch, Space jump/swim, left click dig/attack, right click place/use, 1-9 hotbar, E campfire/rations/chest, Q order wheel, G select soldier, T follow me, Y ask for iron, U ask for a weapon, F flashlight, Z scope/binoculars, M war map, I inventory, K craft, Esc pause. Phones: left thumb moves, right side looks; buttons for jump, use, action, run, crouch, zoom, light, bag, craft and map. Squad buttons appear only when they make sense.',
@@ -210,6 +249,10 @@ export const MANUAL = [
 // read about keys or the mouse; computers never read about taps or buttons.
 export const MANUAL_DEVICE = {
   pc: {
+    t_controls: {
+      en: 'Town Life on a computer: E and R do the nearby actions shown on screen (shop, ask for a favor, talk to the sheriff, skin, milk, sleep, campfire). Right click sows seeds, fills and empties the bucket. Left click digs and harvests. F3 shows or hides the frame counter.',
+      es: 'Town Life en el ordenador: E y R hacen las acciones cercanas que aparecen en pantalla (tienda, pedir un favor, hablar con el sheriff, desollar, ordeñar, dormir, hoguera). Clic derecho siembra, llena y vacía el cubo. Clic izquierdo cava y cosecha. F3 muestra u oculta el contador de fotogramas.',
+    },
     controls: {
       en: 'WASD move, Shift run, C crouch, Space jump (double-tap Space in deep water: dive or swim on the surface; hold Space to swim up, C to swim down), left click dig / attack, right click place / use / scope, 1-9 or the mouse wheel: hotbar, E campfire crafting / ration crates / chest, Q order wheel, G select soldier, T follow me, Y ask for iron, U ask for a weapon, F flashlight, Z scope or binoculars (Shift steadies your aim), M war map, I or Tab inventory, K crafting, Esc pause.',
       es: 'WASD moverse, Mayús correr, C agacharse, Espacio saltar (doble toque de Espacio en agua profunda: bucear o nadar en la superficie; mantén Espacio para subir y C para bajar), clic izquierdo cavar / atacar, clic derecho colocar / usar / mira, 1-9 o la rueda del ratón: barra rápida, E fabricar en la hoguera / cajas de raciones / baúl, Q rueda de órdenes, G elegir soldado, T sígueme, Y pedir hierro, U pedir un arma, F linterna, Z mira o prismáticos (Mayús estabiliza), M mapa de guerra, I o Tab inventario, K fabricar, Esc pausa.',
@@ -236,6 +279,10 @@ export const MANUAL_DEVICE = {
     },
   },
   touch: {
+    t_controls: {
+      en: 'Town Life on a phone: buttons appear for what you can do nearby (shop, ask for a favor, talk to the sheriff, skin, milk, sleep, campfire); tap them. USE sows seeds, fills and empties the bucket. ACTION digs and harvests. Tap the clock three times to show or hide the frame counter.',
+      es: 'Town Life en el móvil: aparecen botones con lo que puedes hacer cerca (tienda, pedir un favor, hablar con el sheriff, desollar, ordeñar, dormir, hoguera); tócalos. USAR siembra, llena y vacía el cubo. ACCIÓN cava y cosecha. Toca el reloj tres veces para mostrar u ocultar el contador de fotogramas.',
+    },
     move: {
       en: 'Put your left thumb anywhere on the left side and drag to walk; drag on the right side to look around. RUN and CROUCH switch on and off (crouching is quieter and harder to spot). JUMP jumps. Logs and ladders can be climbed by walking into them.',
       es: 'Pon el pulgar izquierdo en cualquier punto de la mitad izquierda y arrastra para caminar; arrastra en la mitad derecha para mirar. CORRER y AGACHAR se activan y desactivan (agachado haces menos ruido y cuesta más verte). SALTAR salta. Los troncos y escaleras se trepan caminando hacia ellos.',

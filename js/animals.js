@@ -11,6 +11,18 @@ export const TYPES = {
   pig:  { hp: 40, meat: 2, walk: 1.1, flee: 5.4, group: [3, 6], sense: 1.0, half: 0.5, height: 0.9 },
   cow:  { hp: 70, meat: 3, walk: 0.9, flee: 4.8, group: [3, 5], sense: 0.9, half: 0.75, height: 1.5 },
   bird: { hp: 10, meat: 1, walk: 0.9, flee: 8, group: [5, 9], sense: 1.4, half: 0.28, height: 0.4 },
+  // Town Life
+  deer: { hp: 55, meat: 2, hide: 'hide', hides: 1, walk: 1.2, flee: 7.2, group: [2, 4], sense: 1.4, half: 0.45, height: 1.45 },
+  bear: { hp: 260, meat: 5, hide: 'bear_hide', hides: 1, walk: 0.9, flee: 5.6, group: [1, 1], sense: 1.1, half: 0.7, height: 1.35, fierce: true },
+  chicken: { hp: 8, meat: 1, walk: 0.7, flee: 3.2, group: [3, 5], sense: 0.8, half: 0.22, height: 0.5 },
+};
+// Town Life seasons: how likely each new wild group is (bears rare in summer,
+// plentiful in winter)
+const TOWN_MIX = {
+  spring: { deer: 0.5, bear: 0.07, bird: 0.43 },
+  summer: { deer: 0.55, bear: 0.03, bird: 0.42 },
+  autumn: { deer: 0.5, bear: 0.14, bird: 0.36 },
+  winter: { deer: 0.45, bear: 0.4, bird: 0.15 },
 };
 
 const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
@@ -66,7 +78,45 @@ function makeBird(r) {
   for (const s of [-1, 1]) { const l = leg(0.03, 0.12, 0x6a5a3a, s * 0.05, 0.12, 0); legs.push(l); g.add(l); }
   return { g, legs, wings };
 }
-const MAKERS = { pig: makePig, cow: makeCow, bird: makeBird };
+function makeDeer(r) {
+  const g = new THREE.Group(), legs = [];
+  const c = 0x8a6440, belly = 0xc8b08a;
+  g.add(box(0.5, 0.5, 1.15, c, 0, 0.98, 0));
+  g.add(box(0.4, 0.2, 0.9, belly, 0, 0.78, 0));
+  g.add(box(0.2, 0.55, 0.22, c, 0, 1.32, -0.55, ), box(0.24, 0.24, 0.38, c, 0, 1.55, -0.72));
+  g.add(box(0.12, 0.1, 0.12, 0x2a1e14, 0, 1.52, -0.93));
+  g.add(box(0.06, 0.16, 0.04, c, -0.12, 1.72, -0.66), box(0.06, 0.16, 0.04, c, 0.12, 1.72, -0.66));
+  if (r() < 0.5) for (const s of [-1, 1]) { g.add(box(0.03, 0.28, 0.03, 0xd8ccb0, s * 0.08, 1.82, -0.7)); g.add(box(0.16, 0.03, 0.03, 0xd8ccb0, s * 0.14, 1.92, -0.7)); }  // antlers
+  g.add(box(0.14, 0.14, 0.06, 0xf0e8d8, 0, 1.05, 0.6));
+  for (const [x, z] of [[-0.16, -0.42], [0.16, -0.42], [-0.16, 0.42], [0.16, 0.42]]) { const l = leg(0.1, 0.74, 0x6a4a30, x, 0.74, z); legs.push(l); g.add(l); }
+  return { g, legs };
+}
+function makeBear(r) {
+  const g = new THREE.Group(), legs = [];
+  const c = r() < 0.5 ? 0x3e2c1e : 0x4a3424;
+  g.add(box(0.95, 0.85, 1.6, c, 0, 1.0, 0));
+  g.add(box(0.85, 0.3, 0.6, c, 0, 1.45, -0.35));                     // shoulder hump
+  g.add(box(0.55, 0.5, 0.55, c, 0, 1.1, -1.0));
+  g.add(box(0.3, 0.24, 0.24, 0x5e4430, 0, 1.0, -1.32));
+  g.add(box(0.1, 0.08, 0.04, 0x141010, 0, 1.06, -1.45));
+  g.add(box(0.12, 0.12, 0.06, c, -0.2, 1.4, -0.95), box(0.12, 0.12, 0.06, c, 0.2, 1.4, -0.95));
+  g.add(box(0.06, 0.06, 0.02, 0x0a0806, -0.13, 1.18, -1.28), box(0.06, 0.06, 0.02, 0x0a0806, 0.13, 1.18, -1.28));
+  for (const [x, z] of [[-0.32, -0.55], [0.32, -0.55], [-0.32, 0.55], [0.32, 0.55]]) { const l = leg(0.28, 0.62, c, x, 0.62, z); legs.push(l); g.add(l); }
+  return { g, legs };
+}
+function makeChicken(r) {
+  const g = new THREE.Group(), legs = [], wings = [];
+  const c = r() < 0.6 ? 0xeee6d6 : 0x9a6a3a;
+  g.add(box(0.26, 0.24, 0.36, c, 0, 0.32, 0));
+  g.add(box(0.16, 0.18, 0.16, c, 0, 0.5, -0.18));
+  g.add(box(0.06, 0.08, 0.1, 0xc8302a, 0, 0.63, -0.18));             // comb
+  g.add(box(0.06, 0.04, 0.08, 0xe0a030, 0, 0.48, -0.3));
+  g.add(box(0.12, 0.2, 0.08, c, 0, 0.42, 0.2));                       // tail
+  for (const s of [-1, 1]) { const w = new THREE.Group(); w.position.set(s * 0.13, 0.36, 0); w.add(box(0.04, 0.16, 0.26, c, 0, 0, 0)); wings.push(w); g.add(w); }
+  for (const s of [-1, 1]) { const l = leg(0.03, 0.2, 0xe0a030, s * 0.06, 0.2, 0); legs.push(l); g.add(l); }
+  return { g, legs, wings };
+}
+const MAKERS = { pig: makePig, cow: makeCow, bird: makeBird, deer: makeDeer, bear: makeBear, chicken: makeChicken };
 
 export class Animals {
   constructor(game) {
@@ -75,9 +125,10 @@ export class Animals {
     this.list = [];
     this.herds = [];
     const w = game.world;
-    const mul = DIFF[game.cfg.difficulty].animals;
+    this.town = !!game.townMode;
+    const mul = this.town ? 1.6 : DIFF[game.cfg.difficulty].animals;
     this.target = Math.max(4, Math.round(w.W * w.D / 9000 * mul));
-    this.respawnEvery = DIFF[game.cfg.difficulty].animalRespawn;
+    this.respawnEvery = this.town ? 45 : DIFF[game.cfg.difficulty].animalRespawn;
     this.respawnTimer = this.respawnEvery;
     this.r = Math.random;
     for (let i = 0; i < this.target; i++) this.spawnHerd(false);
@@ -86,8 +137,43 @@ export class Animals {
 
   pickType() {
     const v = this.r();
+    if (this.town) {
+      const mix = TOWN_MIX[this.game.season ? this.game.season() : 'summer'];
+      let acc = 0;
+      for (const [k, p] of Object.entries(mix)) { acc += p; if (v < acc) return k; }
+      return 'deer';
+    }
     return v < 0.38 ? 'pig' : v < 0.68 ? 'cow' : 'bird';
   }
+  // Town Life: wild groups stay out of the village and the cottage yard
+  wildOk(x, z) {
+    if (!this.town) return true;
+    for (const s of this.game.world.sites) {
+      const r = s.type === 'village' ? s.radius + 8 : s.type === 'cabin' ? 22 : 0;
+      if (r && Math.hypot(x - (s.cx ?? s.x), z - (s.cz ?? s.z)) < r) return false;
+    }
+    return true;
+  }
+  // farm animals: they stay inside their pen. owner 'player' or 'village'
+  addLivestock(type, pen, owner, at = null) {
+    const x = at ? at.x : pen.x0 + 1.5 + this.r() * (pen.x1 - pen.x0 - 2), z = at ? at.z : pen.z0 + 1.5 + this.r() * (pen.z1 - pen.z0 - 2);
+    const herd = { type, cx: x, cz: z, moveT: 9999, members: [], airborne: false, pen, owner };
+    const y = this.ground(x, z, this.game.world.surfaceY(Math.floor(x), Math.floor(z)) + 1) ?? (this.game.world.surfaceY(Math.floor(x), Math.floor(z)) + 1);
+    const a = this.add(type, herd, x, y, z);
+    a.owner = owner; a.pen = pen; a.state = 'calm';
+    this.herds.push(herd);
+    return a;
+  }
+  // a new season: some far-away wild groups move on and others arrive
+  reseason() {
+    if (!this.town) return;
+    const p = this.game.player.pos;
+    for (const h of this.herds.slice()) {
+      if (h.pen || !h.members.length) continue;
+      if (Math.hypot(h.cx - p.x, h.cz - p.z) > 90 && this.r() < 0.5) for (const a of h.members.slice()) this.remove(a);
+    }
+  }
+  wildCount() { return this.herds.filter((h) => !h.pen).length; }
 
   // standing height at column (x,z) near y, or null if unwalkable/water
   ground(x, z, y) {
@@ -110,6 +196,7 @@ export class Animals {
     for (let tries = 0; tries < 40; tries++) {
       const x = 8 + this.r() * (w.W - 16), z = 8 + this.r() * (w.D - 16);
       if (awayFromPlayer && Math.hypot(x - p.x, z - p.z) < 50) continue;
+      if (!this.wildOk(x, z)) continue;
       const sy = w.surfaceY(Math.floor(x), Math.floor(z));
       if (sy < SEA || w.get(Math.floor(x), sy + 1, Math.floor(z)) === B.WATER) continue;
       const type = this.pickType();
@@ -153,6 +240,7 @@ export class Animals {
 
   // How far away this animal notices the player (sneaking from behind is best)
   senseRange(a) {
+    if (a.owner) return 0;            // farm animals are used to people
     const pl = this.game.player;
     const moving = Math.hypot(pl.vel.x, pl.vel.z) > 0.5;
     let r = pl.crouch ? (moving ? 2.0 : 1.2) : pl.running ? 18 : moving ? 9 : 4.5;
@@ -224,12 +312,14 @@ export class Animals {
     g.particles.burst(a.pos.x, a.pos.y + a.T.height * 0.6, a.pos.z, col, g.settings.blood ? 6 : 4, 1.2, 0.6, 14);
     if (a.hp <= 0) {
       a.state = 'dead'; a.dead = 0;
+      if (this.onKill) this.onKill(a);
       if (a.type === 'pig') sfx.squeal(0.8);
       // a silent kill on an unaware animal doesn't alarm the rest of the herd
       if (!(silent && unaware)) this.alarm(a.herd, g.player.pos);
       return true;
     }
     if (a.type === 'pig') sfx.squeal(0.7);
+    if (a.T.fierce) { a.rage = 30; sfx.growl(1); }
     this.alarm(a.herd, g.player.pos);
     return false;
   }
@@ -256,12 +346,13 @@ export class Animals {
         if (a.type === 'pig') sfx.pig(1 - d / 25); else if (a.type === 'cow') sfx.cow(1 - d / 30); else sfx.flap(1 - d / 25);
       }
       if (a.type === 'bird' && (a.state !== 'calm')) this.updateFlying(a, dt, d);
+      else if (a.T.fierce && this.updateBear(a, dt, d)) { /* charging */ }
       else this.updateWalker(a, dt);
       // calls
       a.callT -= dt;
       if (a.callT <= 0) {
         a.callT = 8 + this.r() * 20;
-        if (d < 28) { const v = 1 - d / 28; if (a.type === 'pig') sfx.pig(v); else if (a.type === 'cow') sfx.cow(v); else sfx.bird(v); }
+        if (d < 28) { const v = 1 - d / 28; if (a.type === 'pig') sfx.pig(v); else if (a.type === 'cow') sfx.cow(v); else if (a.type === 'chicken') sfx.cluck(v); else if (a.type === 'bear') sfx.growl(v * 0.7); else if (a.type === 'deer') { if (this.r() < 0.3) sfx.deer(v); } else sfx.bird(v); }
       }
       a.mesh.position.copy(a.pos);
       a.mesh.rotation.y = a.yaw;
@@ -270,7 +361,7 @@ export class Animals {
     this.respawnTimer -= dt;
     if (this.respawnTimer <= 0) {
       this.respawnTimer = this.respawnEvery;
-      if (this.herds.length < this.target) this.spawnHerd(true);
+      if ((this.town ? this.wildCount() : this.herds.length) < this.target) this.spawnHerd(true);
     }
   }
 
@@ -281,11 +372,14 @@ export class Animals {
       speed = a.T.flee;
       const dx = a.pos.x - a.from.x, dz = a.pos.z - a.from.z, dd = Math.hypot(dx, dz) || 1;
       tx = a.pos.x + dx / dd * 4 + (this.r() - 0.5); tz = a.pos.z + dz / dd * 4 + (this.r() - 0.5);
+      if (a.pen) { tx = Math.max(a.pen.x0 + 1.2, Math.min(a.pen.x1 - 0.2, tx)); tz = Math.max(a.pen.z0 + 1.2, Math.min(a.pen.z1 - 0.2, tz)); }
       if (a.timer <= 0) { a.state = 'calm'; a.alarmed = false; a.herd.cx = a.pos.x; a.herd.cz = a.pos.z; a.target = null; }
     } else {
       if (!a.target || a.timer <= 0) {
         a.timer = 3 + this.r() * 6;
-        a.target = this.r() < 0.45 ? null : { x: a.herd.cx + (this.r() - 0.5) * 10, z: a.herd.cz + (this.r() - 0.5) * 10 };
+        const pen = a.pen;
+        a.target = this.r() < 0.45 ? null : pen ? { x: pen.x0 + 1.5 + this.r() * (pen.x1 - pen.x0 - 2), z: pen.z0 + 1.5 + this.r() * (pen.z1 - pen.z0 - 2) }
+          : { x: a.herd.cx + (this.r() - 0.5) * 10, z: a.herd.cz + (this.r() - 0.5) * 10 };
         if (!a.target) a.timer = 2 + this.r() * 4; // graze / peck
       }
       if (a.target) {
@@ -348,8 +442,59 @@ export class Animals {
     }
   }
 
+  // Bears: when hurt, or when you come too close, they charge and swipe.
+  updateBear(a, dt, d) {
+    const g = this.game, pl = g.player.pos;
+    a.rage = Math.max(0, (a.rage || 0) - dt);
+    if (d < 11 && !g.dead) a.rage = Math.max(a.rage, 6);
+    if (a.rage <= 0 || g.dead) return false;
+    const dx = pl.x - a.pos.x, dz = pl.z - a.pos.z, dd = Math.hypot(dx, dz) || 1;
+    a.yaw = Math.atan2(-dx, -dz);
+    a.swipeT = (a.swipeT || 0) - dt;
+    if (dd < 1.9 && Math.abs(pl.y - a.pos.y) < 2) {
+      a.speed = 0;
+      if (a.swipeT <= 0) { a.swipeT = 1.5; sfx.growl(1); g.damage(12, 'bear', a.pos); }
+    } else {
+      const sp = a.T.flee, nx = a.pos.x + dx / dd * sp * dt, nz = a.pos.z + dz / dd * sp * dt;
+      const gy = this.ground(nx, nz, a.pos.y);
+      if (gy != null && Math.abs(gy - a.pos.y) <= 1.05) { a.pos.x = nx; a.pos.z = nz; a.pos.y += (gy - a.pos.y) * Math.min(1, dt * 10); }
+      a.speed = sp;
+      if (this.r() < dt * 0.4) sfx.growl(0.8);
+    }
+    a.phase += dt * a.speed * 5;
+    const s = a.speed > 0 ? Math.sin(a.phase) * 0.7 : 0;
+    a.legs.forEach((l, i) => { l.rotation.x = (i % 2 === (i < 2 ? 0 : 1)) ? s : -s; });
+    return true;
+  }
+  // Town Life: dead animals stay as carcasses until skinned (meat and hides)
+  nearestCarcass(pos, r = 2.6) {
+    let best = null, bd = r;
+    for (const a of this.list) if (a.state === 'dead' && a.dead > 1 && !a.skinned) { const d = Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z); if (d < bd && Math.abs(a.pos.y - pos.y) < 2.5) { bd = d; best = a; } }
+    return best;
+  }
+  skin(a) {
+    const g = this.game;
+    a.skinned = true;
+    g.give('meat_raw', a.T.meat);
+    if (a.T.hide) g.give(a.T.hide, a.T.hides || 1);
+    if (a.ownerCrime) a.ownerCrime(a);
+    a.dead = Math.max(a.dead, 1e9);
+    this.remove(a);
+    return true;
+  }
+  toSaveLivestock() { return this.list.filter((a) => a.owner === 'player' && a.state !== 'dead').map((a) => ({ type: a.type, x: +a.pos.x.toFixed(1), z: +a.pos.z.toFixed(1), milk: a.milkT || 0, egg: a.eggT || 0 })); }
+
   updateDead(a, dt) {
     a.dead += dt;
+    if (this.town) {
+      // carcass: stays until skinned (or for a few minutes)
+      a.mesh.rotation.z = Math.min(Math.PI / 2, a.dead * 5);
+      if (a.type === 'bird' && a.pos.y > 0) { const gy = this.ground(a.pos.x, a.pos.z, a.pos.y); if (gy == null || a.pos.y > gy + 0.05) a.pos.y -= dt * 8; if (gy != null && a.pos.y < gy) a.pos.y = gy; }
+      a.mesh.position.copy(a.pos);
+      if (!a.counted && a.dead > 1) { a.counted = true; if (!a.owner) this.game.stats.animals = (this.game.stats.animals || 0) + 1; }
+      if (a.dead > 240) this.remove(a);
+      return;
+    }
     a.mesh.rotation.z = Math.min(Math.PI / 2, a.dead * 5);
     if (a.type === 'bird' && a.pos.y > 0) {
       const gy = this.ground(a.pos.x, a.pos.z, a.pos.y);

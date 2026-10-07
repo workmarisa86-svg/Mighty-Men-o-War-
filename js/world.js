@@ -13,6 +13,7 @@ export class World {
     this.glow = new Uint8Array(this.W * this.D * this.H);
     this.forts = [];
     this.edits = new Map();
+    this.editsVersion = 0;     // bumps on every change (Town Life saves edits only when it moved)
     this.cx = Math.ceil(this.W / CHUNK);
     this.cz = Math.ceil(this.D / CHUNK);
     this.dirty = new Set();
@@ -38,6 +39,7 @@ export class World {
     const old = this.data[i];
     this.data[i] = id;
     this.edits.set(i, id);
+    this.editsVersion++;
     this.markDirty(x, z);
     if (this.onSet) this.onSet(x, y, z, old, id);
     return true;
