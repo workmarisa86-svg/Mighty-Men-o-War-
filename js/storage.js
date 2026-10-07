@@ -54,7 +54,8 @@ export const DEFAULT_SETTINGS = {
   music: 0.45,
   musicMute: false,
   touchSize: 'm',
-  perf: 'normal',      // 'smooth': shorter view and lighter effects for a steadier frame rate
+  perf: 'normal',
+  awareness: true,     // War: the eye over enemies who are noticing you      // 'smooth': shorter view and lighter effects for a steadier frame rate
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
 export function saveSettings(s) { save('settings', s); }
@@ -79,7 +80,7 @@ export function readSave(id) { return load('save-' + id, null); }
 export function writeSave(data) {
   const idx = load('saves', []).filter((m) => m.id !== data.id);
   const meta = {
-    id: data.id, name: data.name, mode: data.cfg.mode, sub: data.cfg.sub,
+    id: data.id, name: data.name, mode: data.cfg.mode, sub: data.cfg.sub, side: data.cfg.side,
     difficulty: data.cfg.difficulty, timeMode: data.cfg.timeMode || 'cycle', day: Math.floor(data.time || 0) + 1,
     gameType: data.cfg.gameType || 'open', mission: data.cfg.mission || null, v: data.v || 1,
     missionDone: data.mission ? data.mission.done && data.mission.result : null,

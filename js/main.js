@@ -1,6 +1,6 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
-import { GAME_VERSION, SAVE_FORMAT, DIFF, QUALITY } from './config.js';
+import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
 import { TOWN_SIZE } from './towngen.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
@@ -88,40 +88,22 @@ class App {
     if (this.game) this.game.resize();
   }
 
-  newGame({ mode = 'war', sub, difficulty, timeMode = 'cycle', name, gameType = 'open', mission = null }) {
-    const size = DIFF[difficulty].size;
+  // War: side ('allies' | 'axis'), difficulty; day and night always cycle
+  newGame({ side = 'allies', difficulty = 'medium', name, gameType = 'open' }) {
+    const size = WAR_SIZE, mode = 'war', sub = 'allies', timeMode = 'cycle', mission = null;
     const now = Date.now();
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now,
-      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, difficulty, timeMode, gameType, mission },
+      cfg: { seed: (Math.random() * 2 ** 31) | 0, size, mode, sub, side, difficulty, timeMode, gameType, mission },
     });
   }
   loadGame(id) {
     const s = readSave(id);
     if (!s) return;
     // worlds from earlier stages: keep the name and settings, rebuild the world
-    if ((s.v || 1) < SAVE_FORMAT) {
-      const keep = { v: SAVE_FORMAT, id: s.id, name: s.name, created: s.created, updated: Date.now(), cfg: Object.assign({ gameType: 'open', timeMode: 'cycle' }, s.cfg), stats: s.stats };
-      this.startGame(keep);
-      return;
-    }
+    if ((s.v || 1) < SAVE_FORMAT) return;    // old War saves can't be converted (cleared from the War menu)
     this.startGame(s);
   }
-  // after a mission: same mission again (fresh world), or carry on in this world
-  replayMission() {
-    const c = this.game.cfg;
-    const name = this.game.save.name;
-    this.quitToMenu(true);
-    this.newGame({ mode: c.mode, sub: c.sub, difficulty: c.difficulty, timeMode: c.timeMode, name, gameType: 'mission', mission: c.mission });
-  }
-  continueOpenWorld() {
-    const g = this.game;
-    g.cfg.gameType = 'open'; g.cfg.mission = null; g.mission = null;
-    if (g.enemies) g.enemies.noDispatch = false;
-    this.saveGame(true);
-    this.closePanel();
-  }
-
   async startGame(save) {
     stopMusic();
     this.ui.show('loading');

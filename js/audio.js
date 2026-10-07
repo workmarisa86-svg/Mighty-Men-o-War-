@@ -74,6 +74,7 @@ export const sfx = {
   error() { tone(200, 0.15, { type: 'square', gain: 0.06, freqEnd: 150 }); },
   // gunshots: sharp crack + body thump; vol falls off with distance (0..1)
   shot(kind, vol = 1) {
+    if (kind === 'suppressed') { noise(0.07, { type: 'bandpass', freq: 1400, gain: 0.12 * vol, q: 1.2 }); tone(180, 0.05, { type: 'triangle', gain: 0.05 * vol, freqEnd: 90 }); return; }
     const g = { pistol: 0.45, rifle: 0.7, sniper: 0.85, smg: 0.38 }[kind] || 0.5;
     const f = { pistol: 1800, rifle: 1200, sniper: 900, smg: 2000 }[kind] || 1500;
     noise(0.05, { type: 'highpass', freq: f, gain: g * vol });

@@ -5,7 +5,7 @@ import { buildAtlas, cubeIcon } from './textures.js';
 export const ITEMS = {
   shovel: { tool: 'shovel' },
   flint: { tool: 'flint' },
-  knife: { weapon: true }, pistol: { weapon: true }, rifle: { weapon: true },
+  knife: { weapon: true }, pistol: { weapon: true }, spistol: { weapon: true }, rifle: { weapon: true },
   sniper: { weapon: true }, smg: { weapon: true },
   grenade: { throwable: true }, smoke: { throwable: true },
   dirt: { block: B.DIRT, tiles: ['dirt_top', 'dirt'] },
@@ -42,7 +42,7 @@ export const ITEMS = {
   chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
-export const WEAPON_IDS = ['knife', 'pistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
+export const WEAPON_IDS = ['knife', 'pistol', 'spistol', 'rifle', 'sniper', 'smg', 'grenade', 'smoke'];
 export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 
 // Crafting happens at a campfire. Weapon times rise 2 s per level of
@@ -52,6 +52,7 @@ export const RECIPE_CATS = ['weapons', 'defense', 'gear', 'transport', 'food', '
 export const RECIPES = [
   { id: 'knife', cat: 'weapons', needs: { iron: 1, wood: 1 }, time: 5 },
   { id: 'pistol', cat: 'weapons', needs: { iron: 2, wood: 1 }, time: 7 },
+  { id: 'spistol', cat: 'weapons', needs: { pistol: 1, iron: 2 }, time: 9 },
   { id: 'rifle', cat: 'weapons', needs: { iron: 3, wood: 2 }, time: 9 },
   { id: 'sniper', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 11 },
   { id: 'smg', cat: 'weapons', needs: { iron: 5, wood: 1 }, time: 13 },
@@ -76,7 +77,7 @@ export const RECIPES = [
   { id: 'fence', cat: 'materials', needs: { wood: 2 }, time: 3, out: 3, town: true },
 ];
 // which recipes each game offers
-const WAR_ONLY = ['grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg'];
+const WAR_ONLY = ['grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
 export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) : !r.town); }
 
 const ICON_DRAW = {
@@ -105,6 +106,10 @@ const ICON_DRAW = {
     c.fillStyle = '#3c3e36'; c.fillRect(8, 14, 30, 3);
     c.fillStyle = '#5a4430'; c.beginPath(); c.moveTo(12, 24); c.lineTo(20, 24); c.lineTo(18, 38); c.lineTo(10, 38); c.fill();
     c.strokeStyle = '#2e302a'; c.lineWidth = 2; c.beginPath(); c.arc(22, 26, 3, 0, Math.PI); c.stroke();
+  },
+  spistol(c) {
+    ICON_DRAW.pistol(c);
+    c.fillStyle = '#1e201c'; c.fillRect(36, 15, 10, 6); c.fillStyle = '#4a4c46'; c.fillRect(37, 16, 8, 1);
   },
   rifle(c) {
     c.fillStyle = '#6a4a2e'; c.beginPath(); c.moveTo(2, 28); c.lineTo(14, 24); c.lineTo(30, 24); c.lineTo(30, 28); c.lineTo(10, 34); c.fill();

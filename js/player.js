@@ -78,7 +78,7 @@ export class Player {
   nearLog(world) {
     const ys = [this.pos.y + 0.2, this.pos.y + 1.1];
     for (const y of ys) for (const [dx, dz] of [[HW + 0.15, 0], [-HW - 0.15, 0], [0, HW + 0.15], [0, -HW - 0.15]]) {
-      if (world.get(Math.floor(this.pos.x + dx), Math.floor(y), Math.floor(this.pos.z + dz)) === B.LOG) return true;
+      const b = world.get(Math.floor(this.pos.x + dx), Math.floor(y), Math.floor(this.pos.z + dz)); if (b === B.LOG || b === B.LADDER) return true;
     }
     return false;
   }

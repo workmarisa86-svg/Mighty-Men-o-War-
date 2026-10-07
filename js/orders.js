@@ -9,9 +9,9 @@ import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { FORMATIONS } from './soldiers.js';
 
-const SHORT = ['follow', 'hold', 'defend', 'spread', 'cover', 'attack'];
-export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack'];
-const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', formation: '&#8942;' };
+const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract'];
+export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract'];
+const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', formation: '&#8942;' };
 
 export class OrderWheel {
   constructor(game) {
@@ -53,7 +53,7 @@ export class OrderWheel {
     return { soldier: hit ? hit.soldier : null, point, fort };
   }
 
-  // short = the phone quick list: Follow me, Hold, Defend, Spread out, Take cover, Attack
+  // short = the phone quick list: Hold, Defend, Spread out, Take cover, Attack, Distract
   open(short = false) {
     if (!this.enabled) return;
     this.isOpen = true; this.sel = -1; this.vx = this.vy = 0; this.short = short;
@@ -100,7 +100,7 @@ export class OrderWheel {
     if (g.dead) this.close();
   }
 
-  recipients(cmd) { return this.game.enemies.recipients(this.at && this.at.soldier, cmd); }
+  recipients(cmd) { return this.game.enemies.recipients(this.at && this.at.soldier, cmd, this.at && this.at.point); }
 
   issue(i) {
     const g = this.game, E = g.enemies, cmd = ORDERS[i];

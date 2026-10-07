@@ -66,7 +66,7 @@ export class Input {
   setupTouch(root) {
     root.classList.add('active');
     const stick = root.querySelector('.stick'), knob = root.querySelector('.knob');
-    let stickId = null, lookId = null, sx = 0, sy = 0, lx = 0, ly = 0;
+    let stickId = null, lookId = null, sx = 0, sy = 0, lx = 0, ly = 0, tapT = 0, tapMove = 0;
     const R = 50;
     root.addEventListener('touchstart', (e) => {
       if (!this.enabled) return;
@@ -82,7 +82,7 @@ export class Input {
         if (t.clientX < innerWidth * 0.4 && stickId === null) {
           stickId = t.identifier; sx = t.clientX; sy = t.clientY;
           stick.style.left = (sx - 60) + 'px'; stick.style.top = (sy - 60) + 'px'; stick.classList.add('show');
-        } else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
+        } else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; tapT = performance.now(); tapMove = 0; }
       }
       e.preventDefault();
     }, { passive: false });
@@ -94,7 +94,7 @@ export class Input {
           knob.style.transform = `translate(${dx}px, ${dy}px)`;
           this.move.x = dx / R; this.move.y = dy / R;
         } else if (t.identifier === lookId) {
-          this.mouse.dx += (t.clientX - lx) * 2.2; this.mouse.dy += (t.clientY - ly) * 2.2;
+          this.mouse.dx += (t.clientX - lx) * 2.2; this.mouse.dy += (t.clientY - ly) * 2.2; tapMove += Math.abs(t.clientX - lx) + Math.abs(t.clientY - ly);
           lx = t.clientX; ly = t.clientY;
         }
       }
@@ -103,7 +103,8 @@ export class Input {
     const end = (e) => {
       for (const t of e.changedTouches) {
         if (t.identifier === stickId) { stickId = null; this.move.x = this.move.y = 0; knob.style.transform = ''; stick.classList.remove('show'); }
-        if (t.identifier === lookId) lookId = null;
+        // a quick tap without dragging on the look side: use what you aim at
+        if (t.identifier === lookId) { lookId = null; if (performance.now() - tapT < 280 && tapMove < 14) this.touchPressed.add('tap'); }
         root.querySelectorAll('[data-btn].down').forEach((b) => {
           if (b.dataset.tid == t.identifier) { b.classList.remove('down'); this.touchBtn.delete(b.dataset.btn); }
         });

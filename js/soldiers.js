@@ -12,7 +12,14 @@ import { DIFF, SEA } from './config.js';
 import { B, SOLID } from './blocks.js';
 import { sfx } from './audio.js';
 import { t } from './i18n.js';
+import { MAIN_NATIONS } from './nations.js';
 import { Character, FACTIONS } from './characters.js';
+
+// Follow me: the spacing in the single-file line, in metres (first follower
+// this far behind you, each next one this far behind the one in front).
+// Blocks are about 0.88 m, so it is converted to blocks here.
+export const FOLLOW_GAP_M = 1.0;
+const FOLLOW_GAP = FOLLOW_GAP_M / 0.88;
 
 export { FACTIONS };
 
@@ -36,7 +43,7 @@ const PATROLS = { beginner: 1, easy: 2, medium: 2, hard: 3, impossible: 3 };
 const PATROL_SIZE = { beginner: [3, 4], easy: [4, 4], medium: [4, 5], hard: [5, 6], impossible: [5, 6] };
 const GUARDS = { beginner: 2, easy: 2, medium: 2, hard: 3, impossible: 3 };   // never leave their fort
 // roles that belong to the player's own squad
-export const PSQ = new Set(['follow', 'hold', 'defend', 'cover', 'advance', 'attack']);
+export const PSQ = new Set(['follow', 'hold', 'defend', 'cover', 'advance', 'attack', 'distract']);
 export const FORMATIONS = ['loose', 'line', 'column'];
 
 const MATS = {};
@@ -51,7 +58,7 @@ const RANKS = { rifleman: 'Pvt.', grenadier: 'Pvt.', gunner: 'Cpl.', sniper: 'Cp
 const SEATS = [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]];
 
 // Order markers over allies' heads (one small icon per order).
-export const ORDER_COLORS = { follow: '#a8dcff', hold: '#ffd060', defend: '#7ad07a', cover: '#c8a0ff', advance: '#ffa050', attack: '#ff6a5a', squad: '#4a96e8', garrison: '#4a96e8', rejoin: '#4a96e8', scatter: '#4a96e8' };
+export const ORDER_COLORS = { follow: '#a8dcff', hold: '#ffd060', defend: '#7ad07a', cover: '#c8a0ff', advance: '#ffa050', attack: '#ff6a5a', distract: '#ffe07a', rest: '#4a96e8', guard: '#4a96e8', fpatrol: '#4a96e8', squad: '#4a96e8', garrison: '#4a96e8', rejoin: '#4a96e8', scatter: '#4a96e8' };
 const markerTex = {};
 function marker(kind, selected) {
   const key = kind + (selected ? '*' : '');
@@ -66,6 +73,7 @@ function marker(kind, selected) {
   else if (kind === 'defend') { x.moveTo(24, 10); x.lineTo(36, 15); x.lineTo(34, 30); x.lineTo(24, 38); x.lineTo(14, 30); x.lineTo(12, 15); x.closePath(); }
   else if (kind === 'cover') { x.arc(24, 30, 12, Math.PI, 0); x.closePath(); }
   else if (kind === 'advance') { x.moveTo(24, 9); x.lineTo(37, 26); x.lineTo(29, 26); x.lineTo(29, 38); x.lineTo(19, 38); x.lineTo(19, 26); x.lineTo(11, 26); x.closePath(); }
+  else if (kind === 'distract') { x.moveTo(14, 18); x.lineTo(22, 18); x.lineTo(32, 10); x.lineTo(32, 38); x.lineTo(22, 30); x.lineTo(14, 30); x.closePath(); }
   else if (kind === 'attack') { x.arc(24, 24, 11, 0, Math.PI * 2); x.moveTo(24, 8); x.lineTo(24, 40); x.moveTo(8, 24); x.lineTo(40, 24); }
   else { x.moveTo(12, 14); x.lineTo(24, 33); x.lineTo(36, 14); x.lineTo(24, 20); x.closePath(); }
   x.stroke(); if (kind !== 'attack') x.fill(); else { x.strokeStyle = ORDER_COLORS.attack; x.lineWidth = 2; x.stroke(); }
@@ -97,7 +105,9 @@ class Soldier {
     this.animAcc = 0; this.full = true;
     this.idx = Soldier.count = (Soldier.count || 0) + 1; this.jit = Math.random() * 1.5;
     this.name = (RANKS[type] || 'Pvt.') + ' ' + NAMES[Math.floor(Math.random() * NAMES.length)];
-    this.rig = new Character(faction, type);
+    // home country: the player's side wears the chosen side's uniforms
+    this.nation = mgr.nationFor(faction);
+    this.rig = new Character(this.nation, type, Math.floor(Math.random() * 3));
     this.rig.setWeapon(this.weapon || 'knife');
     if (faction === 'ally') {
       this.mark = new THREE.Sprite(new THREE.SpriteMaterial({ map: marker('squad'), depthTest: false, transparent: true }));
@@ -127,6 +137,7 @@ export class Enemies {
     this.callT = 0; this.callCd = {};
     this.enabled = !game.townMode;      // no soldiers in Town Life
     this.diff = game.cfg.difficulty || 'medium';
+    this.side = game.cfg.side || 'allies';             // the player's side
     this.allies = game.cfg.sub === 'allies';
     this.dispatchT = { enemy: 40 + Math.random() * 30, ally: 60 + Math.random() * 40 };
     this.patrolT = { enemy: 4 + Math.random() * 6, ally: 8 + Math.random() * 8 };
@@ -146,6 +157,94 @@ export class Enemies {
     if (!this.enabled) return;
     this.populate('enemy', DIFF[this.diff].enemies);
     if (this.allies) this.populate('ally', DIFF[this.diff].allies, saved.followers ?? 4);
+    this.bodies = [];         // the fallen, until someone finds them
+    this.setupRoutines();
+  }
+
+  // which country a new soldier comes from (the side's main nations)
+  nationFor(faction) {
+    const side = faction === 'ally' ? this.side : this.side === 'allies' ? 'axis' : 'allies';
+    const list = MAIN_NATIONS[side];
+    return list[Math.floor(Math.random() * list.length)];
+  }
+  sideOf(faction) { return faction === 'ally' ? this.side : this.side === 'allies' ? 'axis' : 'allies'; }
+
+  // Daily life around each fort: some soldiers rest at a campfire, some
+  // stand guard at the door or on the ramparts, some walk a short patrol
+  // route. Each one always has a purpose (nobody wanders). The garrison
+  // still holds the fort and attack squads still go out.
+  setupRoutines() {
+    const g = this.game, w = g.world, D = DIFF[this.diff];
+    const forts = g.forts ? g.forts.list : [];
+    for (const f of forts) {
+      if (f.owner === 'none') continue;
+      const faction = f.owner, k = faction === 'enemy' ? D : { camp: 2, guards: 1, patrol: 0 };
+      // the camp: a fire beside the fort, away from the door
+      const ox = f.doorOut.x - f.cx, oz = f.doorOut.z - f.cz, L = Math.hypot(ox, oz) || 1;
+      const side = { x: -oz / L, z: ox / L };
+      let camp = null;
+      for (const dist of [15, 18, 21]) for (const sg of [1, -1]) {
+        if (camp) break;
+        const x = Math.floor(f.cx + side.x * dist * sg), z = Math.floor(f.cz + side.z * dist * sg);
+        const y = w.surfaceY(x, z) + 1;
+        if (y <= SEA || w.get(x, y, z) !== B.AIR || this.fortXZ(x, z)) continue;
+        camp = { x, y, z };
+      }
+      if (camp && k.camp) {
+        w.data[w.idx(camp.x, camp.y, camp.z)] = B.CAMPFIRE;           // part of the world, not a player edit
+        g.campfires.add(camp.x, camp.y, camp.z);
+        for (let i = 0; i < k.camp; i++) {
+          const a = i / k.camp * Math.PI * 2, sx = camp.x + 0.5 + Math.cos(a) * 1.6, sz = camp.z + 0.5 + Math.sin(a) * 1.6;
+          const sy = this.ground(sx, sz, camp.y + 1) ?? camp.y;
+          const s = this.add(faction, i === 0 ? 'gunner' : 'rifleman', sx, sy, sz, this.newSquad({ x: sx, z: sz }, faction), true);
+          s.setRole('rest'); s.home = f; s.spot = { x: sx, y: sy, z: sz }; s.face = { x: camp.x + 0.5, z: camp.z + 0.5 };
+        }
+      }
+      for (let i = 0; i < k.guards; i++) {
+        const p = i === 0 ? { x: f.doorOut.x + ox / L * 2.2, z: f.doorOut.z + oz / L * 2.2 } : (f.posts.find((q) => q.y > f.base + 1) || f.doorOut);
+        const y = p.y ?? this.ground(p.x, p.z, f.base + 2) ?? f.base;
+        const s = this.add(faction, 'rifleman', p.x, y, p.z, this.newSquad(p, faction), true);
+        s.setRole('guard'); s.home = f; s.spot = { x: p.x, y, z: p.z }; s.face = { x: p.x + (p.x - f.cx), z: p.z + (p.z - f.cz) };
+      }
+      if (k.patrol) {
+        const R = 15, route = [];
+        for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, x = f.cx + 0.5 + Math.cos(a) * R, z = f.cz + 0.5 + Math.sin(a) * R; const y = this.ground(x, z, f.base + 3); if (y != null) route.push({ x, y, z }); }
+        if (route.length >= 3) for (let i = 0; i < k.patrol; i++) {
+          const q = route[(i * 3) % route.length];
+          const s = this.add(faction, 'rifleman', q.x, q.y, q.z, this.newSquad(q, faction), true);
+          s.setRole('fpatrol'); s.home = f; s.route = route; s.wpI = (i * 3) % route.length;
+        }
+      }
+    }
+  }
+  // the daily routines; when alerted they fight near their spot, search
+  // where the noise or the body was, and calm down after a while
+  routineBehaviour(s, dt) {
+    const P = s.plan, tgt = s.target, f = s.home;
+    if (f && f.owner !== s.faction) { const own = this.ownForts(s.faction)[0]; if (own) this.joinGarrison(s, own); else s.setRole('scatter'); return; }
+    s.resting = s.role === 'rest' && !s.alerted;
+    const anchor = s.spot || (s.route && s.route[s.wpI]) || s.pos;
+    if (tgt) { s.calmT = 0; this.fieldCombat(s, dt, anchor, 12); return; }
+    if (s.alerted) {
+      s.calmT = (s.calmT || 0) + dt;
+      if (s.calmT > 40) { s.alerted = false; s.searchPos = null; s.aware = 0; s.calmT = 0; }   // nothing more: back to routine
+      else if (s.searchPos) {
+        const d = Math.hypot(s.searchPos.x - s.pos.x, s.searchPos.z - s.pos.z);
+        if (d > 2 && Math.hypot(s.searchPos.x - anchor.x, s.searchPos.z - anchor.z) < 30) { P.goal = s.searchPos; P.speed = 3.4; P.crouch = false; }
+        else { P.face = s.searchPos; s.yaw += Math.sin(s.calmT * 0.8) * dt * 0.8; }
+        return;
+      }
+    }
+    if (s.role === 'fpatrol') {
+      const q = s.route[s.wpI];
+      if (Math.hypot(q.x - s.pos.x, q.z - s.pos.z) < 1.2) s.wpI = (s.wpI + 1) % s.route.length;
+      P.goal = s.route[s.wpI]; P.speed = 1.6;
+      return;
+    }
+    const d = Math.hypot(s.spot.x - s.pos.x, s.spot.z - s.pos.z);
+    if (d > 0.7) { P.goal = s.spot; P.speed = s.alerted ? 3.4 : 2; return; }
+    P.face = s.face;
+    P.crouch = s.role === 'rest';                         // sitting round the fire
   }
 
   // Every soldier starts in one of his side's forts (plus the player's squad).
@@ -342,36 +441,90 @@ export class Enemies {
       .filter((c) => c.d < s.T.range + 20).sort((a, b) => a.d - b.d).slice(0, 4);
     for (const { h, d } of cands) {
       let sight = 75;
-      if (h.kind === 'player') {
-        if (night && !g.lightOn) sight = 22;
-        if (pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) < 0.5) sight *= 0.6;
-      } else if (night) sight = 28;
+      if (h.kind === 'player') sight = this.playerSight(s, d);
+      else if (night) sight = 28;
       if (d > sight) continue;
-      // unaware soldiers only look ahead; up close they hear footsteps (not sneaking)
-      const footsteps = h.kind !== 'player' ? d < 5 : (d < 4 && !pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) > 0.5);
+      // unaware soldiers only look ahead; up close they hear footsteps (not sneaking,
+      // and less in rain or snow)
+      const quiet = g.weather.rain > 0.3 ? 0.6 : 1;
+      const footsteps = h.kind !== 'player' ? d < 5 : (!pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) > 0.5 && d < (pl.running ? 9 : 4) * quiet);
       if (!s.alerted && !footsteps) {
+        // unaware: they look ahead; a light or a muzzle flash catches the eye from the side too
+        const lit = h.kind === 'player' && (g.lightOn || g.shotT > 0);
         const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
-        if (((h.pos.x - s.pos.x) * fx + (h.pos.z - s.pos.z) * fz) / (d || 1) < 0.3) continue;
+        if (((h.pos.x - s.pos.x) * fx + (h.pos.z - s.pos.z) * fz) / (d || 1) < (lit ? -0.4 : 0.3)) continue;
       }
       const tgt = h.kind === 'player' ? pl.eye() : new THREE.Vector3(h.pos.x, h.pos.y + (h.kind === 'tank' ? 1.4 : 1.5), h.pos.z);
       if (g.explosives.smokeBlocks(eye, tgt)) continue;
       const low = new THREE.Vector3(tgt.x, h.pos.y + 0.9, tgt.z);
-      if (this.clearLine(eye, tgt, 'sight') || this.clearLine(eye, low, 'sight')) return h;
+      if (this.clearLine(eye, tgt, 'sight') || this.clearLine(eye, low, 'sight')) {
+        if (h.kind !== 'player' || s.faction !== 'enemy') return h;
+        // the player is noticed gradually: closer, brighter and louder is faster
+        const gain = Math.max(0.2, Math.min(1, 1.3 - d / sight)) * (s.resting ? 0.5 : 1) * (s.alerted ? 2.5 : 1) * (footsteps ? 1.6 : 1);
+        s.aware = Math.min(1.2, (s.aware || 0) + 0.7 * gain);
+        s.seenPlayer = true;
+        if (s.aware >= 1) return h;
+        s.searchPos = h.pos.clone();          // something there: he turns to look
+      }
     }
     return null;
   }
+  // How far this soldier can make out the player right now. Darkness, cover
+  // and crouching hide you; light (campfires, your flashlight, lit forts),
+  // running close by and gunfire give you away.
+  playerSight(s, d) {
+    const g = this.game, pl = g.player, day = g.sky.daylight;
+    const moving = Math.hypot(pl.vel.x, pl.vel.z) > 0.5;
+    let R = 7 + 63 * day;
+    if (pl.crouch) R *= moving ? 0.7 : 0.5;
+    if (g.weather.rain > 0.3) R *= 0.85;
+    if (g.lightOn) R = Math.max(R, 90);                                   // the beam is seen from far away
+    if (g.campfires.near(pl.pos, 5)) R = Math.max(R, 38);
+    if (day < 0.5 && this.inFortLight(pl.pos)) R = Math.max(R, 34);
+    if (pl.running && moving && d < 14) R = Math.max(R, 16);
+    if (g.shotT > 0) R = Math.max(R, 70);                                 // muzzle flash
+    if (s.resting) R *= 0.6;
+    return R;
+  }
+  inFortLight(p) { return !!this.game.forts && this.game.forts.list.some((f) => Math.hypot(f.cx + 0.5 - p.x, f.cz + 0.5 - p.z) < 16); }
   canSee(s) { const h = this.findTarget(s); return !!h && h.kind === 'player'; }
+  // fallen comrades nobody has found yet: whoever sees one raises the alarm
+  lookForBodies(s) {
+    for (const b of this.bodies) {
+      if (b.found || b.faction !== s.faction || s.pos.distanceTo(b.pos) > 16) continue;
+      if (!this.clearLine(new THREE.Vector3(s.pos.x, s.pos.y + 1.6, s.pos.z), new THREE.Vector3(b.pos.x, b.pos.y + 0.4, b.pos.z), 'sight')) continue;
+      b.found = true;
+      this.alarm(s, b.pos);
+      if (this.game.bubbles) this.game.bubbles.say(s, t('call.bodyFound'), { kind: 'warn', silent: true });
+      for (const o of this.list) if (o.alive && o.faction === s.faction && o !== s && o.pos.distanceTo(s.pos) < 20) this.alarm(o, b.pos);
+      return;
+    }
+  }
   clearLine(a, b, mode) {
     const dir = new THREE.Vector3().subVectors(b, a);
     const len = dir.length(); dir.divideScalar(len);
     return !this.game.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, len, false, mode);
   }
+  // A noise (gunshot, blast): squads in range engage; garrisons, camps,
+  // guards and patrols turn toward it, take cover and search (rain and snow
+  // carry sound less far).
   hear(pos, radius, faction = 'enemy') {
+    if (this.game.weather.rain > 0.3) radius *= 0.7;
     for (const sq of this.squads) {
       if (sq.faction !== faction || sq.garrison) continue;
       const m = sq.members.find((s) => s.alive && s.pos.distanceTo(pos) < radius);
       if (m) this.alertSquad(sq, pos);
     }
+    for (const s of this.list) {
+      if (!s.alive || s.faction !== faction || s.inSquad || s.pos.distanceTo(pos) > radius) continue;
+      this.alarm(s, pos);
+    }
+  }
+  // alerted: he stops resting, looks for the cause and searches the area
+  alarm(s, pos) {
+    if (!s.alerted && s.resting) s.wakeT = 1.2;           // caught off guard
+    s.alerted = true; s.calmT = 0; s.searchPos = pos.clone ? pos.clone() : new THREE.Vector3(pos.x, pos.y, pos.z);
+    s.aware = Math.max(s.aware || 0, 0.8);
   }
   alertSquad(sq, pos) {
     if (!sq || sq.garrison || sq.player) return;
@@ -407,11 +560,13 @@ export class Enemies {
   select(s, on) { s.selected = on; s.refreshMark(); }
   clearSelection() { for (const s of this.list) if (s.selected) this.select(s, false); }
   // who an order goes to: the selected group, else one aimed soldier, else the whole squad
-  recipients(aimed, cmd) {
+  recipients(aimed, cmd, point = null) {
     const sel = this.selection();
     if (sel.length) return sel;
     if (aimed && aimed.alive && aimed.faction === 'ally') return [aimed];
     let group = this.squadMembers();
+    // Distract: the two soldiers of the squad nearest the spot
+    if (cmd === 'distract' && point) return group.slice().sort((a, b) => a.pos.distanceTo(point) - b.pos.distanceTo(point)).slice(0, 2);
     if (cmd === 'follow') {
       // "everyone, on me": nearby allies who are not guarding a fort join in
       const p = this.game.player.pos;
@@ -457,6 +612,7 @@ export class Enemies {
         else if (cmd === 'cover') { s.setRole('cover'); s.anchor = s.pos.clone(); s.threat = s.target ? s.target.pos.clone() : this.contactT < 20 && this.contactPos ? this.contactPos.clone() : this.aheadOfPlayer(25); }
         else if (cmd === 'advance') { s.setRole('advance'); s.dest = this.spreadAround(point, i, group.length, 2.6); }
         else if (cmd === 'attack') { s.setRole('attack'); s.attackFort = fort; }
+        else if (cmd === 'distract') { s.setRole('distract'); s.dest = this.spreadAround(point, i, group.length, 2.5); s.distractT = 0; s.noiseT = 0; }
       }
       s.markPop = 1;
       if (i < 3) this.acks.push({ s, key: 'ack' + cmd[0].toUpperCase() + cmd.slice(1), t: 0.25 + i * 0.7 });
@@ -672,9 +828,18 @@ export class Enemies {
       const p = this.findPath(s, gx, gy, gz);
       if (p && p.length) { s.path = p; s.pathGoal = { x: gx, z: gz }; }
     }
+    // wedged against something with a planned route: step on to its next
+    // point (a single block; never left sliding against a wall)
+    if (s.noProg >= 6 && s.path && s.path.length) {
+      const q = s.path.shift();
+      if (this.bodyFree(q.x, q.y, q.z)) { s.pos.set(q.x, q.y, q.z); s.noProg = 3; s.progD = null; return; }
+    }
     if (s.noProg >= 7) {
       const inS = this.fortXZ(s.pos.x, s.pos.z), inG = this.fortXZ(gx, gz), f = inG || inS || this.game.forts.nearest(s.pos);
-      if (!f || Math.hypot(f.cx - s.pos.x, f.cz - s.pos.z) > 30) return;    // open ground: the hole rule handles it
+      // open ground: the hole rule handles it (but a soldier under orders,
+      // stuck where you can't see him, is moved on toward his goal)
+      const cam = this.game.camera.position, seen = s.pos.distanceTo(cam) < 60 && ((s.pos.x - cam.x) * -Math.sin(this.game.player.yaw) + (s.pos.z - cam.z) * -Math.cos(this.game.player.yaw)) > 0;
+      if (!f || (Math.hypot(f.cx - s.pos.x, f.cz - s.pos.z) > 30 && !(s.inSquad && !seen && s.noProg >= 10))) return;
       const p = inG ? f.doorIn : f.doorOut;
       const y = inG ? f.base : (this.ground(p.x, p.z, f.base + 2) ?? f.base);
       s.pos.set(p.x, y, p.z); s.noProg = 0; s.progD = null; s.routing = inG ? 'in' : null; s.swimming = false;
@@ -734,6 +899,8 @@ export class Enemies {
     }
     this.acks = this.acks.filter((a) => a.t > 0);
     this.respawnPending(dt);
+    for (const b of this.bodies) b.t += dt;
+    this.bodies = this.bodies.filter((b) => b.t < 90);
     for (const f of this.fires) { f.t -= dt; if (f.t <= 0 && g.world.get(f.x, f.y, f.z) === B.CAMPFIRE) g.world.set(f.x, f.y, f.z, B.AIR); }
     this.fires = this.fires.filter((f) => f.t > 0);
     this.tankT -= dt;
@@ -997,7 +1164,7 @@ export class Enemies {
     if (this.plLast && dt > 0) { const v = Math.min(12, Math.hypot(pl.pos.x - this.plLast.x, pl.pos.z - this.plLast.z) / dt); this.plSpeed += (v - this.plSpeed) * Math.min(1, dt * 5); }
     this.plLast = { x: pl.pos.x, z: pl.pos.z }; this.plSpeed = this.plSpeed || 0;
     const last = T[T.length - 1];
-    if (!last || Math.hypot(last.x - pl.pos.x, last.z - pl.pos.z) > 0.6 || Math.abs(last.y - pl.pos.y) > 0.8) {
+    if (!last || Math.hypot(last.x - pl.pos.x, last.z - pl.pos.z) > 0.3 || Math.abs(last.y - pl.pos.y) > 0.8) {
       T.push({ x: pl.pos.x, y: pl.pos.y, z: pl.pos.z, seq: this.trailSeq = (this.trailSeq || 0) + 1, crouch: pl.crouch, water: pl.headInWater || pl.swimming });
       if (T.length > 260) T.shift();
     }
@@ -1012,7 +1179,7 @@ export class Enemies {
     this.underground = g.eyeSky != null && g.eyeSky < 0.45;
     fol.sort((a, b) => a.idx - b.idx);
     // where along the trail each follower belongs: 3.2 m, 5.4 m, 7.6 m ... behind
-    const marks = fol.map((_, i) => 3.2 + i * 2.2);
+    const marks = fol.map((_, i) => FOLLOW_GAP * (i + 1));
     let acc = 0, prev = pl.pos, mi = 0;
     for (let k = T.length - 1; k >= 0 && mi < marks.length; k--) {
       const q = T[k];
@@ -1058,7 +1225,7 @@ export class Enemies {
     };
     while (wp && s.onSeq < s.slotSeq && reached(wp)) { s.onSeq++; wp = this.trailAt(s.onSeq) || wp; }
     if (!wp) return false;
-    const atSlot = s.onSeq >= s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.9;
+    const atSlot = s.onSeq >= s.slotSeq && Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z) < 0.45;
     s.crouch = !!pl.crouch;                                     // they copy you
     P.crouch = !!pl.crouch;
     if (atSlot && !(s.swimming && wp.water)) { s.speed = 0; return true; }
@@ -1168,7 +1335,10 @@ export class Enemies {
     if (s.senseT <= 0 && !far) {
       s.senseT = 0.35;
       const had = !!s.target;
+      s.seenPlayer = false;
       s.target = (s.armed || pdist < 20) ? this.findTarget(s) : null;
+      if (!s.seenPlayer && s.aware > 0) s.aware = Math.max(0, s.aware - 0.09);
+      if (!s.alerted && s.faction === 'enemy') this.lookForBodies(s);
       s.sees = !!s.target;
       if (s.target) {
         s.alerted = true;
@@ -1193,6 +1363,7 @@ export class Enemies {
       this.unarmedBehaviour(s, dt, pdist);
       return;
     } else if (s.role === 'garrison') this.garrisonBehaviour(s, dt);
+    else if (s.role === 'rest' || s.role === 'guard' || s.role === 'fpatrol') this.routineBehaviour(s, dt);
     else if (s.role === 'carrier') {
       // mission: carry supplies to a fort, fighting back only when needed
       const P = s.plan;
@@ -1234,6 +1405,7 @@ export class Enemies {
     const d = Math.hypot(s.pos.x - s.post.x, s.pos.z - s.post.z);
     if (d > 0.8) { P.goal = s.post; P.speed = tgt ? 3.6 : 2.2; }
     if (tgt) P.face = tgt.pos;
+    else if (s.searchPos) { P.face = s.searchPos; if ((s.calmT = (s.calmT || 0) + dt) > 40) { s.searchPos = null; s.alerted = false; s.aware = 0; s.calmT = 0; } }
     // ramparts give cover: duck between shots
     if (tgt && s.post.y > s.post.fort.base + 1) { this.peek(s, dt); P.crouch = !s.peeking; }
   }
@@ -1358,6 +1530,27 @@ export class Enemies {
       const d = s.dest;
       if (Math.hypot(s.pos.x - d.x, s.pos.z - d.z) < 1.2) { s.role = 'hold'; s.holdPos = new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z); s.refreshMark(); return; }
       P.goal = d; P.speed = 4.4;
+      return;
+    }
+    if (role === 'distract') {
+      // go to the spot, make noise and show yourself so the enemy looks
+      // there; after a short while (or once hit) get into cover and stay
+      const d = s.dest, dd = Math.hypot(s.pos.x - d.x, s.pos.z - d.z);
+      if (dd > 1.2 && !s.distractT) { P.goal = d; P.speed = 4.4; return; }
+      s.distractT = (s.distractT || 0) + dt;
+      s.noiseT -= dt;
+      if (s.noiseT <= 0) {
+        s.noiseT = 3;
+        if (g.bubbles) g.bubbles.say(s, t('call.distract'), { name: s.name, kind: 'ally', silent: true });
+        sfx.shot('rifle', Math.max(0.1, 1 - s.pos.distanceTo(pl.pos) / 60) * 0.6);
+        for (const o of this.list) if (o.alive && o.faction === 'enemy' && o.pos.distanceTo(s.pos) < 32) { if (o.inSquad || o.squad && !o.squad.garrison && o.role === 'squad') this.alertSquad(o.squad, s.pos); else this.alarm(o, s.pos); }
+      }
+      P.crouch = false;
+      if (s.distractT > 12 || s.hurtT < 0.5) {
+        const foe = this.list.filter((o) => o.alive && o.faction === 'enemy').sort((a, b) => a.pos.distanceTo(s.pos) - b.pos.distanceTo(s.pos))[0];
+        s.setRole('cover'); s.anchor = s.pos.clone(); s.threat = foe ? foe.pos.clone() : this.aheadOfPlayer(25);
+        this.callout(s, 'ackCover');
+      }
       return;
     }
     if (role === 'defend') {
@@ -1530,6 +1723,7 @@ export class Enemies {
 
   combat(s, dt) {
     const tgt = s.target;
+    if (s.wakeT > 0) { s.wakeT -= dt; return; }          // caught off guard: still getting up
     if (!tgt || !s.armed) return;
     if (s.raft) s.yaw = this.turn(s.yaw, Math.atan2(-(tgt.pos.x - s.pos.x), -(tgt.pos.z - s.pos.z)), dt * 8);
     const d = Math.hypot(tgt.pos.x - s.pos.x, tgt.pos.z - s.pos.z);
@@ -1793,7 +1987,7 @@ export class Enemies {
     }
     // incoming fire near the player's squad puts them under fire too
     if (s.faction === 'enemy' && end.distanceTo(pl.pos) < 12) { this.contactT = 0; this.contactPos = s.pos.clone(); }
-    this.tracer(muzzle, end, FACTIONS[s.faction].tracer);
+    this.tracer(muzzle, end, s.faction === 'enemy' ? 0xff7a40 : 0xd8f0c8);
     sfx.shot(s.T.sound, Math.max(0, 1 - g.camera.position.distanceTo(muzzle) / 110) * 0.8);
     g.animals.noise(s.pos, 35);
     if (s.faction === 'ally') this.hear(s.pos, 50, 'enemy');
@@ -1909,7 +2103,20 @@ export class Enemies {
     const g = this.game;
     if (by === 'player' && s.faction === 'enemy') { g.stats.enemies = (g.stats.enemies || 0) + 1; g.hud.killNote(); }
     if (s.faction === 'ally') this.callout(null, 'manDown', s.pos);
-    if (!silent) this.alertSquad(s.squad, g.player.pos);
+    if (!silent) { this.alertSquad(s.squad, g.player.pos); this.hear(s.pos, 22, s.faction); }
+    else {
+      // a silent kill: only those who saw it react
+      const body = new THREE.Vector3(s.pos.x, s.pos.y + 0.8, s.pos.z);
+      for (const o of this.list) {
+        if (!o.alive || o === s || o.faction !== s.faction) continue;
+        const d = o.pos.distanceTo(s.pos);
+        if (d > 35) continue;
+        const fx = -Math.sin(o.yaw), fz = -Math.cos(o.yaw);
+        if (d > 5 && ((s.pos.x - o.pos.x) * fx + (s.pos.z - o.pos.z) * fz) / d < 0.2) continue;
+        if (this.clearLine(new THREE.Vector3(o.pos.x, o.pos.y + 1.6, o.pos.z), body, 'sight')) this.alarm(o, s.pos);
+      }
+    }
+    this.bodies.push({ pos: s.pos.clone(), faction: s.faction, t: 0, found: !silent });
     if (s.post && s.type === 'officer') s.post.fort.officerDead = true;
     this.pending.push({ type: s.type === 'commander' ? 'officer' : s.type, faction: s.faction, t: 25 + Math.random() * 20 });
   }

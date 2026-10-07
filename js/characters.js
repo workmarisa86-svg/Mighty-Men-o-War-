@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { PartList, mat4, mergeGroup } from './merge.js';
 import { gunModel } from './gunmodels.js';
+import { UNIFORMS, UNIFORM_OF, SIDE_NATIONS, flagCanvas } from './nations.js';
 
 export const FACTIONS = {
   // the enemy army: slate-grey tunics, rust armband, pale diamond insignia
@@ -78,11 +79,15 @@ const VARIANTS = {};
 // 'felt' | 'scarf' | 'none', hair }
 const LOOKS = {};
 export function civLook(key, look) { LOOKS[key] = look; }
+// faction 'ally' / 'enemy' for the old look; or a nation code (us, de, ...)
+// whose side and uniform decide the colours and helmet
 function variant(faction, type, skin) {
   const key = `${faction}|${type}|${skin}|${SEG}`;
   if (VARIANTS[key]) return VARIANTS[key];
   if (faction === 'civ') return (VARIANTS[key] = civVariant(LOOKS[type] || {}, skin));
-  const F = FACTIONS[faction];
+  const nat = UNIFORM_OF[faction];
+  const F = nat ? UNIFORMS[nat] : FACTIONS[faction];
+  if (nat) faction = SIDE_NATIONS.axis.includes(nat) ? 'enemy' : 'ally';     // helmet shape: Axis deep, Allies bowl
   const officer = type === 'officer', commander = type === 'commander';
   const tunic = commander ? 0x2a2a2a : officer ? (faction === 'enemy' ? 0x353d46 : 0x63583c) : F.tunic;
   const sk = SKINS[skin % SKINS.length];
@@ -278,6 +283,15 @@ function blobShadow() {
   return m;
 }
 
+// sleeve patches: one small material per nation
+let PATCH_GEO = null;
+const PATCH_MATS = {};
+function patchMat(n) {
+  if (PATCH_MATS[n]) return PATCH_MATS[n];
+  const t = new THREE.CanvasTexture(flagCanvas(n)); t.colorSpace = THREE.SRGBColorSpace;
+  return (PATCH_MATS[n] = new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
+}
+
 // ------------------------------------------------------------------ rig
 const V = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3(), N = new THREE.Vector3();
 const BX = new THREE.Vector3(), BY = new THREE.Vector3(), BZ = new THREE.Vector3(), MB = new THREE.Matrix4();
@@ -304,6 +318,13 @@ export class Character {
     this.kneeL = bone(this.legL, 0, -RIG.thigh, 0, v.shin);
     this.kneeR = bone(this.legR, 0, -RIG.thigh, 0, v.shin);
     this.gun = bone(this.spine, 0, 0, 0);
+    // a small patch with the home country's flag on the left sleeve
+    if (UNIFORM_OF[faction]) {
+      const pm = patchMat(faction);
+      this.patch = new THREE.Mesh(PATCH_GEO || (PATCH_GEO = new THREE.PlaneGeometry(0.075, 0.05)), pm);
+      this.patch.position.set(-0.062, -0.085, 0); this.patch.rotation.y = -Math.PI / 2;
+      this.armL.add(this.patch);
+    }
     this.shadow = blobShadow(); this.root.add(this.shadow);
     this.shadow.scale.set(0.9, 1, 0.9);
     this.weapon = undefined;
@@ -331,6 +352,7 @@ export class Character {
     if (l === this.lod) return;
     this.lod = l;
     this.kit.visible = l === 0; this.face.visible = l === 0;
+    if (this.patch) this.patch.visible = l === 0;
   }
 
   // Two-bone IK: point the arm (shoulder bone + elbow bone) so the hand

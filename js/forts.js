@@ -4,6 +4,7 @@
 // grenades. Every fort is lit inside at all times, and its warm light shows
 // through windows, gaps and tower lamps at night so it can be seen from afar.
 import * as THREE from 'three';
+import { flagCanvas, MAIN_NATIONS } from './nations.js';
 import { SEA, DIFF } from './config.js';
 import { B } from './blocks.js';
 import { sfx } from './audio.js';
@@ -111,7 +112,7 @@ export function stampFort(world, f, rnd) {
   // main door (2 wide, 3 high) on the +lz side
   for (const lx of [-1, 0]) for (let y = b; y <= b + 2; y++) put(lx, y, H, B.FORT_DOOR);
   // ladder posts up to the rampart
-  for (const lx of [-(H - 2), H - 2]) for (let y = b; y <= b + 3; y++) put(lx, y, -(H - 2), B.LOG);
+  for (const lx of [-(H - 2), H - 2]) for (let y = b; y <= b + 3; y++) put(lx, y, -(H - 2), B.LADDER);
   put(3, b, -2, B.SUPPLY);
   // warm light everywhere inside
   for (let lz = -(H - 1); lz <= H - 1; lz++) for (let lx = -(H - 1); lx <= H - 1; lx++) for (let y = b; y <= b + 6; y++) {
@@ -145,22 +146,11 @@ export function stampFort(world, f, rnd) {
 
 // ---------------------------------------------------------------- flags
 const flagTex = {};
-function makeFlag(owner) {
-  if (flagTex[owner]) return flagTex[owner];
-  const c = document.createElement('canvas'); c.width = 64; c.height = 40;
-  const x = c.getContext('2d');
-  if (owner === 'ally') {
-    x.fillStyle = '#2a4a6a'; x.fillRect(0, 0, 64, 40);
-    x.fillStyle = '#c8b890'; x.fillRect(0, 0, 64, 4); x.fillRect(0, 36, 64, 4);
-    x.beginPath(); x.arc(32, 20, 9, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#2a4a6a'; x.beginPath(); x.arc(32, 20, 4, 0, Math.PI * 2); x.fill();
-  } else {
-    x.fillStyle = '#8a3a2a'; x.fillRect(0, 0, 64, 40);
-    x.fillStyle = '#2a2622'; x.fillRect(0, 17, 64, 6);
-    x.fillStyle = '#d8c070'; x.beginPath(); x.moveTo(32, 9); x.lineTo(43, 20); x.lineTo(32, 31); x.lineTo(21, 20); x.closePath(); x.fill();
-  }
-  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-  flagTex[owner] = tex;
+// national flags (see nations.js): a fort flies its owner's flag
+function makeFlag(nation) {
+  if (flagTex[nation]) return flagTex[nation];
+  const tex = new THREE.CanvasTexture(flagCanvas(nation)); tex.colorSpace = THREE.SRGBColorSpace;
+  flagTex[nation] = tex;
   return tex;
 }
 let haloTex = null;
@@ -175,6 +165,13 @@ function makeHalo() {
 
 // ---------------------------------------------------------------- runtime
 export class Forts {
+  // the nation whose flag flies over a fort (from its owner's side)
+  flagNation(f, owner) {
+    const side = this.game.cfg.side || 'allies';
+    const s = owner === 'ally' ? side : side === 'allies' ? 'axis' : 'allies';
+    const list = MAIN_NATIONS[s];
+    return list[f.id % list.length];
+  }
   constructor(game, saved) {
     this.game = game;
     this.list = game.world.forts;
@@ -201,7 +198,7 @@ export class Forts {
     pole.position.set(f.pole.x, f.pole.y + 3, f.pole.z);
     g.add(pole);
     const cloth = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5, 8, 1),
-      new THREE.MeshLambertMaterial({ map: makeFlag(f.owner === 'ally' ? 'ally' : 'enemy'), side: THREE.DoubleSide }));
+      new THREE.MeshLambertMaterial({ map: makeFlag(this.flagNation(f, f.owner)), side: THREE.DoubleSide }));
     cloth.geometry.translate(1.2, 0, 0);
     cloth.position.set(f.pole.x + 0.07, f.pole.y + 5.2, f.pole.z);
     cloth.visible = f.owner !== 'none';
@@ -298,7 +295,7 @@ export class Forts {
   setOwnerQuiet(f, owner) {
     const prev = f.owner;
     f.owner = owner; f.charges = 0; f.officerDead = false;
-    f.cloth.material.map = makeFlag(owner === 'ally' ? 'ally' : 'enemy'); f.cloth.visible = owner !== 'none';
+    f.cloth.material.map = makeFlag(this.flagNation(f, owner)); f.cloth.visible = owner !== 'none';
     this.game.enemies.fortChanged(f, prev, owner);
   }
   setOwner(f, owner) {
@@ -361,7 +358,7 @@ export class Forts {
         const a = f.flagAnim; a.t += dt;
         if (a.t < 3) f.cloth.position.y = f.flagTop - (f.flagTop - f.flagBottom) * (a.t / 3);
         else {
-          if (!a.swapped) { a.swapped = true; f.cloth.material.map = makeFlag(a.next === 'ally' ? 'ally' : 'enemy'); f.cloth.visible = a.next !== 'none'; }
+          if (!a.swapped) { a.swapped = true; f.cloth.material.map = makeFlag(this.flagNation(f, a.next)); f.cloth.visible = a.next !== 'none'; }
           f.cloth.position.y = f.flagBottom + (f.flagTop - f.flagBottom) * Math.min(1, (a.t - 3) / 3);
           if (a.t > 6) f.flagAnim = null;
         }

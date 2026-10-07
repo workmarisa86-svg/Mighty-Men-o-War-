@@ -11,6 +11,7 @@ const TILE_NAMES = [
   'grass_top', 'grass_side', 'sand', 'clay', 'brick', 'glass', 'thatch', 'ice',
   'charcoal', 'gold', 'farmland', 'path', 'fence',
   'sprout', 'wheat_g', 'wheat_r', 'carrot_g', 'carrot_r', 'cabbage_g', 'cabbage_r', 'wilted',
+  'ladder', 'ladder_top',
 ];
 // season currently painted into the seasonal tiles (grass, leaves): null = War look
 let SEASON = null;
@@ -348,6 +349,13 @@ const PAINT = {
   carrot_r(p) { PAINT.carrot_g(p); for (let i = 0; i < 5; i++) p.rect(2 + i * 6, 28, 4, 4, [214, 112, 40]); },
   cabbage_g(p) { p.clear(); for (let i = 0; i < 3; i++) { const cx = 6 + i * 10; for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y < 16) p.px(cx + x, 27 + y, jit([96, 150, 70], p.r, 20)); } },
   cabbage_r(p) { p.clear(); for (let i = 0; i < 2; i++) { const cx = 9 + i * 14; for (let y = -7; y <= 6; y++) for (let x = -7; x <= 7; x++) if (x * x + y * y < 46) p.px(cx + x, 24 + y, jit(x * x + y * y < 16 ? [170, 206, 130] : [110, 170, 90], p.r, 18)); } },
+  ladder(p) {
+    p.clear();
+    const rail = [92, 70, 46], dark = [58, 44, 30];
+    p.rect(3, 0, 4, 32, rail); p.rect(25, 0, 4, 32, rail); p.rect(3, 0, 1, 32, dark); p.rect(28, 0, 1, 32, dark);
+    for (let y = 3; y < 32; y += 8) { p.rect(7, y, 18, 3, [112, 86, 56]); p.rect(7, y + 2, 18, 1, dark); }
+  },
+  ladder_top(p) { p.clear(); p.rect(3, 12, 4, 8, [92, 70, 46]); p.rect(25, 12, 4, 8, [92, 70, 46]); },
   wilted(p) { p.clear(); for (let i = 0; i < 6; i++) { const x = 3 + i * 5; p.rect(x, 26, 1, 6, [110, 92, 54]); p.rect(x, 26, 3, 1, [96, 80, 46]); } },
 };
 // leaves: one look per season in Town Life (War keeps its own)

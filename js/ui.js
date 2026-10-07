@@ -7,7 +7,7 @@ import { itemIcon, ITEMS, MATERIALS, RECIPES, RECIPE_CATS } from './items.js';
 import { sfx } from './audio.js';
 import { MANUAL, MANUAL_CATS, MANUAL_DEVICE } from './manual.js';
 import { getDevice } from './i18n.js';
-import { missionsFor, missionInfo } from './missions.js';
+import { SIDE_NATIONS, flagURL } from './nations.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
 import { installTownUI } from './townui.js';
@@ -94,6 +94,14 @@ export class UI {
 
   // ------------------------------------------------------------- War menu
   r_main() {
+    // War saves from before the sides (Allies / Axis) can't be converted:
+    // say so once, then clear them
+    const old = listSaves().filter((m) => (m.v || 1) < SAVE_FORMAT);
+    if (old.length) {
+      for (const m of old) deleteSave(m.id);
+      this.panel(t('menu.oldSavesTitle'), `<p>${t('menu.oldSaves', { n: old.length })}</p>`, { onBack: () => this.show('main') });
+      return;
+    }
     const hasSaves = listSaves().length > 0;
     this.root.classList.add('art-screen');
     this.root.innerHTML = `${heroArt()}
@@ -178,64 +186,45 @@ export class UI {
   }
 
   // -------------------------------------------------------------- new game
+  // War: choose a side, then the difficulty, then Open World or Battles.
   r_newgame(p) {
-    const st = Object.assign({ step: 'sub', mode: 'war', sub: null, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', mission: null }, p);
+    const st = Object.assign({ step: 'side', side: null, difficulty: 'medium', gameType: 'open' }, p);
     const go = (patch) => this.show('newgame', Object.assign({}, st, patch));
     let body = '';
-    if (st.step === 'sub') {
-      body = `<p class="label">${t('new.how')}</p><div class="choices">
-        <div class="choice" data-v="alone"><h3>${t('new.alone')}</h3><p>${t('new.aloneDesc')}</p></div>
-        <div class="choice" data-v="allies"><h3>${t('new.allies')}</h3><p>${t('new.alliesDesc')}</p></div></div>`;
+    if (st.step === 'side') {
+      body = `<p class="label">${t('new.side')}</p><div class="choices sides">${['allies', 'axis'].map((sd) => `
+        <div class="choice side-${sd}" data-side="${sd}"><div class="flags">${SIDE_NATIONS[sd].map((n) => `<img src="${flagURL(n)}" alt="" title="${t('nation.' + n)}">`).join('')}</div>
+        <h3>${t('side.' + sd)}</h3><p>${t('side.' + sd + 'Desc')}</p></div>`).join('')}</div>`;
+    } else if (st.step === 'diff') {
+      body = `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
+        <div class="choice small" data-d="${d}">
+          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>`;
     } else {
       const n = listSaves().length + 1;
-      body = `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
-        <div class="choice small ${st.difficulty === d ? 'on' : ''}" data-d="${d}">
-          <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>
-        <p class="label">${t('new.time')}</p><div class="choices">${['cycle', 'day'].map((m) => `
-        <div class="choice small ${st.timeMode === m ? 'on' : ''}" data-tm="${m}"><h3>${t('new.time.' + m)}</h3><p>${t('new.time.' + m + 'Desc')}</p></div>`).join('')}</div>` +
-        `<p class="label">${t('new.type')}</p><div class="choices">${['open', 'mission'].map((m) => `
-        <div class="choice small ${st.gameType === m ? 'on' : ''}" data-gt="${m}"><h3>${t('new.type.' + m)}</h3><p>${t('new.type.' + m + 'Desc')}</p></div>`).join('')}</div>` +
-        (st.gameType === 'mission' ? this.missionList(st) : '') +
-        `<p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
+      body = `<p class="muted small">${t('side.' + st.side)} · ${t('diff.' + st.difficulty)}</p>
+        <p class="label">${t('new.type')}</p><div class="choices">
+        <div class="choice small ${st.gameType === 'open' ? 'on' : ''}" data-gt="open"><h3>${t('new.type.open')}</h3><p>${t('new.type.openDesc')}</p></div>
+        <div class="choice small locked" data-gt="battles"><h3>${t('new.type.battles')}</h3><p>${t('new.type.battlesSoon')}</p></div></div>
+        <p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
-    const back = () => {
-      if (st.step === 'sub') this.show('main');
-      else go({ step: 'sub' });
-    };
+    const back = () => this.show(st.step === 'side' ? 'main' : 'newgame', st.step === 'side' ? {} : Object.assign({}, st, { step: st.step === 'diff' ? 'side' : 'diff' }));
     const panel = this.panel(t('new.title'), body, { onBack: back, wide: true });
-    panel.querySelectorAll('.choice[data-v]').forEach((c) => c.onclick = () => {
-      const v = c.dataset.v;
-      go({ step: 'final', sub: v });
-    });
-    panel.querySelectorAll('.choice[data-tm]').forEach((c) => c.onclick = () => {
-      st.timeMode = c.dataset.tm;
-      panel.querySelectorAll('.choice[data-tm]').forEach((x) => x.classList.toggle('on', x === c));
-    });
-    panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => {
-      st.difficulty = c.dataset.d;
-      if (st.gameType === 'mission') { go({ difficulty: st.difficulty, timeMode: st.timeMode, mission: null }); return; }
-      panel.querySelectorAll('.choice[data-d]').forEach((x) => x.classList.toggle('on', x === c));
-    });
-    panel.querySelectorAll('.choice[data-gt]').forEach((c) => c.onclick = () => go({ gameType: c.dataset.gt, difficulty: st.difficulty, timeMode: st.timeMode }));
-    panel.querySelectorAll('.mission[data-m]').forEach((c) => c.onclick = () => {
-      st.mission = c.dataset.m;
-      panel.querySelectorAll('.mission[data-m]').forEach((x) => x.classList.toggle('on', x === c));
-    });
+    panel.querySelectorAll('.choice[data-side]').forEach((c) => c.onclick = () => go({ step: 'diff', side: c.dataset.side }));
+    panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => go({ step: 'final', difficulty: c.dataset.d }));
+    panel.querySelectorAll('.choice[data-gt]').forEach((c) => c.onclick = () => { if (c.dataset.gt === 'battles') { this.app.input && sfx.error(); return; } go({ gameType: 'open' }); });
     const sb = panel.querySelector('#startbtn');
     if (sb) sb.onclick = () => {
       const name = panel.querySelector('#wname').value.trim() || t('new.defaultName', { n: 1 });
-      if (st.gameType === 'mission' && !st.mission) { const el = panel.querySelector('.missions'); if (el) el.classList.add('need'); sfx.error && sfx.error(); return; }
-      this.app.newGame({ mode: 'war', sub: st.sub, difficulty: st.difficulty, timeMode: st.timeMode, name,
-        gameType: st.gameType, mission: st.gameType === 'mission' ? st.mission : null });
+      this.app.newGame({ side: st.side, difficulty: st.difficulty, name, gameType: 'open' });
     };
   }
 
   // ------------------------------------------------------------------ load
   r_load() {
     const saves = listSaves();
-    const modeLabel = (m) => `${t('mode.war')} · ${t('sub.' + m.sub)} · ${t('diff.' + m.difficulty)} · ${t('new.time.' + (m.timeMode || 'cycle'))}` +
-      ' · ' + (m.gameType === 'mission' && m.mission ? `${t('new.type.mission')}: ${t('ms.' + m.mission + '.name')}${m.missionDone ? (m.missionDone.ok ? ' ✓' : ' ✗') : ''}` : t('new.type.open'));
+    const modeLabel = (m) => `${t('mode.war')} · ${t('side.' + (m.side || 'allies'))} · ${t('diff.' + m.difficulty)}` +
+      ' · ' + t('new.type.open');
     const body = saves.length ? `<div class="saves">${saves.map((m) => `
       <div class="save">
         <div><h3>${esc(m.name)}</h3><p>${modeLabel(m)} · ${t('load.day', { n: m.day })}</p>
@@ -282,6 +271,7 @@ export class UI {
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
+      <div class="field"><span>${t('set.awareness')}</span>${seg('awareness', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.perf')}</span>${seg('perf', [['normal', t('set.perfNormal')], ['smooth', t('set.perfSmooth')]])}</div>
       <p class="muted small">${t('set.perfNote')}</p>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => this.show(from === 'pause' ? 'pause' : from === 'town' ? 'town' : 'main') });
@@ -446,38 +436,7 @@ export class UI {
     });
   }
 
-  missionList(st) {
-    const list = missionsFor(st.mode, st.sub, st.difficulty);
-    const mm = (s) => s >= 60 ? t('ms.minutes', { n: Math.round(s / 60) }) : t('ms.seconds', { n: s });
-    return `<p class="label">${t('new.pickMission')}</p><div class="missions">${list.map((m) => {
-      const I = missionInfo(m.id, st.sub, st.difficulty);
-      const best = bestMedal(m.id, st.mode === 'war' ? st.difficulty : null);
-      return `<div class="mission ${st.mission === m.id ? 'on' : ''}" data-m="${m.id}">
-        <h3>${t('ms.' + m.id + '.name')}${best ? ` <i class="medal ${best}" title="${t('medal.' + best)}"></i>` : ''}</h3>
-        <p>${t('ms.' + m.id + '.goal')}</p>
-        <p class="small"><b>${t('ms.win')}:</b> ${t('ms.' + m.id + '.win')}</p>
-        <p class="small"><b>${t('ms.lose')}:</b> ${t('ms.' + m.id + '.lose')}</p>
-        <p class="small muted">${st.mode === 'war' ? t('diff.' + st.difficulty) + ' · ' : ''}${I.limit ? t('ms.limit', { t: mm(I.limit) }) : t('ms.noLimit')}</p></div>`;
-    }).join('') || `<p class="muted">${t('ms.none')}</p>`}</div>`;
-  }
 
-  // end of a mission: medal, replay, another, or carry on in Open World
-  r_missionEnd(r) {
-    const g = this.app.game, id = g.mission ? g.mission.id : g.cfg.mission;
-    const body = `<div class="center">
-      ${r.ok ? `<div class="medal big ${r.medal}"></div><p class="big">${t('medal.' + r.medal)}</p>` : `<p class="big warn">${t('ms.failed')}</p><p>${t('ms.why.' + r.why)}</p>`}
-      <p class="muted">${t('ms.' + id + '.name')}</p></div>
-      <div class="menu">
-        <button class="btn primary" id="mreplay">${t('ms.replay')}</button>
-        <button class="btn" id="mother">${t('ms.another')}</button>
-        <button class="btn" id="mopen">${t('ms.openWorld')}</button>
-      </div>`;
-    this.panel(r.ok ? t('ms.complete') : t('ms.failedTitle'), body, { back: false });
-    const c = g.cfg;
-    this.root.querySelector('#mreplay').onclick = () => this.app.replayMission();
-    this.root.querySelector('#mother').onclick = () => { this.app.quitToMenu(true); this.show('newgame', { step: 'final', mode: c.mode, sub: c.sub, difficulty: c.difficulty || 'medium', timeMode: c.timeMode, gameType: 'mission' }); };
-    this.root.querySelector('#mopen').onclick = () => this.app.continueOpenWorld();
-  }
 
   // Statistics: totals, and War stats per difficulty
   // Town Life: the statistics of its one world

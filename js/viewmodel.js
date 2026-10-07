@@ -107,6 +107,17 @@ export class ViewModel {
     this.flashT = 0;
     this.blockMats = {};
   }
+  // the player's own sleeve and hand, in the uniform of the chosen side
+  setUniform(color) {
+    if (this.sleeve) this.holder.remove(this.sleeve);
+    if (color == null) { this.sleeve = null; return; }
+    const g = new THREE.Group();
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.32, 10), new THREE.MeshLambertMaterial({ color }));
+    cuff.rotation.x = Math.PI / 2 - 0.15; cuff.position.set(0.02, -0.06, 0.2); g.add(cuff);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.08), new THREE.MeshLambertMaterial({ color: 0xc89a78 }));
+    hand.position.set(0.02, -0.04, 0.03); g.add(hand);
+    this.sleeve = g; this.holder.add(g);
+  }
 
   model(id) {
     if (this.cache[id]) return this.cache[id];
@@ -115,6 +126,12 @@ export class ViewModel {
     if (id === 'rifle' || id === 'sniper') g = BUILD.realRifle(id);
     else if (id === 'smg') { g = gunModel('smg'); g.scale.setScalar(0.6); }
     else if (id === 'pistol') { g = gunModel('pistol'); g.position.z = 0.02; }
+    else if (id === 'spistol') {
+      // pistol with a suppressor screwed onto the muzzle
+      g = new THREE.Group(); const p = gunModel('pistol'); g.add(p); g.position.z = 0.02;
+      const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 10), M.steel);
+      sup.rotation.x = Math.PI / 2; sup.position.set(0, 0.035, -0.24); g.add(sup);
+    }
     else if (id === 'knife') { g = gunModel('knife'); g.rotation.set(0.25, 0, 0.15); }
     else if (BUILD[id]) g = BUILD[id]();
     else if (def.tiles) {

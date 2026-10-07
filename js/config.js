@@ -1,6 +1,6 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '0.8.0';
-export const SAVE_FORMAT = 2;
+export const GAME_VERSION = '0.9.0';
+export const SAVE_FORMAT = 3;      // 3: sides (Allies / Axis); older War saves can't be converted
 // every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
 export const STORE_PREFIX = 'blocks-mmow-';
 export const OLD_PREFIX = 'blocks-';
@@ -11,13 +11,18 @@ export const SEA = 26;            // water surface: water blocks occupy y < SEA
 
 export const DIFFICULTIES = ['beginner', 'easy', 'medium', 'hard', 'impossible'];
 
-// Difficulty controls enemy count, food scarcity and fort spacing (via world size).
+// Difficulty controls the number of enemy soldiers, how aggressive their
+// attacks are (squad size and how often they leave) and how scarce food is;
+// camp / guards / patrol: soldiers resting, on watch and walking each fort.
+
+
+export const WAR_SIZE = 256;          // one world size for every difficulty
 export const DIFF = {
-  beginner:   { size: 192, enemies: 10, allies: 16, animals: 1.6, animalRespawn: 60,  forts: 7 },
-  easy:       { size: 224, enemies: 14, allies: 14, animals: 1.3, animalRespawn: 90,  forts: 8 },
-  medium:     { size: 256, enemies: 20, allies: 12, animals: 1.0, animalRespawn: 130, forts: 9 },
-  hard:       { size: 320, enemies: 28, allies: 10, animals: 0.7, animalRespawn: 200, forts: 11 },
-  impossible: { size: 384, enemies: 38, allies: 9,  animals: 0.45, animalRespawn: 300, forts: 13 },
+  beginner:   { size: 256, enemies: 10, allies: 16, animals: 1.6, animalRespawn: 60,  forts: 9, camp: 2, guards: 1, patrol: 0 },
+  easy:       { size: 256, enemies: 14, allies: 14, animals: 1.3, animalRespawn: 90,  forts: 9, camp: 2, guards: 1, patrol: 2 },
+  medium:     { size: 256, enemies: 20, allies: 12, animals: 1.0, animalRespawn: 130, forts: 9, camp: 3, guards: 2, patrol: 2 },
+  hard:       { size: 256, enemies: 28, allies: 10, animals: 0.7, animalRespawn: 200, forts: 9, camp: 3, guards: 2, patrol: 2 },
+  impossible: { size: 256, enemies: 38, allies: 9,  animals: 0.45, animalRespawn: 300, forts: 9, camp: 4, guards: 2, patrol: 3 },
 };
 
 export const DAY_SECONDS = 20 * 60;   // real seconds per in-game day (War mode)

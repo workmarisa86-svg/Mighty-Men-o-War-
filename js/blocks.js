@@ -8,6 +8,7 @@ export const B = {
   GRASS: 19, SAND: 20, CLAY: 21, BRICK: 22, GLASS: 23, THATCH: 24, ICE: 25,
   CHARCOAL: 26, GOLD: 27, FARMLAND: 28, PATH: 29, FENCE: 30,
   SPROUT: 31, WHEAT_G: 32, WHEAT_R: 33, CARROT_G: 34, CARROT_R: 35, CABBAGE_G: 36, CABBAGE_R: 37, WILTED: 38,
+  LADDER: 39,
 };
 
 export const BLOCKS = [];
@@ -59,6 +60,8 @@ def(B.FENCE, { name: 'fence', opaque: false, render: 'glass', tiles: { top: 'fen
 for (const [id, name] of [[B.SPROUT, 'sprout'], [B.WHEAT_G, 'wheat_g'], [B.WHEAT_R, 'wheat_r'], [B.CARROT_G, 'carrot_g'], [B.CARROT_R, 'carrot_r'], [B.CABBAGE_G, 'cabbage_g'], [B.CABBAGE_R, 'cabbage_r'], [B.WILTED, 'wilted']]) {
   def(id, { name, crop: true, solid: false, opaque: false, render: 'cross', tiles: { top: name, side: name, bottom: name }, hard: 0.05, drop: null, color: [0.4, 0.5, 0.2] });
 }
+// ladder: two side rails and even rungs (see-through), climbed like a trunk
+def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'wood', color: [0.42, 0.32, 0.2] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 
 // Quick lookup tables for hot loops (mesher, physics).
