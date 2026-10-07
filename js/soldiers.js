@@ -110,7 +110,7 @@ class Soldier {
   get follow() { return this.role === 'follow'; }
   get inSquad() { return PSQ.has(this.role); }
   arm(weapon) { this.weapon = weapon; this.ammo = this.T.mag; this.rig.setWeapon(weapon || (this.hasKnife ? 'knife' : null)); }
-  setRole(role) { this.role = role; this.cover = null; this.refreshMark(); }
+  setRole(role) { this.role = role; this.cover = null; this.orderCover = null; this.badCover = null; this.noProg = 0; this.rejoin = true; this.fsPath = false; this.path = null; this.refreshMark(); }
   refreshMark() { if (this.mark) this.mark.material.map = marker(PSQ.has(this.role) ? this.role : 'squad', this.selected); }
 }
 
@@ -433,19 +433,17 @@ export class Enemies {
       if (!fort) { g.hud.toast(t('order.noBase')); return 0; }
     }
     const point = at.point || g.player.pos.clone();
-    const spreadOn = !group.every((m) => m.spread);
     let i = 0;
     for (const s of group) {
       if (!s.alive) continue;
       if (cmd === 'spread') {
         // break the file and spread out around where the group is, a few metres apart
         const c = group.reduce((acc, m) => ({ x: acc.x + m.pos.x / group.length, z: acc.z + m.pos.z / group.length }), { x: 0, z: 0 });
-        s.spread = spreadOn;
-        if (s.role === 'follow' || s.role === 'hold') {
-          const sp = this.spreadAround({ x: c.x, y: s.pos.y, z: c.z }, i, group.length, 4);
-          const gy = this.ground(sp.x, sp.z, s.pos.y + 1);
-          s.setRole('hold'); s.holdPos = new THREE.Vector3(sp.x, gy ?? s.pos.y, sp.z);
-        }
+        // every recipient spreads out, whatever he was doing, and holds there
+        this.toPlayerSquad(s);
+        s.spread = true;
+        const sp = this.freeSpotNear(this.spreadAround({ x: c.x, y: s.pos.y, z: c.z }, i, group.length, 4), s.pos.y) || s.pos;
+        s.setRole('hold'); s.holdPos = new THREE.Vector3(sp.x, sp.y, sp.z);
       }
       else {
         this.toPlayerSquad(s);
@@ -453,7 +451,7 @@ export class Enemies {
         if (cmd === 'follow') s.setRole('follow');
         else if (cmd === 'hold') { s.setRole('hold'); s.holdPos = s.pos.clone(); }
         else if (cmd === 'defend') { s.setRole('defend'); s.defendFort = fort; s.patrolT = 0; }
-        else if (cmd === 'cover') { s.setRole('cover'); s.anchor = s.pos.clone(); s.threat = this.contactPos ? this.contactPos.clone() : this.aheadOfPlayer(25); }
+        else if (cmd === 'cover') { s.setRole('cover'); s.anchor = s.pos.clone(); s.threat = s.target ? s.target.pos.clone() : this.contactT < 20 && this.contactPos ? this.contactPos.clone() : this.aheadOfPlayer(25); }
         else if (cmd === 'advance') { s.setRole('advance'); s.dest = this.spreadAround(point, i, group.length, 2.6); }
         else if (cmd === 'attack') { s.setRole('attack'); s.attackFort = fort; }
       }
@@ -985,6 +983,9 @@ export class Enemies {
   // a steady distance apart, never ahead of the player.
   updateFormation(dt) {
     const g = this.game, pl = g.player, T = this.trail;
+    // the player's real walking pace (followers match it)
+    if (this.plLast && dt > 0) { const v = Math.min(12, Math.hypot(pl.pos.x - this.plLast.x, pl.pos.z - this.plLast.z) / dt); this.plSpeed += (v - this.plSpeed) * Math.min(1, dt * 5); }
+    this.plLast = { x: pl.pos.x, z: pl.pos.z }; this.plSpeed = this.plSpeed || 0;
     const last = T[T.length - 1];
     if (!last || Math.hypot(last.x - pl.pos.x, last.z - pl.pos.z) > 0.6 || Math.abs(last.y - pl.pos.y) > 0.8) {
       T.push({ x: pl.pos.x, y: pl.pos.y, z: pl.pos.z, seq: this.trailSeq = (this.trailSeq || 0) + 1, crouch: pl.crouch, water: pl.headInWater || pl.swimming });
@@ -1022,9 +1023,17 @@ export class Enemies {
     if (!T.length || !s.slot) return false;
     // join the trail at the nearest point (once, or after falling behind)
     if (s.onSeq == null || !this.trailAt(s.onSeq) || s.rejoin) {
-      let best = null, bd = 1e9;
-      for (let k = T.length - 1; k >= 0; k--) { const q = T[k]; const d = Math.hypot(q.x - s.pos.x, q.z - s.pos.z) + Math.abs(q.y - s.pos.y) * 2; if (d < bd) { bd = d; best = q; } }
-      if (bd > 14) return false;                   // too far from the path: walk there normally
+      // the point where getting onto the trail and walking it to his place is
+      // shortest (not just the nearest point: no long way round)
+      let best = null, bs = 1e9, along = 0, bd = 1e9;
+      const si = s.slotSeq - T[0].seq;
+      for (let k = Math.min(T.length - 1, si); k >= 0; k--) {
+        const q = T[k];
+        if (k < Math.min(T.length - 1, si)) along += Math.hypot(T[k + 1].x - q.x, T[k + 1].z - q.z);
+        const d = Math.hypot(q.x - s.pos.x, q.z - s.pos.z) + Math.abs(q.y - s.pos.y) * 2;
+        if (d + along < bs) { bs = d + along; best = q; bd = d; }
+      }
+      if (!best || bd > 5) return false;            // off the path: walk to his place directly
       s.onSeq = Math.min(best.seq, s.slotSeq); s.rejoin = false;
     }
     if (s.onSeq > s.slotSeq) s.onSeq = s.slotSeq;  // the player went back toward us: just stop
@@ -1043,8 +1052,10 @@ export class Enemies {
     s.crouch = !!pl.crouch;                                     // they copy you
     P.crouch = !!pl.crouch;
     if (atSlot && !(s.swimming && wp.water)) { s.speed = 0; return true; }
-    const behind = s.slotSeq - s.onSeq;
-    const speed = behind > 12 || pdist > 18 ? 6.4 : behind > 4 ? 4.8 : pl.crouch ? 1.8 : 3.4;
+    // same pace as the player; faster only to catch up with his place
+    let rem = Math.hypot(wp.x - s.pos.x, wp.z - s.pos.z);
+    for (let k = s.onSeq; k < s.slotSeq && rem < 30; k++) { const a = this.trailAt(k), b = this.trailAt(k + 1); if (a && b) rem += Math.hypot(b.x - a.x, b.z - a.z); }
+    const speed = Math.min(7.5, Math.max(pl.crouch ? 1.6 : 2.2, this.plSpeed + Math.min(4, rem * 0.6)));
     this.trailStep(s, wp, speed, dt);
     P.goal = null; P.moved = true;                              // movement already done
     return true;
@@ -1160,7 +1171,7 @@ export class Enemies {
     if (wire && s.faction === 'enemy') { s.hp -= 5 * dt; if (s.hp <= 0) { this.kill(s, 'wire'); return; } }
     const slow = wire ? 0.35 : 1;
     const nade = g.explosives.projectiles.find((p) => p.kind === 'grenade' && p.owner !== s.faction && (p.owner === 'player' ? s.faction === 'enemy' : true) && p.pos.distanceTo(s.pos) < 5);
-    if (nade && !s.raft) { s.fleeT = 2; s.fleeFrom = nade.pos.clone(); }
+    if (nade && !s.raft && !s.inSquad) { s.fleeT = 2; s.fleeFrom = nade.pos.clone(); }
     s.cool -= dt; s.gcool -= dt;
     if (s.raft) { this.rideRaft(s, dt); if (s.raft) { this.combat(s, dt); this.animate(s, dt); return; } }
     s.plan = { goal: null, speed: 0, face: null, crouch: false };
@@ -1274,58 +1285,67 @@ export class Enemies {
     const g = this.game, pl = g.player, P = s.plan, tgt = s.target;
     s.idx = s.idx ?? this.list.indexOf(s);
     const role = s.role;
+    // Priority: the player's orders, then following him; nothing a soldier
+    // decides on his own (cover, fighting, spreading out) overrides either.
+    // Under orders they still shoot at what they see, but only from where
+    // the order puts them.
+    if (tgt) P.face = tgt.pos;
     if (role === 'follow') {
       if (pl.raft && pl.raft.box && pl.raft.t !== undefined && pdist < 7) this.boardRaft(s, pl.raft);
-      const contact = this.contactT < 8;
       const slot = s.slot || pl.pos;
-      if (tgt) {
-        // shoot back; in the open take cover briefly, in tunnels stay in the file
-        if (this.underground || s.swimming) { if (this.followTrail(s, dt, pdist)) { P.face = tgt.pos; return; } }
-        this.fieldCombat(s, dt, slot, 8); s.rejoin = true; return;
-      }
-      if (contact && this.contactPos && !this.underground && !s.swimming) {
-        if (!s.cover || s.coverT <= 0) { s.cover = this.findCover(s, this.contactPos, slot, 7) || slot; s.coverT = 5; }
-        s.coverT -= dt;
-        P.goal = s.cover; P.speed = 4.6; P.crouch = true; P.face = this.contactPos; s.rejoin = true;
-        return;
-      }
       s.cover = null;
       // stuck or far behind: rejoin the trail; as a last resort appear behind
       // the player, out of sight
       // (stuck = no progress along the trail while behind his place)
       if (s.onSeq !== s.fsSeq || s.onSeq == null || s.onSeq >= s.slotSeq - 2) { s.fsSeq = s.onSeq; s.followStuck = 0; s.fsPath = false; }
       else s.followStuck = (s.followStuck || 0) + dt;
-      if (pdist > 70 || s.followStuck > 8) { this.behindPlayer(s); s.followStuck = 0; s.path = null; return; }
-      if (s.followStuck > 4) {
+      if (pdist > 70 || s.followStuck > 7) { this.behindPlayer(s); s.followStuck = 0; s.path = null; return; }
+      if (s.followStuck > 2.5) {
         // re-plan: a route over the blocks to his place, then back on the trail
         if (!s.fsPath) { const pth = this.findPath(s, slot.x, slot.y, slot.z); if (pth && pth.length) { s.path = pth; s.pathGoal = { x: slot.x, z: slot.z }; s.fsPath = true; } }
         if (s.fsPath && s.path && s.path.length) { P.goal = slot; P.speed = 4.8; s.rejoin = true; return; }
         s.rejoin = true;
       }
       if (this.followTrail(s, dt, pdist)) return;
+      s.rejoin = true;
       const dp = Math.hypot(s.pos.x - slot.x, s.pos.z - slot.z);
-      if (dp > 1.5) { P.goal = slot; P.speed = pdist > 22 ? 7 : 4.8; }
+      if (dp > 1.5) { P.goal = slot; P.speed = pdist > 22 ? 7 : 5.2; }
       return;
     }
     if (role === 'hold') {
+      // stay on the spot (also where Spread out put him), whatever happens
       const hp = s.holdPos || (s.holdPos = s.pos.clone());
-      if (tgt) { this.fieldCombat(s, dt, hp, 5); return; }
-      if (Math.hypot(s.pos.x - hp.x, s.pos.z - hp.z) > 1) { P.goal = hp; P.speed = 3; }
-      P.crouch = this.contactT < 10 && s.pos.distanceTo(pl.pos) < 40;
+      const d = Math.hypot(s.pos.x - hp.x, s.pos.z - hp.z);
+      if (d > 0.8 && (s.noProg || 0) >= 4) { hp.set(s.pos.x, s.pos.y, s.pos.z); s.noProg = 0; }   // can't get there: hold here
+      else if (d > 0.8) { P.goal = hp; P.speed = d > 4 ? 5 : 3.4; return; }
+      if (tgt) { this.peek(s, dt); P.crouch = !s.peeking; }
+      else P.crouch = this.contactT < 10 && s.pos.distanceTo(pl.pos) < 40;
       return;
     }
     if (role === 'cover') {
+      // the nearest cover from the threat, picked once and kept until the
+      // next order (only an uncovered stop-gap spot is searched again)
       const anchor = s.anchor || (s.anchor = s.pos.clone());
-      const threat = tgt ? tgt.pos : s.threat || this.aheadOfPlayer(25);
-      if (!s.cover || s.coverT <= 0) { s.cover = this.findCover(s, threat, anchor, 8) || anchor; s.coverT = tgt ? 5 : 20; }
-      s.coverT -= dt;
-      P.goal = s.cover; P.speed = 4.6;
-      if (tgt) { this.peek(s, dt); P.crouch = !s.peeking; P.face = tgt.pos; } else { P.crouch = true; P.face = threat; }
+      const threat = s.threat || (tgt ? tgt.pos.clone() : this.aheadOfPlayer(25));
+      s.coverSearchT = (s.coverSearchT || 0) - dt;
+      if (!s.orderCover || (!s.orderCover.covered && s.coverSearchT <= 0)) {
+        const c = this.nearestCover(s, threat, anchor, 10);
+        if (c || !s.orderCover) s.orderCover = c || { x: anchor.x, y: anchor.y, z: anchor.z, covered: false };
+        s.coverSearchT = 3;
+      }
+      if ((s.noProg || 0) >= 4 && s.orderCover) {
+        // can't reach it: the next nearest cover, or right here
+        (s.badCover = s.badCover || []).push(s.orderCover); s.noProg = 0;
+        s.orderCover = this.nearestCover(s, threat, s.pos, 6) || { x: s.pos.x, y: s.pos.y, z: s.pos.z, covered: false };
+      }
+      const c = s.orderCover, d = Math.hypot(s.pos.x - c.x, s.pos.z - c.z);
+      s.cover = c;                                   // (ducked behind it: no shooting until he peeks)
+      if (d > 0.6) { P.goal = c; P.speed = 5.2; P.crouch = false; return; }
+      if (tgt) { this.peek(s, dt); P.crouch = !s.peeking; } else { P.crouch = true; P.face = threat; }
       return;
     }
     if (role === 'advance') {
       const d = s.dest;
-      if (tgt) { this.fieldCombat(s, dt, d, 10); return; }
       if (Math.hypot(s.pos.x - d.x, s.pos.z - d.z) < 1.2) { s.role = 'hold'; s.holdPos = new THREE.Vector3(s.pos.x, s.pos.y, s.pos.z); s.refreshMark(); return; }
       P.goal = d; P.speed = 4.4;
       return;
@@ -1347,7 +1367,6 @@ export class Enemies {
       const f = s.attackFort;
       if (!f || f.owner === 'ally') { if (f) { s.setRole('defend'); s.defendFort = f; } else s.setRole('follow'); return; }
       const i = this.psq.members.filter((m) => m.role === 'attack').indexOf(s);
-      if (tgt && Math.hypot(s.pos.x - f.doorOut.x, s.pos.z - f.doorOut.z) > 6) { this.fieldCombat(s, dt, f.doorOut, 14); return; }
       if (!f.blown && !f.doorOpen) {
         const ox = f.doorOut.x - f.doorIn.x, oz = f.doorOut.z - f.doorIn.z, L = Math.hypot(ox, oz), sgn = i % 2 ? 1 : -1, row = Math.floor(i / 2);
         P.goal = i === 0 ? f.doorOut : { x: f.doorOut.x + (-oz / L) * sgn * (3 + row * 1.6), z: f.doorOut.z + (ox / L) * sgn * (3 + row * 1.6) };
@@ -1388,6 +1407,36 @@ export class Enemies {
     const dir = to.sub(from); const len = dir.length(); dir.divideScalar(len);
     const hit = this.game.world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, Math.min(3, len - 1), false, 'bullet');
     return !!hit;
+  }
+  // open ground a soldier fits on, close to p (same level, give or take)
+  freeSpotNear(p, y0) {
+    for (let r = 0; r <= 3; r += 0.75) for (let k = 0; k < (r ? 8 : 1); k++) {
+      const a = k / 8 * Math.PI * 2, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+      const gy = this.ground(x, z, y0 + 1);
+      if (gy != null && Math.abs(gy - y0) < 2.2 && !this.fortWallAt(x, z) && this.bodyFree(x, gy, z)) return { x, y: gy, z };
+    }
+    return null;
+  }
+  fortWallAt(x, z) { const f = this.fortXZ(x, z); return !!f && !this.game.forts.inside(f, { x, y: f.base + 1, z }); }
+  // Take cover order: the closest covered spot (rings outward), else null
+  nearestCover(s, threat, anchor, leash) {
+    const inFort = this.fortXZ(s.pos.x, s.pos.z);
+    const taken = this.list.filter((o) => o !== s && o.alive && o.faction === s.faction && o.orderCover).map((o) => o.orderCover).concat(s.badCover || []);
+    for (let r = 0; r <= leash; r += 1) {
+      const n = r === 0 ? 1 : Math.max(8, Math.round(r * 6));
+      for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2, x = s.pos.x + Math.cos(a) * r, z = s.pos.z + Math.sin(a) * r;
+        if (Math.hypot(x - anchor.x, z - anchor.z) > leash + 2) continue;
+        if (this.fortXZ(x, z) !== inFort || this.inDoorway(x, z)) continue;
+        const y = this.ground(x, z, s.pos.y + 1);
+        if (y == null || Math.abs(y - s.pos.y) > 2.2) continue;
+        const c = { x: Math.floor(x) + 0.5, y, z: Math.floor(z) + 0.5 };
+        if (taken.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 1.2)) continue;
+        if (!this.bodyFree(c.x, c.y, c.z)) continue;
+        if (this.coveredFrom(c, threat)) return { ...c, covered: true };
+      }
+    }
+    return null;
   }
   findCover(s, threat, anchor, leash) {
     const w = this.game.world;
@@ -1827,7 +1876,7 @@ export class Enemies {
     g.particles.burst(s.pos.x, s.pos.y + (head ? 1.65 : 1.2), s.pos.z, col, g.settings.blood ? 6 : 4, 1.2, 0.6, 14);
     if (s.hp <= 0) { this.kill(s, by, silent && unaware); return true; }
     this.alertSquad(s.squad, by === 'player' ? g.player.pos : s.pos);
-    s.alerted = true; s.coverT = 0;   // move to better cover
+    s.alerted = true; s.coverT = 0;   // move to better cover (orders keep their spot)
     s.cool = Math.min(s.cool, 0.6);
     return false;
   }

@@ -59,7 +59,9 @@ export class ContextBar {
     if (!playing) { this.pressed.clear(); return; }
     if (tap('orders')) { if (g.orders.isOpen) g.orders.close(); else g.orders.open(true); }
     const s = this.near;
-    if (s && s.alive && (tap('follow') || input.hit('KeyT')) && s.role !== 'follow') {
+    // T with nobody beside you: the whole squad (and allies close by) follow you
+    if (input.hit('KeyT') && !(s && s.alive && s.role !== 'follow') && E && g.cfg.sub === 'allies') { E.issue('follow', E.recipients(null, 'follow')); this.timer = 0; }
+    else if (s && s.alive && (tap('follow') || input.hit('KeyT')) && s.role !== 'follow') {
       // him, and every ally close to you
       const p = g.player.pos;
       const group = E.list.filter((o) => o.alive && !o.surrender && o.faction === 'ally' && o.role !== 'follow' && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 9);
