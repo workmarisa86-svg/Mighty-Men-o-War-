@@ -1,22 +1,29 @@
-// Built-in forts: indestructible concrete forts spread across the world.
-// Each is allied, enemy or unclaimed. They can only be entered through the
+// Headquarters: big indestructible concrete strongholds, 2 to 5 in each
+// country. Each belongs to one side. They can only be entered through the
 // main door, which only opens for its owners or is blown open by 3 TNT or 12
-// grenades. Every fort is lit inside at all times, and its warm light shows
-// through windows, gaps and tower lamps at night so it can be seen from afar.
+// grenades. Inside: a courtyard, ramparts, four rooms (medical room, armory,
+// food storeroom and the officer's room with the war-map table) and a
+// basement reached by a hatch (its brick walls can be tunnelled into from
+// outside). Lit inside at all times; lamps and corner floodlights show far
+// away at night.
 import * as THREE from 'three';
 import { flagCanvas, MAIN_NATIONS } from './nations.js';
 import { SEA, DIFF } from './config.js';
 import { B } from './blocks.js';
 import { sfx } from './audio.js';
 import { t } from './i18n.js';
+import { COUNTRY } from './countries.js';
 
-export const FORT_HALF = 6;          // 13 x 13 footprint
+export const FORT_HALF = 10;         // 21 x 21 footprint
 const ZONE = FORT_HALF + 4;          // no building this close to the walls
-export const FORT_NAMES = [
+export const FORT_NAMES_OLD = [
   'Fort Ashgrove', 'Kestrel Redoubt', 'Fort Marrow', 'Blackwater Keep', 'Fort Calder', 'Hollow Bastion',
   'Fort Dunmere', 'Ironbridge Post', 'Fort Varga', 'Saltmarsh Redoubt', 'Fort Tamsin', 'Greyfield Keep',
   'Fort Orrin', 'Cinder Hill Post', 'Fort Lowry', 'Wrenmoor Bastion',
 ];
+
+// headquarters names: the country's name and a number (e.g. "HQ 2")
+export const FORT_NAMES = ['HQ 1', 'HQ 2', 'HQ 3', 'HQ 4', 'HQ 5', 'HQ 6', 'HQ 7', 'HQ 8', 'HQ 9'];
 
 // local (door faces +lz) -> world offset
 function rot(side, lx, lz) {
@@ -27,20 +34,21 @@ function rot(side, lx, lz) {
 }
 
 // ----------------------------------------------------------------- generation
-export function chooseFortSites(world, tops, water, distLand, rnd, count, avoid) {
+export function chooseFortSites(world, tops, water, distLand, rnd, count, avoid, south = 0) {
   const W = world.W, D = world.D;
   const spacing = Math.sqrt(W * D / count) * 0.72;
   const sites = [];
   for (let tries = 0; tries < 4000 && sites.length < count; tries++) {
-    const cx = 16 + Math.floor(rnd() * (W - 32)), cz = 16 + Math.floor(rnd() * (D - 32));
+    const cx = 28 + Math.floor(rnd() * (W - 56)), cz = 28 + Math.floor(rnd() * (D - 56));
     if (sites.some((s) => Math.hypot(s.cx - cx, s.cz - cz) < spacing)) continue;
     if (avoid && Math.hypot(avoid.x - cx, avoid.z - cz) < 40) continue;
+    if (south && cz > D - south) continue;                         // keep clear of the landing beach
     const k = cx + cz * W;
     if (water[k]) continue;
     // about 40% of forts sit right next to a river or lake (water as a defence)
-    const waterside = sites.filter((s) => s.waterside).length < Math.ceil(count * 0.4);
+    const waterside = tries < 2500 && sites.filter((s) => s.waterside).length < Math.ceil(count * 0.4);
     const dl = distLand[k];
-    if (waterside ? (dl < 9 || dl > 13) : dl < 14) continue;
+    if (waterside ? (dl < 13 || dl > 17) : dl < (tries < 3000 ? 18 : 14)) continue;
     let ok = true;
     for (let dz = -FORT_HALF - 1; dz <= FORT_HALF + 1 && ok; dz++) for (let dx = -FORT_HALF - 1; dx <= FORT_HALF + 1 && ok; dx++) {
       if (water[(cx + dx) + (cz + dz) * W]) ok = false;
@@ -49,7 +57,7 @@ export function chooseFortSites(world, tops, water, distLand, rnd, count, avoid)
     // door faces away from the nearest water
     let side = 's', best = -1;
     for (const sd of ['n', 's', 'e', 'w']) {
-      const [ox, oz] = rot(sd, 0, 12);
+      const [ox, oz] = rot(sd, 0, 16);
       const d = distLand[(cx + ox) + (cz + oz) * W] || 0;
       if (d > best) { best = d; side = sd; }
     }
@@ -79,18 +87,24 @@ export function flattenForSite(tops, water, W, D, f) {
 
 export function stampFort(world, f, rnd) {
   const b = f.base;
-  const put = (lx, y, lz, id) => {
+  const put = (lx, y, lz, id, lock = true) => {
     const [ox, oz] = rot(f.side, lx, lz);
     const x = f.cx + ox, z = f.cz + oz;
     if (!world.inside(x, y, z)) return;
     const i = world.idx(x, y, z);
     world.data[i] = id;
-    world.locked[i] = id === B.AIR ? 0 : 1;
+    world.locked[i] = lock && id !== B.AIR ? 1 : 0;
   };
-  const H = FORT_HALF;
+  const H = FORT_HALF, R0 = -(H - 1), R1 = -(H - 5);       // the rooms along the back wall
+  // the basement: under the courtyard, brick walls that can be dug into from outside
+  for (let lz = -H + 1; lz <= H - 1; lz++) for (let lx = -H + 1; lx <= H - 1; lx++) {
+    const edge = Math.abs(lx) === H - 1 || Math.abs(lz) === H - 1;
+    put(lx, b - 6, lz, B.BRICK, false);
+    for (let y = b - 5; y <= b - 2; y++) put(lx, y, lz, edge ? B.BRICK : B.AIR, false);
+  }
   for (let lz = -H; lz <= H; lz++) for (let lx = -H; lx <= H; lx++) {
     put(lx, b - 1, lz, B.FORT_WALL);                                  // floor
-    for (let y = b; y <= b + 7; y++) put(lx, y, lz, B.AIR);           // clear
+    for (let y = b; y <= b + 9; y++) put(lx, y, lz, B.AIR);           // clear
     const edge = Math.abs(lx) === H || Math.abs(lz) === H;
     const corner = Math.abs(lx) >= H - 1 && Math.abs(lz) >= H - 1;
     if (edge) {
@@ -100,29 +114,50 @@ export function stampFort(world, f, rnd) {
     if (corner) for (let y = b; y <= b + 6; y++) put(lx, y, lz, B.FORT_WALL);   // towers
     // inner rampart walkway to fire over the walls
     if (!edge && (Math.abs(lx) === H - 1 || Math.abs(lz) === H - 1)) put(lx, b + 3, lz, B.FORT_WALL);
+    // the rooms' roof is part of the walkway
+    if (lz >= R0 && lz <= R1 && !edge) put(lx, b + 3, lz, B.FORT_WALL);
+  }
+  // four rooms: walls between them, a doorway into each from the courtyard
+  const rooms = [['medical', -9, -6], ['armory', -4, -1], ['food', 1, 4], ['officer', 6, 9]];
+  for (let lx = -H + 1; lx <= H - 1; lx++) for (let y = b; y <= b + 2; y++) put(lx, y, R1 + 1, B.FORT_WALL);
+  for (const px of [-5, 0, 5]) for (let lz = R0; lz <= R1; lz++) for (let y = b; y <= b + 2; y++) put(px, y, lz, B.FORT_WALL);
+  f.rooms = [];
+  const P = (lx, lz) => { const [ox, oz] = rot(f.side, lx, lz); return { x: f.cx + ox + 0.5, z: f.cz + oz + 0.5 }; };
+  for (const [type, a, c] of rooms) {
+    const dx = Math.round((a + c) / 2);
+    put(dx, b, R1 + 1, B.AIR); put(dx, b + 1, R1 + 1, B.AIR);         // doorway
+    put(dx, b + 2, R1 + 1, B.FORT_LAMP);                               // lamp over the doorway
+    const fx = { medical: B.MEDICAL, armory: B.ARMORY, food: B.SUPPLY, officer: B.MAPTABLE }[type];
+    for (let lx = a; lx <= c; lx++) put(lx, b, R0, fx);                // along the back wall
+    if (type === 'food') put(a, b + 1, R0, B.SUPPLY);
+    if (type === 'armory') { put(a, b, R0 + 1, B.ARMORY); put(c, b, R0 + 1, B.ARMORY); }
+    if (type === 'officer') { for (let lx = a + 1; lx <= c - 1; lx++) put(lx, b, R0, B.AIR); put(a + 1, b, R0 + 2, B.MAPTABLE); put(a + 2, b, R0 + 2, B.MAPTABLE); put(a, b, R0, B.SUPPLY); }
+    const q = P(dx, R0 + 2);
+    f.rooms.push({ type, x: q.x, y: b, z: q.z });
   }
   // firing windows / light slits
-  for (const a of [-3, 0, 3]) {
-    put(a, b + 2, -H, B.AIR); put(-H, b + 2, a, B.AIR); put(H, b + 2, a, B.AIR);
-    if (Math.abs(a) === 3) put(a, b + 2, H, B.AIR);
+  for (const a of [-6, -2, 2, 6]) {
+    put(-H, b + 2, a + (a < 0 ? 0 : 0), B.AIR); put(H, b + 2, a, B.AIR);
+    if (Math.abs(a) > 2) put(a, b + 2, H, B.AIR);
   }
-  // lamps: in the walls (they glow inside and out) and on top of each tower
-  for (const [lx, lz] of [[-H, -2], [-H, 2], [H, -2], [H, 2], [-2, -H], [2, -H]]) put(lx, b + 1, lz, B.FORT_LAMP);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(sx * H, b + 7, sz * H, B.FORT_LAMP);
+  // lamps in the walls (they glow inside and out); floodlight towers on the corners
+  for (const [lx, lz] of [[-H, -3], [-H, 3], [H, -3], [H, 3], [-3, H], [3, H], [-4, -H], [4, -H]]) put(lx, b + 1, lz, B.FORT_LAMP);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { for (let y = b + 7; y <= b + 8; y++) put(sx * H, y, sz * H, B.FORT_WALL); put(sx * H, b + 9, sz * H, B.FORT_LAMP); }
   // main door (2 wide, 3 high) on the +lz side
   for (const lx of [-1, 0]) for (let y = b; y <= b + 2; y++) put(lx, y, H, B.FORT_DOOR);
-  // ladder posts up to the rampart
-  for (const lx of [-(H - 2), H - 2]) for (let y = b; y <= b + 3; y++) put(lx, y, -(H - 2), B.LADDER);
-  put(3, b, -2, B.SUPPLY);
-  // warm light everywhere inside
-  for (let lz = -(H - 1); lz <= H - 1; lz++) for (let lx = -(H - 1); lx <= H - 1; lx++) for (let y = b; y <= b + 6; y++) {
+  // ladders up to the rampart, by the front wall; and a hatch down to the basement
+  for (const lx of [-(H - 2), H - 2]) for (let y = b; y <= b + 3; y++) put(lx, y, H - 2, B.LADDER);
+  for (let y = b - 5; y <= b - 1; y++) put(H - 3, y, 0, B.LADDER);
+  for (const [lx, lz] of [[-6, 2], [6, -2], [-3, -3]]) put(lx, b - 5, lz, B.SUPPLY);
+  // warm light everywhere inside, the basement too
+  for (let lz = -(H - 1); lz <= H - 1; lz++) for (let lx = -(H - 1); lx <= H - 1; lx++) for (let y = b - 5; y <= b + 6; y++) {
     const [ox, oz] = rot(f.side, lx, lz);
     const x = f.cx + ox, z = f.cz + oz;
     if (world.inside(x, y, z)) world.glow[world.idx(x, y, z)] = 150;
   }
   // useful world-space points
-  const P = (lx, lz) => { const [ox, oz] = rot(f.side, lx, lz); return { x: f.cx + ox + 0.5, z: f.cz + oz + 0.5 }; };
   const mid = P(-0.5, H);
+  f.half = H;
   f.doorCenter = { x: mid.x, y: b + 1.5, z: mid.z };
   f.doorOut = P(-0.5, H + 2.5); f.doorIn = P(-0.5, H - 2.5);
   f.doorCells = [];
@@ -130,18 +165,19 @@ export function stampFort(world, f, rnd) {
   // the two ladders up to the rampart: where to step on (bottom, in the
   // courtyard) and off (top, on the walkway)
   f.ladders = [-(H - 2), H - 2].map((lx) => {
-    const t = P(lx, -(H - 2)), bt = P(lx - Math.sign(lx), -(H - 3));
+    const t = P(lx, H - 2), bt = P(lx - Math.sign(lx), H - 3);
     return { top: { x: t.x, y: b + 4, z: t.z }, bottom: { x: bt.x, y: b, z: bt.z } };
   });
-  f.posts = [];      // garrison positions: rampart and courtyard
-  for (const [lx, lz, up] of [[-3, -(H - 1), 1], [3, -(H - 1), 1], [-(H - 1), 1, 1], [H - 1, -1, 1], [-3, H - 1, 1], [3, H - 1, 1],
-    [-2, 0, 0], [2, 2, 0], [0, -3, 0], [-3, 3, 0]]) {
+  const hatch = P(H - 3, 0); f.hatch = { x: hatch.x, y: b, z: hatch.z };
+  f.posts = [];      // garrison positions: rampart, rooms' roof and courtyard
+  for (const [lx, lz, up] of [[-5, -(H - 1), 1], [5, -(H - 1), 1], [-(H - 1), 1, 1], [H - 1, -1, 1], [-5, H - 1, 1], [5, H - 1, 1], [0, R0 + 1, 1], [-(H - 1), -4, 1],
+    [-3, 3, 0], [3, 5, 0], [0, 0, 0], [-6, 0, 0], [6, 3, 0], [-2, 6, 0]]) {
     const q = P(lx, lz); f.posts.push({ x: q.x, y: up ? b + 4 : b, z: q.z });
   }
   f.lampsOut = [];
-  for (const [lx, lz] of [[-H - 0.7, -2], [-H - 0.7, 2], [H + 0.7, -2], [H + 0.7, 2], [-2, -H - 0.7], [2, -H - 0.7]]) { const q = P(lx, lz); f.lampsOut.push({ x: q.x, y: b + 1.5, z: q.z, big: false }); }
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const q = P(sx * H, sz * H); f.lampsOut.push({ x: q.x, y: b + 7.5, z: q.z, big: true }); }
-  const pole = P(-H, -H); f.pole = { x: pole.x, y: b + 8, z: pole.z };
+  for (const [lx, lz] of [[-H - 0.7, -3], [-H - 0.7, 3], [H + 0.7, -3], [H + 0.7, 3], [-3, H + 0.7], [3, H + 0.7], [-4, -H - 0.7], [4, -H - 0.7]]) { const q = P(lx, lz); f.lampsOut.push({ x: q.x, y: b + 1.5, z: q.z, big: false }); }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const q = P(sx * H, sz * H); f.lampsOut.push({ x: q.x, y: b + 9.5, z: q.z, big: true, flood: true }); }
+  const pole = P(-H + 1, 3); f.pole = { x: pole.x, y: b + 8, z: pole.z };
 }
 
 // ---------------------------------------------------------------- flags
@@ -166,9 +202,14 @@ function makeHalo() {
 // ---------------------------------------------------------------- runtime
 export class Forts {
   // the nation whose flag flies over a fort (from its owner's side)
+  // Stage 2: a country's own flag while its own side holds it; an
+  // occupier flies its main nation's flag
   flagNation(f, owner) {
     const side = this.game.cfg.side || 'allies';
     const s = owner === 'ally' ? side : side === 'allies' ? 'axis' : 'allies';
+    const c = COUNTRY[this.game.cfg.country];
+    if (c && c.side === s && !c.occupied) return c.id;
+    if (c && c.occupied && s === 'allies') return c.id;
     const list = MAIN_NATIONS[s];
     return list[f.id % list.length];
   }
@@ -183,6 +224,9 @@ export class Forts {
     for (const f of this.list) {
       const s = byId.get(f.id);
       if (s) { f.owner = s.owner; f.charges = s.charges || 0; f.blown = !!s.blown; }
+      // the campaign's record (or the battle's set-up) decides who holds it
+      if (game.campaign) f.owner = game.campaign.ownerOf(f);
+      else if (game.battle) f.owner = game.battle.ownerOf(f);
       f.charges = f.charges || 0; f.blown = !!f.blown;
       f.openT = 0; f.alarm = 0; f.alarmCd = 0; f.officerDead = false; f.flagAnim = null;
       f.center = new THREE.Vector3(f.cx + 0.5, f.base + 1, f.cz + 0.5);
@@ -205,12 +249,12 @@ export class Forts {
     g.add(cloth);
     f.cloth = cloth; f.flagTop = f.pole.y + 5.2; f.flagBottom = f.pole.y + 0.9;
     f.halos = f.lampsOut.map((l) => {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-      s.position.set(l.x, l.y, l.z); s.scale.setScalar(l.big ? 5 : 2.6);
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      s.position.set(l.x, l.y, l.z); s.scale.setScalar(l.flood ? 9 : l.big ? 5 : 2.6);
       g.add(s); return s;
     });
-    const dome = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    dome.position.set(f.cx + 0.5, f.base + 4, f.cz + 0.5); dome.scale.setScalar(15);
+    const dome = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    dome.position.set(f.cx + 0.5, f.base + 5, f.cz + 0.5); dome.scale.setScalar(26);
     g.add(dome); f.halos.push(dome); dome.userData.dome = true;
     this.scene.add(g);
     f.decor = g;
@@ -219,7 +263,7 @@ export class Forts {
   // -------------------------------------------------------------- queries
   inside(f, pos, pad = 0) {
     return Math.abs(pos.x - (f.cx + 0.5)) <= FORT_HALF - 0.4 + pad && Math.abs(pos.z - (f.cz + 0.5)) <= FORT_HALF - 0.4 + pad &&
-      pos.y >= f.base - 0.6 && pos.y <= f.base + 7;
+      pos.y >= f.base - 6 && pos.y <= f.base + 9;
   }
   fortAt(pos) { return this.list.find((f) => this.inside(f, pos)) || null; }
   nearest(pos, owner) {
@@ -297,6 +341,7 @@ export class Forts {
     f.owner = owner; f.charges = 0; f.officerDead = false;
     f.cloth.material.map = makeFlag(this.flagNation(f, owner)); f.cloth.visible = owner !== 'none';
     this.game.enemies.fortChanged(f, prev, owner);
+    if (this.game.campaign) this.game.campaign.hqChanged(f);
   }
   setOwner(f, owner) {
     const prev = f.owner;
@@ -317,6 +362,7 @@ export class Forts {
       sfx.warn();
     }
     g.enemies.fortChanged(f, prev, owner);
+    if (g.campaign) g.campaign.hqChanged(f);
   }
 
   // -------------------------------------------------------------- update
@@ -405,8 +451,8 @@ export class Forts {
       return;
     }
     // surrender: officer down, or outnumbered with the door blown open
-    const nearAttackers = (other === 'ally' && !g.dead && Math.hypot(g.player.pos.x - f.center.x, g.player.pos.z - f.center.z) < 14 ? 1 : 0) +
-      g.enemies.list.filter((s) => s.alive && !s.surrender && s.faction === other && Math.hypot(s.pos.x - f.center.x, s.pos.z - f.center.z) < 14).length;
+    const nearAttackers = (other === 'ally' && !g.dead && Math.hypot(g.player.pos.x - f.center.x, g.player.pos.z - f.center.z) < FORT_HALF + 8 ? 1 : 0) +
+      g.enemies.list.filter((s) => s.alive && !s.surrender && s.faction === other && Math.hypot(s.pos.x - f.center.x, s.pos.z - f.center.z) < FORT_HALF + 8).length;
     if ((f.officerDead && nearAttackers > 0) || (f.blown && nearAttackers > defenders.length)) {
       for (const s of defenders) g.enemies.surrender(s, f);
       g.hud.toast(t('fort.surrender', { name: f.name }));
@@ -427,4 +473,4 @@ export function assignOwners(forts, mode, sub, rnd, startFort) {
     f.id = i;
   });
 }
-export function fortCount(cfg) { return (DIFF[cfg.difficulty] || DIFF.medium).forts; }
+export function fortCount(cfg) { return cfg.country ? COUNTRY[cfg.country].hqs : (DIFF[cfg.difficulty] || DIFF.medium).forts; }

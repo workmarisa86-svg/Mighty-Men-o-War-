@@ -20,7 +20,7 @@ export const UNIFORMS = {
   jp: { tunic: 0x7a6e48, trousers: 0x6a5e3c, helmet: 0x5a5638, band: 0x8a7a50, insignia: 0xd8b040, pack: 0x625a3c, tracer: 0xff7a40 },
 };
 // which uniform a nation's soldiers wear
-export const UNIFORM_OF = { us: 'us', uk: 'uk', su: 'su', cn: 'us', ca: 'uk', au: 'uk', in: 'uk', de: 'de', it: 'it', jp: 'jp', fr: 'de', pl: 'de', no: 'de', gr: 'it' };
+export const UNIFORM_OF = { us: 'us', uk: 'uk', su: 'su', cn: 'us', ca: 'uk', au: 'uk', in: 'uk', de: 'de', it: 'it', jp: 'jp', fr: 'uk', pl: 'uk', no: 'uk', gr: 'uk' };
 // the nations soldiers of a side come from until each country has its own (Stage 2)
 export const MAIN_NATIONS = { allies: ['us', 'uk', 'su'], axis: ['de', 'it', 'jp'] };
 

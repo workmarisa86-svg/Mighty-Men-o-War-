@@ -27,7 +27,7 @@ export class Farm {
       // first visit: the village fields are planted and ripe
       const v = w.sites.find((s) => s.type === 'village');
       for (const f of v.fields) for (let z = f.z0; z <= f.z1; z++) for (let x = f.x0; x <= f.x1; x++) {
-        const i = w.idx(x, v.y, z), b = w.data[i];
+        const i = w.idx(x, f.y ?? v.y, z), b = w.data[i];
         if (BLOCKS[b] && BLOCKS[b].crop) this.crops.set(i, { c: f.crop, g: b === B.SPROUT ? 0.2 : 1, w: game.time, e: game.time, h: 1, o: 'v' });
       }
     }

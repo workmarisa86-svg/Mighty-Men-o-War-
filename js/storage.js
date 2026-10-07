@@ -84,6 +84,8 @@ export function writeSave(data) {
     difficulty: data.cfg.difficulty, timeMode: data.cfg.timeMode || 'cycle', day: Math.floor(data.time || 0) + 1,
     gameType: data.cfg.gameType || 'open', mission: data.cfg.mission || null, v: data.v || 1,
     missionDone: data.mission ? data.mission.done && data.mission.result : null,
+    country: data.cfg.country || null,
+    owned: data.campaign ? Object.values(data.campaign.countries).filter((c) => c.owner === data.cfg.side).length : null,
     created: data.created, updated: data.updated,
   };
   const ok = save('save-' + data.id, data);

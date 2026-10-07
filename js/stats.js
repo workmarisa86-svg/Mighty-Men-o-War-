@@ -2,7 +2,7 @@
 // War statistics are kept per difficulty level.
 import { load, save, remove } from './storage.js';
 
-const BLANK = () => ({ days: 0, fortsCaptured: 0, fortsLost: 0, enemies: 0, animals: 0, longestAlone: 0, missions: 0, gold: 0, silver: 0, bronze: 0 });
+const BLANK = () => ({ days: 0, fortsCaptured: 0, fortsLost: 0, enemies: 0, animals: 0, longestAlone: 0, missions: 0, gold: 0, silver: 0, bronze: 0, countries: 0, battles: 0, played: 0 });
 // Peace mode is gone: its mission medals are dropped
 const PEACE_MISSIONS = ['shack', 'hunter', 'explore', 'bridgeb'];
 export function loadStats() {

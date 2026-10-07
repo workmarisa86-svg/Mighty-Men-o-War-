@@ -1,9 +1,14 @@
-// Townspeople: shopkeepers who stay at their shops, the sheriff, farmers and
-// villagers who walk the village roads by day and go home at night. They
-// greet you (warmly or coldly, depending on your honor), notice crimes they
-// can see, run to the sheriff to report them, and form the posse.
-// Far-away townspeople sleep: they are not animated and skip ahead along
-// their route.
+// Townspeople: shopkeepers who stay at their shops, the sheriff, farmers who
+// work the fields by their homes, and villagers who go to the shops, the
+// plaza and their neighbors' homes by day and go home at night. They greet
+// you (warmly or coldly, depending on your honor), notice crimes they can
+// see, run to the sheriff to report them, and form the posse.
+// Only townspeople near the player are active: far-away ones are not
+// animated and skip ahead along their route.
+// The town never runs out of people: whoever dies is replaced by a newcomer
+// born that day, who grows up over GROW_DAYS and then takes their place
+// (home, job, shop). A body left inside a house stays there until a visitor
+// finds it (and runs to the sheriff) or BODY_DAYS pass unnoticed.
 import * as THREE from 'three';
 import { B, SOLID } from './blocks.js';
 import { Character, civLook } from './characters.js';
@@ -22,6 +27,9 @@ const HAIR = [0x2a1c12, 0x5a3a20, 0x8a6a3a, 0x3a2a1c, 0x9a9488, 0x1a1410];
 
 export const ROLE_SPOT = { general: 'general', butcher: 'butcher', hunting: 'hunting', market: 'market' };
 const WALK = 2.2, RUN = 5.2;
+export const GROW_DAYS = 2, BODY_DAYS = 3;
+const VISIT = 0.1;              // chance a day out is a visit to a neighbor
+const ACTIVE_M = 80;            // only people this close to the player are active
 
 export class Townsfolk {
   constructor(game, saved = {}) {
@@ -31,8 +39,11 @@ export class Townsfolk {
     this.tracers = [];
     this.gens = saved.gens || {};
     this.dead = saved.dead || {};
+    this.bodies = saved.bodies || {};          // bodies left inside houses, by person
     const v = this.village;
     const homes = v.buildings.filter((b) => b.type === 'house');
+    // each home's two nearest neighbors (the homes its people visit)
+    for (const h of homes) h.neighbors = homes.filter((o) => o !== h).sort((a, b) => Math.hypot(a.inside.x - h.inside.x, a.inside.z - h.inside.z) - Math.hypot(b.inside.x - h.inside.x, b.inside.z - h.inside.z)).slice(0, 2);
     const roles = [
       ['keeper', 'general'], ['keeper', 'butcher'], ['keeper', 'hunting'], ['keeper', 'market'], ['sheriff', 'hall'],
       ['farmer'], ['farmer'], ['farmer'], ['villager'], ['villager'], ['villager'], ['villager'], ['villager'],
@@ -75,35 +86,54 @@ export class Townsfolk {
       hp: 100, alive: true, deadT: 0, state: 'idle', idleT: r() * 10, route: [], goal: null, greetT: 0, actT: 0,
       armed: null, posse: false, hostile: false, cool: 0, reportTo: null, crime: null, scaredT: 0, seenT: 0, stuckT: 0, faceT: 0,
     };
-    if (this.dead[i] && this.dead[i] > g.time) { v.alive = false; v.away = true; rig.root.visible = false; }
+    const body = this.bodies[i];
+    if (body) { v.alive = false; v.body = body; v.deadT = 30; v.fallDir = body.f || 1; v.pos.set(body.x, body.y, body.z); v.yaw = body.yaw || 0; }
+    else if (this.dead[i] && this.dead[i] > g.time) { v.alive = false; v.away = true; rig.root.visible = false; }
     this.list[i] = v;
     return v;
   }
 
+
   hour() { return (this.game.time % 1) * 24; }
   night() { const h = this.hour(); return h >= 21 || h < 6; }
 
-  // ---- routes along the village roads ---------------------------------
+  // ---- routes: the center's roads and the paths out to the homes ------
+  // where a building joins the roads: a home's path leaves from the end of
+  // one of the center's roads; center buildings face a road
   roadPoint(b) {
     const v = this.village;
     if (!b) return null;
+    if (b.arm) return { x: b.arm.x, y: v.y, z: b.arm.z, axis: b.arm.axis };
     if (b.type === 'market') return { x: v.cx + 4.5, y: v.y, z: v.cz + 0.5, axis: 'x' };
     if (b.side === 'n' || b.side === 's') return { x: b.door.x, y: v.y, z: v.cz + 0.5, axis: 'x' };
     return { x: v.cx + 0.5, y: v.y, z: b.door.z, axis: 'z' };
   }
-  // a place: { pos, b (building, entered through its door), road: point on a road }
+  // a place: { pos, b (building, entered through its door) or road (a point
+  // on a road), trail (the path out to it), via / from (a corner to go round
+  // on the way in / out) }
   routeTo(v, place) {
     const vi = this.village, out = [];
     const cur = v.place;
-    if (cur && cur.b && cur.b !== place.b) { if (cur.b.doorIn) out.push(cur.b.doorIn); out.push(cur.b.door); }
+    const same = cur && cur.b && cur.b === place.b;
+    if (cur && cur.b && !same) { if (cur.b.doorIn) out.push(cur.b.doorIn); out.push(cur.b.door); }
+    if (cur && cur.from) out.push(cur.from);
+    const trA = cur ? (cur.b ? cur.b.trail : cur.trail) : null;
+    const trZ = place.b ? place.b.trail : place.trail;
     const a = cur ? (cur.b ? this.roadPoint(cur.b) : cur.road) : null;
     const z = place.b ? this.roadPoint(place.b) : place.road;
-    if (a && z && !(cur && cur.b === place.b)) {
-      out.push(a);
-      if (a.axis !== z.axis) out.push({ x: vi.cx + 0.5, y: vi.y, z: vi.cz + 0.5 });
-      out.push(z);
+    // between a home and its own field nobody goes back to the center
+    const local = trA && trA === trZ;
+    if (!same && !local) {
+      if (trA) for (let k = trA.length - 1; k >= 0; k--) out.push(trA[k]);
+      if (a && z) {
+        out.push(a);
+        if (a.axis !== z.axis) out.push({ x: vi.cx + 0.5, y: vi.y, z: vi.cz + 0.5 });
+        out.push(z);
+      }
+      if (trZ) for (const q of trZ) out.push(q);
     }
-    if (place.b && !(cur && cur.b === place.b)) { out.push(place.b.door); if (place.b.doorIn) out.push(place.b.doorIn); }
+    if (place.b && !same) { out.push(place.b.door); if (place.b.doorIn) out.push(place.b.doorIn); }
+    if (place.via) out.push(place.via);
     out.push(place.pos);
     v.route = out.map((q) => ({ x: q.x, y: q.y ?? vi.y, z: q.z }));
     v.place = place; v.goal = place.pos;
@@ -115,20 +145,26 @@ export class Townsfolk {
     if (v.role === 'keeper') return at(v.work, v.work.keeper);
     if (this.night()) return at(v.role === 'sheriff' ? v.work : v.home, (v.role === 'sheriff' ? v.work : v.home).inside);
     if (v.role === 'sheriff') {
-      const pts = [{ x: vi.cx + 0.5 + (r() - 0.5) * 8, z: vi.cz + 0.5 + (r() - 0.5) * 8 }, { x: v.work.door.x, z: v.work.door.z }, { x: vi.cx + 0.5 + (r() < 0.5 ? -36 : 36), z: vi.cz + 0.5 }];
+      const pts = [{ x: vi.cx + 0.5 + (r() - 0.5) * 8, z: vi.cz + 0.5 + (r() - 0.5) * 8 }, { x: v.work.door.x, z: v.work.door.z }, { x: vi.cx + 0.5 + (r() < 0.5 ? -22 : 22), z: vi.cz + 0.5 }];
       const p = pts[Math.floor(r() * pts.length)];
       return { road: { x: p.x, y: vi.y, z: vi.cz + 0.5, axis: 'x' }, pos: { x: p.x, y: vi.y, z: p.z } };
     }
-    if (v.role === 'farmer' && r() < 0.75) {
-      const f = vi.fields[v.i % vi.fields.length];
-      const x = f.x0 + 1 + Math.floor(r() * (f.x1 - f.x0 - 1)) + 0.5, z = (f.gate.z > f.z1 ? f.z1 + 1.4 : f.z0 - 1.4);
+    const f = v.home && v.home.field;
+    if (v.role === 'farmer' && f && r() < 0.75) {
+      // the field beside his home
+      const s = f.spots[Math.floor(r() * f.spots.length)];
       v.work = f;
-      return { road: { x: f.gate.x, y: vi.y, z: vi.cz + 0.5, axis: 'x' }, pos: { x, y: vi.y, z }, work: 'field' };
+      return { road: this.roadPoint(v.home), trail: v.home.trail, via: f.gate, from: f.gate, pos: { x: s.x, y: s.y, z: s.z }, work: 'field' };
     }
-    const shops = vi.buildings.filter((b) => b.type !== 'house');
+    const shops = vi.buildings.filter((b) => b.type !== 'house' && b.type !== 'jail');
     const k = r();
-    if (k < 0.35) { const x = vi.cx + 0.5 + (r() - 0.5) * 10, z = vi.cz + 0.5 + (r() - 0.5) * 10; return { road: { x: vi.cx + 0.5, y: vi.y, z: vi.cz + 0.5, axis: 'x' }, pos: { x, y: vi.y, z } }; }
-    if (k < 0.7) { const s = shops[Math.floor(r() * shops.length)]; return s.type === 'market' ? at(s, s.door) : at(s, s.counter || s.inside); }
+    if (k < 0.3) { const x = vi.cx + 0.5 + (r() - 0.5) * 10, z = vi.cz + 0.5 + (r() - 0.5) * 10; return { road: { x: vi.cx + 0.5, y: vi.y, z: vi.cz + 0.5, axis: 'x' }, pos: { x, y: vi.y, z } }; }
+    if (k < 0.6) { const s = shops[Math.floor(r() * shops.length)]; return s.type === 'market' ? at(s, s.door) : at(s, s.counter || s.inside); }
+    if (k < 0.6 + VISIT && v.home && v.home.neighbors && v.home.neighbors.length) {
+      // a visit to a neighbor
+      const n = v.home.neighbors[Math.floor(r() * v.home.neighbors.length)];
+      return at(n, { x: n.inside.x + (r() - 0.5) * 2, y: n.inside.y, z: n.inside.z + (r() - 0.5) * 2 });
+    }
     return at(v.home, v.home.inside);
   }
 
@@ -159,7 +195,9 @@ export class Townsfolk {
       let gy = this.ground(nx, nz, v.pos.y);
       if (gy == null || gy - v.pos.y > up || gy - v.pos.y < -3) continue;
       // stepping up onto a block: the body rises as it moves onto it
-      if (!this.free(nx, gy, nz)) { if (up > 1 && Math.abs(gy - v.pos.y) < 0.2 && this.free(nx, gy + 1, nz) && this.free(v.pos.x, v.pos.y + 1, v.pos.z)) gy += 1; else continue; }
+      // stepping down: the body is still at its old height for a moment
+      const fy = gy < v.pos.y - 0.05 ? Math.max(gy, Math.ceil(v.pos.y - 0.2)) : gy;
+      if (!this.free(nx, fy, nz)) { if (up > 1 && Math.abs(gy - v.pos.y) < 0.2 && this.free(nx, gy + 1, nz) && this.free(v.pos.x, v.pos.y + 1, v.pos.z)) gy += 1; else continue; }
       v.pos.x = nx; v.pos.z = nz; v.pos.y += (gy - v.pos.y) * Math.min(1, dt * 12);
       v.yaw = turn(v.yaw, a, dt * 7); v.speed = speed;
       if (o === 0) v.stuckT = Math.max(0, v.stuckT - dt); else v.stuckT += dt * 0.4;
@@ -169,7 +207,7 @@ export class Townsfolk {
     for (const [sx, sz] of [[Math.sign(dx) * st, 0], [0, Math.sign(dz) * st]]) {
       if (!sx && !sz) continue;
       const nx = v.pos.x + sx, nz = v.pos.z + sz, gy = this.ground(nx, nz, v.pos.y);
-      if (gy == null || gy - v.pos.y > up || gy - v.pos.y < -3 || !this.free(nx, gy, nz)) continue;
+      if (gy == null || gy - v.pos.y > up || gy - v.pos.y < -3 || !this.free(nx, gy < v.pos.y - 0.05 ? Math.max(gy, Math.ceil(v.pos.y - 0.2)) : gy, nz)) continue;
       v.pos.x = nx; v.pos.z = nz; v.pos.y += (gy - v.pos.y) * Math.min(1, dt * 12); v.speed = speed * 0.7; v.stuckT += dt * 0.3;
       return false;
     }
@@ -180,7 +218,11 @@ export class Townsfolk {
   walk(v, dt, speed) {
     if (!v.route.length) return true;
     const q = v.route[0];
-    if (this.step(v, q.x, q.z, speed, dt, q.y) || (Math.hypot(q.x - v.pos.x, q.z - v.pos.z) < 0.6 && Math.abs(q.y - v.pos.y) < 1.6)) {
+    const dq = Math.hypot(q.x - v.pos.x, q.z - v.pos.z);
+    // no closer for a few seconds (going round and round a corner or a
+    // step): count the point as passed and head for the next one
+    if (q !== v.progQ || dq < v.progD - 0.5) { v.progQ = q; v.progD = dq; v.progT = 0; } else v.progT += dt;
+    if (this.step(v, q.x, q.z, speed, dt, q.y) || (dq < 0.9 && Math.abs(q.y - v.pos.y) < 1.6) || (v.progT > 4 && dq < 3)) {
       v.route.shift(); v.replans = 0;
       return !v.route.length;
     }
@@ -188,8 +230,9 @@ export class Townsfolk {
       v.stuckT = 0; v.replans = (v.replans || 0) + 1;
       // blocked (something was built in the way): plan around it; after a few
       // tries (or when nobody is looking) slip on to the next point
-      const p = v.replans < 3 ? findPath(this.game.world, v.pos, v.route[v.route.length - 1], 1500, true) : null;
-      if (p && p.length && v.replans < 3) v.route = p;
+      // (only round the obstacle to the next point; the rest of the way stays)
+      const p = v.replans < 3 ? findPath(this.game.world, v.pos, v.route[0], 1500, false) : null;
+      if (p && p.length && v.replans < 3) v.route = p.concat(v.route.slice(1));
       if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(); if (nx) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
     }
     return false;
@@ -298,12 +341,22 @@ export class Townsfolk {
       if (!v.alive) {
         if (v.away) { if (!this.dead[v.i] || this.dead[v.i] <= g.time) this.replace(v); continue; }
         v.deadT += dt;
-        v.rig.pose({ dead: v.deadT, fallDir: v.fallDir || 1 }, dt);
-        if (v.deadT > 40) { v.away = true; v.rig.root.visible = false; }
+        const near = Math.hypot(v.pos.x - P.x, v.pos.z - P.z) < (g.settings.renderDist + 1) * 16;
+        v.rig.root.visible = near;
+        if (near) { v.rig.pose({ dead: v.deadT, fallDir: v.fallDir || 1 }, dt); v.rig.place(v.pos, v.yaw, v.pos.y); }
+        // a body in a house stays until someone finds it (then it is taken
+        // away after a while) or BODY_DAYS pass unnoticed; elsewhere it is
+        // taken away soon
+        const bd = v.body;
+        if (bd ? (bd.found ? g.time > bd.found + 0.03 : g.time > bd.t + BODY_DAYS) : v.deadT > 40) {
+          v.away = true; v.rig.root.visible = false;
+          if (bd) delete this.bodies[v.i];
+          v.body = null;
+        }
         continue;
       }
       const d = Math.hypot(v.pos.x - P.x, v.pos.z - P.z);
-      v.far = d > 90;
+      v.far = d > ACTIVE_M;
       v.fired = false;
       v.greetT -= dt; v.faceT -= dt; v.scaredT -= dt;
       if (v.posse) T.posseBehaviour(v, dt, d);
@@ -340,10 +393,11 @@ export class Townsfolk {
     if (v.far && v.goal) {
       // asleep: skip ahead along the route now and then
       v.actT -= dt;
-      if (v.route.length && v.actT <= 0) { v.actT = 3; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); }
+      if (v.route.length && v.actT <= 0) { v.actT = 3; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); if (!v.route.length) this.lookForBody(v); }
       if (!v.route.length && v.actT <= 0) { v.actT = 20 + Math.random() * 30; this.routeTo(v, this.pickPlace(v)); }
       return;
     }
+    this.lookForBody(v);
     const nightNow = this.night();
     if (v.wasNight !== nightNow) { v.wasNight = nightNow; v.idleT = 0; v.route = []; }
     if (v.route.length) { v.crouch = false; this.walk(v, dt, WALK); return; }
@@ -394,18 +448,75 @@ export class Townsfolk {
     v.alive = false; v.deadT = 0; v.speed = 0; v.route = []; v.reportTo = null;
     v.fallDir = Math.random() < 0.5 ? 1 : -1;
     g.bubbles.clearFor(v);
-    this.dead[v.i] = g.time + (v.role === 'keeper' || v.role === 'sheriff' ? 1 : 2);   // a newcomer arrives in a day or two
+    this.game.town.witnesses = this.game.town.witnesses.filter((w) => w !== v);
+    const h = this.houseAt(v.pos);
+    if (h >= 0) {
+      // killed inside a house: the body stays there
+      v.body = this.bodies[v.i] = { h, t: g.time, x: v.pos.x, y: v.pos.y, z: v.pos.z, yaw: v.yaw, f: v.fallDir, found: 0, known: false };
+      this.dead[v.i] = g.time + BODY_DAYS + GROW_DAYS;
+    } else this.dead[v.i] = g.time + GROW_DAYS;   // a newcomer is born today and grows up
     if (v.posse) g.town.posseLost(v);
+  }
+  // which house (index in the village's buildings) a point is inside, or -1
+  houseAt(p) {
+    const bs = this.village.buildings;
+    for (let k = 0; k < bs.length; k++) {
+      const b = bs[k];
+      if (b.type === 'house' && p.x >= b.x0 && p.x < b.x1 + 1 && p.z >= b.z0 && p.z < b.z1 + 1 && Math.abs(p.y - b.inside.y) < 2.5) return k;
+    }
+    return -1;
+  }
+  // a visitor arriving at a house finds a body left there
+  lookForBody(v) {
+    const b = v.place && v.place.b;
+    if (!b || b.type !== 'house' || v.route.length || !v.alive || v.posse || v.reportTo) return;
+    const h = this.village.buildings.indexOf(b);
+    for (const [i, bd] of Object.entries(this.bodies)) {
+      if (bd.h !== h || bd.found || +i === v.i) continue;
+      this.found(v, +i, bd);
+      return;
+    }
+  }
+  found(v, i, bd) {
+    const g = this.game;
+    bd.found = g.time;
+    this.dead[i] = g.time + GROW_DAYS;
+    g.town.bodyFound(v, this.list[i], bd);
+  }
+  // after a sleep: what happened while the player slept (hours of game time)
+  fastForward(hours) {
+    const g = this.game;
+    for (const [i, bd] of Object.entries(this.bodies)) {
+      if (bd.found) continue;
+      const end = Math.min(g.time, bd.t + BODY_DAYS);
+      const h = Math.max(0, (end - (g.time - hours / 24)) * 24);
+      // the chance a neighbor visited in that time (about one visit in two days)
+      if (Math.random() < 1 - Math.exp(-h / 48)) {
+        const home = this.village.buildings[bd.h];
+        const finder = this.list.find((o) => o.alive && !o.posse && o.role !== 'keeper' && o.home && home.neighbors && home.neighbors.includes(o.home))
+          || this.list.find((o) => o.alive && !o.posse && o.role !== 'keeper' && o.role !== 'sheriff');
+        if (finder) { bd.found = g.time; this.dead[i] = g.time - Math.random() * h / 24 + GROW_DAYS; g.town.bodyFound(finder, this.list[+i], bd, true); }
+      }
+    }
+    // everyone else just got on with their day
+    for (const v of this.list) {
+      if (!v.alive || v.posse || v.reportTo) continue;
+      const pl = this.pickPlace(v);
+      v.route = []; v.place = pl; v.goal = pl.pos; v.idleT = 10 + Math.random() * 30;
+      v.pos.set(pl.pos.x, pl.pos.y ?? this.village.y, pl.pos.z); v.wasNight = this.night();
+    }
   }
   replace(v) {
     v.rig.dispose();
     this.gens[v.i] = (this.gens[v.i] || 0) + 1;
-    delete this.dead[v.i];
+    delete this.dead[v.i]; delete this.bodies[v.i];
     const n = this.spawn(v.i, v.role, v.shop, v.home);
     n.place = { b: n.work || n.home, pos: n.pos };
+    // the newcomer has grown up (no memory of what happened before)
+    this.game.hud.toast(t(v.role === 'keeper' ? 'town.grownKeeper' : 'town.grownUp', { name: n.name, shop: v.shop ? t('shop.' + v.shop) : '' }));
   }
   armed(v, weapon) { v.armed = weapon; v.rig.setWeapon(weapon); }
-  toSave() { return { gens: this.gens, dead: this.dead }; }
+  toSave() { return { gens: this.gens, dead: this.dead, bodies: this.bodies }; }
   dispose() {
     for (const v of this.list) v.rig.dispose();
     for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); }

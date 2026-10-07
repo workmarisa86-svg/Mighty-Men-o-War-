@@ -1,9 +1,29 @@
-// Terrain generation: a war-scarred landscape of dirt, mud and rubble,
-// shell craters, still rivers and lakes, and sparse battered trees.
+// Terrain generation. Each War country is its own world with its own
+// landscape (see LANDS in countries.js): grassland, snowfields, rice paddies,
+// red desert, jungle, olive hills, volcanic ash, hedgerows or fjords, with
+// shell craters, rivers and lakes, and a sea coast along the south edge
+// where the country can be reached by boat. Its headquarters stand on
+// flattened ground.
 import { SEA } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
 import { chooseFortSites, flattenForSite, stampFort, assignOwners, fortCount, FORT_NAMES } from './forts.js';
+import { COUNTRY, LANDS, BATTLE } from './countries.js';
+
+// the landscape of a world: its country's, changed for some battles
+// (summer battles have no snow, winter ones do)
+export function landFor(cfg) {
+  const c = COUNTRY[cfg.country];
+  if (!c) return null;
+  const L = Object.assign({}, LANDS[c.land]);
+  const b = cfg.battle && BATTLE[cfg.battle];
+  if (b && b.summer) Object.assign(L, { ground: 'dry', frozen: false, tree: 'birch' });
+  if (b && b.cold) Object.assign(L, { ground: 'snow', frozen: true });
+  return L;
+}
+// the sea along the south edge (coastal countries)
+export const COAST = 30;
+export function hasCoast(cfg) { const c = COUNTRY[cfg.country]; return !!(c && (c.coast || (cfg.battle && BATTLE[cfg.battle] && BATTLE[cfg.battle].by === 'boat'))); }
 
 
 export function generate(world) {
@@ -14,6 +34,8 @@ export function generate(world) {
   const rnd = mulberry32(seed + 99);
   const cxW = W / 2, czW = D / 2;
   const alone = mode === 'war' && sub === 'alone';
+  const L = landFor(world.cfg) || LANDS.prairie, coast = hasCoast(world.cfg);
+  const n6 = new Simplex2(seed + 6), n7 = new Simplex2(seed + 7);
 
   // --- heightmap -----------------------------------------------------------
   // An open battlefield: mostly level ground with only gentle, wide swells.
@@ -24,12 +46,14 @@ export function generate(world) {
   const water = new Uint8Array(W * D);
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     const k = x + z * W;
-    land[k] = SEA + 3 + n1.fbm(x / 220, z / 220, 3) * 2.5;
+    land[k] = SEA + 3 + L.hills * 0.4 + n1.fbm(x / 220, z / 220, 3) * L.hills + Math.max(0, n6.fbm(x / 70, z / 70, 2)) * L.hills * 0.8;
     const rv = Math.abs(n3.fbm(x / 190, z / 190, 2));   // winding rivers
     const lk = n4.fbm(x / 95, z / 95, 2);                // lakes
-    let wet = rv < 0.032 || lk > 0.42;
+    let wet = rv < L.river || lk > L.lake;
+    // the sea along the south edge, with a gently wavy shoreline
+    if (coast && z > D - COAST + n7.noise(x / 40, 0) * 5) wet = true;
     if (alone && Math.hypot(x - cxW, z - czW) < 24) wet = false; // dry cabin clearing
-    if (x < 3 || z < 3 || x >= W - 3 || z >= D - 3) wet = false;
+    if (x < 3 || z < 3 || x >= W - 3 || (!coast && z >= D - 3)) wet = false;
     water[k] = wet ? 1 : 0;
   }
   // smooth the water outline (no one-block inlets or specks)
@@ -97,9 +121,9 @@ export function generate(world) {
   }
   for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 12, tops[k]));
 
-  // --- fort sites: flatten the ground where built-in forts will stand ---------
+  // --- headquarters sites: flatten the ground where they will stand ---------
   const frnd = mulberry32(seed + 404);
-  const forts = fortCount(world.cfg) ? chooseFortSites(world, tops, water, distLand, frnd, fortCount(world.cfg), alone ? { x: cxW, z: czW } : null) : [];
+  const forts = fortCount(world.cfg) ? chooseFortSites(world, tops, water, distLand, frnd, fortCount(world.cfg), alone ? { x: cxW, z: czW } : null, coast ? COAST + 34 : 0) : [];
   for (const f of forts) flattenForSite(tops, water, W, D, f);
 
   // --- columns -------------------------------------------------------------
@@ -107,13 +131,16 @@ export function generate(world) {
     const k = x + z * W;
     const top = tops[k];
     let surf;
-    const sn = n5.noise(x / 16, z / 16);
-    if (top < SEA) surf = B.MUD;
-    else if (top <= SEA) surf = (hash2(x, z, seed) < 0.6) ? B.MUD : B.DIRT;
-    else if (crater[k] === 1) surf = hash2(x, z, seed + 5) < 0.45 ? B.RUBBLE : B.MUD;
-    else if (sn > 0.55) surf = B.RUBBLE;
-    else if (sn < -0.5) surf = B.MUD;
-    else surf = B.DIRT;
+    const sn = n5.noise(x / 16, z / 16), rk = n6.noise(x / 23, z / 23);
+    const soil = L.ground === 'red' || L.ground === 'ash' ? B.SAND : B.GRASS;
+    if (top < SEA) surf = coast && z > D - COAST - 6 ? B.SAND : B.MUD;
+    else if (top <= SEA) surf = coast && z > D - COAST - 12 ? B.SAND : (hash2(x, z, seed) < 0.6) ? B.MUD : B.DIRT;
+    else if (coast && z > D - COAST - 8 && top <= SEA + 2) surf = B.SAND;      // the beach
+    else if (crater[k] === 1) surf = hash2(x, z, seed + 5) < 0.45 ? B.RUBBLE : B.DIRT;
+    else if (rk > 1 - L.rock * 1.6) surf = B.STONE;
+    else if (sn > 0.6) surf = B.RUBBLE;
+    else if (sn < -0.62 + (L.mud || 0)) surf = L.ground === 'snow' ? B.DIRT : B.MUD;
+    else surf = hash2(x, z, seed + 3) < 0.12 ? B.DIRT : soil;
     for (let y = 0; y <= top; y++) {
       let b;
       if (y === 0 || (y === 1 && hash2(x, z, seed + 9) < 0.5)) b = B.BEDROCK;
@@ -160,18 +187,45 @@ export function generate(world) {
   world.forts = forts;
   const nearFort = (x, z, r) => forts.some((f) => Math.abs(f.cx - x) <= r && Math.abs(f.cz - z) <= r);
 
+  // --- the land's own features: frozen water, fields, rice paddies, hedgerows
+  if (L.frozen) for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    if (coast && z > D - COAST - 12) continue;                  // the sea stays open
+    const i = world.idx(x, SEA - 1, z);
+    if (world.data[i] === B.WATER) world.data[i] = B.ICE;
+  }
+  const crops = [B.WHEAT_R, B.CARROT_R, B.CABBAGE_R];
+  for (let z = 4; z < D - 4; z++) for (let x = 4; x < W - 4; x++) {
+    const k = x + z * W, top = tops[k];
+    if (top <= SEA || crater[k] || nearFort(x, z, 14) || (coast && z > D - COAST - 10)) continue;
+    const f = n7.noise(x / 26, z / 26), here = world.data[world.idx(x, top, z)];
+    if (here !== B.GRASS && here !== B.DIRT && here !== B.SAND) continue;
+    if (L.rice && f > 1 - L.rice * 2.2 && x % 9 && z % 7) {
+      world.data[world.idx(x, top, z)] = B.WATER; world.data[world.idx(x, top - 1, z)] = B.MUD;   // a flooded paddy
+    } else if (L.fields && f < -1 + L.fields * 2.2) {
+      world.data[world.idx(x, top, z)] = B.FARMLAND;
+      if (z % 2 === 0 && world.get(x, top + 1, z) === B.AIR) world.data[world.idx(x, top + 1, z)] = L.ground === 'snow' ? B.WILTED : crops[Math.floor(Math.abs(f) * 7) % 3];
+    } else if (L.hedges && Math.abs(n6.noise(x / 30, z / 30)) < 0.025) {
+      for (let y = top + 1; y <= top + 2; y++) if (world.get(x, y, z) === B.AIR) world.data[world.idx(x, y, z)] = B.LEAVES;
+    }
+  }
+
   // --- trees ---------------------------------------------------------------
+  const tp = world.cfg.country ? L.trees : 0.0065;
   for (let z = 3; z < D - 3; z++) for (let x = 3; x < W - 3; x++) {
-    if (hash2(x, z, seed + 31) > 0.0065) continue;
+    const orchard = L.orchard && x % 6 === 0 && z % 6 === 0 && n5.noise(x / 50, z / 50) > 0.45;
+    if (!orchard && hash2(x, z, seed + 31) > tp * (L.tree === 'jungle' || L.tree === 'pine' ? (n5.noise(x / 60, z / 60) > 0 ? 1.8 : 0.3) : 1)) continue;
+    if (coast && z > D - COAST - 10) continue;
     const top = tops[x + z * W];
     if (top <= SEA) continue;
     if (crater[x + z * W] === 1) continue;
     if (alone && Math.hypot(x - cxW, z - czW) < 8) continue;
-    if (nearFort(x, z, 12)) continue;    // nothing to climb over the walls with
+    if (nearFort(x, z, 17)) continue;    // nothing to climb over the walls with
     let flat = true;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (Math.abs(tops[x + dx + (z + dz) * W] - top) > 1) flat = false;
     if (!flat) continue;
-    plantTree(world, x, top + 1, z, mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9)));
+    const tr = mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9));
+    if (!world.cfg.country) plantTree(world, x, top + 1, z, tr);
+    else plantKind(world, orchard ? 'olive' : L.tree, x, top + 1, z, tr);
   }
 
   // --- spawn ---------------------------------------------------------------
@@ -209,6 +263,39 @@ function distanceField(W, D, isSource) {
     }
   }
   return d;
+}
+
+// trees of each landscape: pine, birch, oak, olive, scrub, jungle
+function plantKind(world, kind, x, y, z, r) {
+  const set = (X, Y, Z, id) => { if (world.inside(X, Y, Z) && world.get(X, Y, Z) === B.AIR) world.data[world.idx(X, Y, Z)] = id; };
+  if (kind === 'oak') { if (r() < 0.2) { plantTree(world, x, y, z, r); return; } kind = 'round'; }
+  if (kind === 'scrub') { set(x, y, z, B.LEAVES); if (r() < 0.5) set(x + (r() < 0.5 ? 1 : -1), y, z, B.LEAVES); if (r() < 0.3) set(x, y + 1, z, B.LEAVES); return; }
+  const h = kind === 'pine' ? 6 + Math.floor(r() * 4) : kind === 'jungle' ? 7 + Math.floor(r() * 5) : kind === 'olive' ? 2 + Math.floor(r() * 2) : 5 + Math.floor(r() * 3);
+  for (let i = 0; i < h; i++) set(x, y + i, z, B.LOG);
+  const top = y + h - 1;
+  if (kind === 'pine') {
+    // a narrow cone of needles
+    for (let dy = -h + 3; dy <= 1; dy++) {
+      const rad = dy === 1 ? 0 : Math.max(1, Math.round((1 - dy) * 0.45));
+      for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) if (Math.abs(dx) + Math.abs(dz) <= rad + (dy % 2 ? 0 : 1)) set(x + dx, top + dy, z + dz, B.LEAVES);
+    }
+  } else if (kind === 'olive') {
+    // low, wide and flat
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (dx * dx + dz * dz <= 5 && r() < 0.85) { set(x + dx, top + 1, z + dz, B.LEAVES); if (dx * dx + dz * dz <= 2) set(x + dx, top + 2, z + dz, B.LEAVES); }
+  } else if (kind === 'jungle') {
+    // a tall trunk, a broad crown and hanging leaves
+    for (let dy = -1; dy <= 1; dy++) for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) if (dx * dx + dz * dz + dy * dy * 3 <= 11 && r() < 0.85) set(x + dx, top + dy + 1, z + dz, B.LEAVES);
+    for (let i = 0; i < 5; i++) { const dx = Math.floor(r() * 7) - 3, dz = Math.floor(r() * 7) - 3; for (let k = 0; k < 2 + r() * 3; k++) set(x + dx, top - k, z + dz, B.LEAVES); }
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (r() < 0.5) set(x + dx, y, z + dz, B.LEAVES);   // undergrowth
+  } else {
+    // round crown (oak, birch)
+    const rad = kind === 'birch' ? 1 + (r() < 0.5 ? 1 : 0) : 2 + (r() < 0.55 ? 1 : 0);
+    for (let dy = -2; dy <= 2; dy++) for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) {
+      const d = dx * dx + dz * dz + dy * dy * 1.5;
+      if (d > rad * rad + 0.5 || r() < 0.25) continue;
+      set(x + dx, top + dy, z + dz, B.LEAVES);
+    }
+  }
 }
 
 export function plantTree(world, x, y, z, r) {

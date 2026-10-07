@@ -7,6 +7,7 @@ import { sfx } from './audio.js';
 import { t } from './i18n.js';
 import { ORDER_COLORS } from './soldiers.js';
 import { esc } from './ui.js';
+import { WEATHER } from './countries.js';
 
 const $ = (s) => document.querySelector(s);
 const PX_PER_DEG = 3;
@@ -85,7 +86,13 @@ export class HUD {
       const hh = Math.floor(tod * 24), mm = Math.floor((tod * 24 - hh) * 60);
       const clock = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
       const parts = g.town ? [t('season.' + g.town.season) + ' ' + g.town.dayOfSeason(), t('hud.day', { n: day }), clock] : [t('hud.day', { n: day }), g.dayOnly ? t('hud.daylight') : clock];
-      if (g.weather.rain > 0.15) parts.push(t(g.town && g.town.snowing() ? 'hud.snow' : 'hud.rain'));
+      if (g.climateNow && !g.town) {
+        // War: the country's (or the battle's) weather, and the battle clock
+        parts.unshift(t('cname.' + g.cfg.country));
+        const k = Object.keys(WEATHER).find((x) => WEATHER[x] === g.climateNow);
+        if (k) parts.push(g.climateNow.icon + ' ' + t('wx.' + k));
+        if (g.battle && g.battle.role === 'defend' && !g.battle.done) { const s = Math.ceil(g.battle.timeLeft()); parts.push(t('battle.timeLeft', { t: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })); }
+      } else if (g.weather.rain > 0.15) parts.push(t(g.town && g.town.snowing() ? 'hud.snow' : 'hud.rain'));
       this.status.textContent = parts.join('  ·  ');
     }
 
