@@ -75,7 +75,7 @@ export class Townsfolk {
       const l = new THREE.Line(g, this.lineMat.clone()); l.visible = false; l.frustumCulled = false;
       game.scene.add(l); this.tracers.push({ l, t: 0 });
     }
-    this.trI = 0; this.lodT = 0;
+    this.trI = 0; this.lodT = 0; this.tmpV = new THREE.Vector3();
   }
 
   // the same people every time (from the world seed); a newcomer replaces
@@ -89,6 +89,7 @@ export class Townsfolk {
     const look = female
       ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, style: ['long', 'bun', 'braid'][Math.floor(r() * 3)], hat: r() < 0.2 ? 'scarf' : 'none', hatColor: [0x8a3a3a, 0x3a5a7a, 0x6a6a3a][Math.floor(r() * 3)] }
       : { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], trousers: DARK[Math.floor(r() * DARK.length)], hair: HAIR[Math.floor(r() * HAIR.length)], vest: r() < 0.45 ? DARK[Math.floor(r() * DARK.length)] : null, hat: r() < 0.5 ? 'cap' : r() < 0.6 ? 'felt' : 'none', moustache: r() < 0.35, rolled: r() < 0.4, braces: r() < 0.3 ? 0x3a2a1c : null };
+    if (!female) look.gunbelt = true;              // 1940s frontier town: every man wears a revolver on his hip
     if (status === 'mansion' && !female) { look.vest = 0x2e2a26; look.hat = 'felt'; look.hatColor = 0x2a2420; }
     if (shop === 'butcher') look.apron = 0xe8e4dc;
     if (shop === 'general') look.apron = 0x7a5a3a;
@@ -105,7 +106,7 @@ export class Townsfolk {
     if (role === 'sheriff') guns = ['pistol', 'rifle'];
     if (shop === 'hunting') guns = ['shotgun'];
     const v = {
-      i, role, shop, home, work, name, female, status, kin: sp.kin, homeIdx: sp.homeIdx, fam: sp.fam, look, lookKey: 'v' + i + '_' + gen, skin: Math.floor(r() * 5),
+      i, role, shop, home, work, name, female, status, kin: sp.kin, homeIdx: sp.homeIdx, fam: sp.fam, bed: this.specs.filter((q) => q.fam === sp.fam).indexOf(sp), look, lookKey: 'v' + i + '_' + gen, skin: Math.floor(r() * 5),
       pitch: female ? 1.35 + r() * 0.15 : 0.85 + r() * 0.25,
       rig: null, pos: new THREE.Vector3(p.x, p.y, p.z), yaw: r() * 6, speed: 0, crouch: false,
       hp: 100, alive: true, deadT: 0, state: 'idle', idleT: r() * 10, route: [], goal: null, greetT: 0, actT: 0,
@@ -183,7 +184,12 @@ export class Townsfolk {
     const vi = this.village, r = Math.random;
     const at = (b, pos) => ({ b, pos: pos || b.inside });
     if (v.role === 'keeper') return at(v.work, v.work.keeper);
-    if (this.night()) return at(v.role === 'sheriff' ? v.work : v.home, (v.role === 'sheriff' ? v.work : v.home).inside);
+    if (this.night()) {
+      // bedtime: home to their own bed (the sheriff keeps watch at his office)
+      const sl = v.role !== 'sheriff' && v.home.furn && v.home.furn.slots[v.bed];
+      if (sl) return { b: v.home, pos: sl.side, sleep: v.bed };
+      return at(v.role === 'sheriff' ? v.work : v.home, (v.role === 'sheriff' ? v.work : v.home).inside);
+    }
     if (v.role === 'sheriff') {
       const pts = [{ x: vi.cx + 0.5 + (r() - 0.5) * 8, z: vi.cz + 0.5 + (r() - 0.5) * 8 }, { x: v.work.door.x, z: v.work.door.z }, { x: vi.cx + 0.5 + (r() < 0.5 ? -22 : 22), z: vi.cz + 0.5 }];
       const p = pts[Math.floor(r() * pts.length)];
@@ -417,11 +423,11 @@ export class Townsfolk {
       else this.dailyBehaviour(v, dt, d);
       if (v.horse) v.horse.carry(v);
       // greetings when the player comes close
-      if (!v.posse && !v.reportTo && !v.fight && !v.surrendered && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
+      if (!v.posse && !v.reportTo && !v.fight && !v.surrendered && !v.sleeping && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
         v.greetT = 70 + Math.random() * 40; v.faceT = 3;
         this.say(v, T.greetingKey(v));
       }
-      if (v.faceT > 0 && !v.posse && !v.fight) { v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 6); }
+      if (v.faceT > 0 && !v.posse && !v.fight && !v.sleeping && !v.sitting) { v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 6); }
       // drawing: only close, on-screen people are animated every frame
       const show = d < Math.min(RIG_IN, (g.settings.renderDist + 1) * 16);
       if (!show) { if (d > RIG_OUT) this.dropRig(v); else if (v.rig) v.rig.root.visible = false; continue; }
@@ -430,9 +436,13 @@ export class Townsfolk {
       if (relod) rig.setLod(d < 30 ? 0 : 1);
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
         const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed);
-        rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0 }, d < 50 ? dt : dt * 4);
+        rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
       }
-      if (v.horse) rig.place(v.horse.saddle(), v.yaw, v.horse.pos.y);
+      if (v.posse || v.fight || v.surrendered > 0 || v.reportTo || v.route.length) { v.sleeping = false; v.sitting = false; }
+      const sl = v.sleeping && v.home.furn && v.home.furn.slots[v.bed];
+      if (sl) rig.place(this.tmpV.set(sl.foot.x, sl.foot.y + 0.6, sl.foot.z), Math.atan2(sl.dir.x, sl.dir.z), sl.foot.y);   // lying in bed, head on the pillow
+      else if (v.sitting && v.seat) rig.place(this.tmpV.set(v.seat.x, v.seat.y, v.seat.z), Math.atan2(-v.seat.face.x, -v.seat.face.z), v.seat.y);
+      else if (v.horse) rig.place(v.horse.saddle(), v.yaw, v.horse.pos.y);
       else { const gy = this.ground(v.pos.x, v.pos.z, v.pos.y + 0.5); rig.place(v.pos, v.yaw, gy ?? v.pos.y); }
     }
   }
@@ -440,6 +450,7 @@ export class Townsfolk {
   dailyBehaviour(v, dt, d) {
     const g = this.game;
     if (v.scaredT > 0 && v.role !== 'keeper') {
+      v.sleeping = false; v.sitting = false; v.seat = null;
       // gunfire close by: hurry home
       if (!v.fleeing) { v.fleeing = true; this.routeTo(v, { b: v.home, pos: v.home.inside }); }
       this.walk(v, dt, RUN); v.crouch = false; return;
@@ -454,8 +465,14 @@ export class Townsfolk {
     }
     this.lookForBody(v);
     const nightNow = this.night();
-    if (v.wasNight !== nightNow) { v.wasNight = nightNow; v.idleT = 0; v.route = []; }
-    if (v.route.length) { v.crouch = false; this.walk(v, dt, WALK); return; }
+    if (v.wasNight !== nightNow) { v.wasNight = nightNow; v.idleT = 0; v.route = []; v.sleeping = false; }
+    // a seat at the supper table (you are their guest)
+    if (v.seat) { if (v.route.length) { this.walk(v, dt, WALK); v.sitting = false; } else { v.speed = 0; v.sitting = true; } return; }
+    v.sitting = false;
+    if (v.route.length) { v.crouch = false; v.sleeping = false; this.walk(v, dt, WALK); return; }
+    // in bed for the night
+    v.sleeping = nightNow && v.place && v.place.sleep != null && v.place.b === v.home;
+    if (v.sleeping) { v.speed = 0; return; }
     v.speed = 0;
     v.idleT -= dt;
     v.crouch = v.place && v.place.work === 'field' && !nightNow;

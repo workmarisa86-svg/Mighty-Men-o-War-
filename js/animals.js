@@ -19,11 +19,13 @@ export const TYPES = {
 // Town Life seasons: how likely each new wild group is (bears rare in summer,
 // plentiful in winter)
 const TOWN_MIX = {
-  spring: { deer: 0.5, bear: 0.07, bird: 0.43 },
-  summer: { deer: 0.55, bear: 0.03, bird: 0.42 },
-  autumn: { deer: 0.5, bear: 0.14, bird: 0.36 },
-  winter: { deer: 0.45, bear: 0.4, bird: 0.15 },
+  spring: { deer: 0.45, bear: 0.2, bird: 0.35 },
+  summer: { deer: 0.5, bear: 0.14, bird: 0.36 },
+  autumn: { deer: 0.42, bear: 0.28, bird: 0.3 },
+  winter: { deer: 0.4, bear: 0.42, bird: 0.18 },
 };
+// Town Life: at least this many bears roam the woods (far from the town and your cottage)
+const MIN_BEARS = { spring: 4, summer: 3, autumn: 5, winter: 4 };
 
 const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
 const MATS = {};
@@ -192,7 +194,7 @@ export class Animals {
     return null;
   }
 
-  spawnHerd(awayFromPlayer = true) {
+  spawnHerd(awayFromPlayer = true, kind = null) {
     const w = this.game.world, p = this.game.player.pos;
     for (let tries = 0; tries < 40; tries++) {
       const x = 8 + this.r() * (w.W - 16), z = 8 + this.r() * (w.D - 16);
@@ -200,7 +202,7 @@ export class Animals {
       if (!this.wildOk(x, z)) continue;
       const sy = w.surfaceY(Math.floor(x), Math.floor(z));
       if (sy < SEA || w.get(Math.floor(x), sy + 1, Math.floor(z)) === B.WATER) continue;
-      const type = this.pickType();
+      const type = kind || this.pickType();
       const T = TYPES[type];
       const herd = { type, cx: x, cz: z, moveT: 20 + this.r() * 20, members: [], airborne: type === 'bird' && this.r() < 0.4 };
       herd.cy = sy + 14 + this.r() * 6;
@@ -363,6 +365,10 @@ export class Animals {
     if (this.respawnTimer <= 0) {
       this.respawnTimer = this.respawnEvery;
       if ((this.town ? this.wildCount() : this.herds.length) < this.target) this.spawnHerd(true);
+      else if (this.town) {
+        const bears = this.herds.filter((h) => !h.pen && h.type === 'bear' && h.members.some((a) => a.state !== 'dead')).length;
+        if (bears < MIN_BEARS[(this.game.town && this.game.town.season) || 'summer']) this.spawnHerd(true, 'bear');
+      }
     }
   }
 

@@ -14,6 +14,9 @@ import { t } from './i18n.js';
 import { saveTown } from './storage.js';
 import { TOWN_LAYOUT } from './towngen.js';
 import { WEAPONS } from './weapons.js';
+import { Furniture } from './furniture.js';
+import { Fishing } from './fishing.js';
+import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
@@ -22,12 +25,13 @@ export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 export const SHOPS = {
   general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, glass: 3, fence: 2 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
-  butcher: { sells: { meat_cooked: 6, meat_raw: 4 }, buys: { meat_raw: 3, meat_cooked: 4 } },
-  hunting: { sells: { knife: 10, pistol: 45, shotgun: 55, rifle: 80, sniper: 140, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, meat_raw: 2 } },
+  butcher: { sells: { meat_cooked: 6, meat_raw: 4, fish_cooked: 6 }, buys: { meat_raw: 3, meat_cooked: 4, fish: 3, big_fish: 12, fish_cooked: 5 } },
+  hunting: { sells: { rod: 6, knife: 10, pistol: 45, shotgun: 55, rifle: 80, sniper: 140, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, meat_raw: 2 } },
   stable: { sells: { horse: 60 }, buys: { wheat: 3 } },
-  market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2 } },
+  market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2, fish: 3, big_fish: 10 } },
 };
-const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40 };
+const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40, escape: 50 };
+const PICK_TIME = 6;                  // seconds to pick the cell's lock
 const JOBS = [
   { item: 'wood', n: 6, pay: 8 }, { item: 'stone', n: 6, pay: 8 }, { item: 'meat_raw', n: 2, pay: 10 }, { item: 'egg', n: 3, pay: 8 },
   { item: 'milk', n: 1, pay: 6 }, { item: 'wheat', n: 4, pay: 9 }, { item: 'clay', n: 4, pay: 8 }, { item: 'hide', n: 1, pay: 12 },
@@ -65,6 +69,14 @@ export class TownLife {
     this.ctxT = 0; this.ctx = []; this.ambT = 0;
     this.editsSaved = saved.editsVersion ?? -1;
     this.spawnLivestock(saved.livestock);
+    // bears roam the woods from the start (more keep arriving, see animals.js)
+    for (let k = g.animals.herds.filter((h) => h.type === 'bear').length; k < 4; k++) g.animals.spawnHerd(true, 'bear');
+    // furniture in every home and the jail cot; fishing; a night in jail in progress
+    this.furniture = new Furniture(g, this.village);
+    this.fishing = new Fishing(g);
+    this.jailB = this.village.buildings.find((b) => b.type === 'jail');
+    this.jailed = saved.jailed || null;
+    if (this.jailed) this.cellDoor(true, true);
     g.animals.onKill = (a) => { if (a.owner === 'village') this.crime('livestock', { pos: a.pos }); };
     // HUD: coins, honor and bounty; context buttons for phones
     const hud = document.getElementById('hud');
@@ -402,23 +414,83 @@ export class TownLife {
     this.addBounty(BOUNTY.resist, 'resist');
     this.goHostile();
   }
-  // jail: pay the fine, lose stolen goods and scuba gear, wake in the cottage
-  // a day later with the crops nearly dead
+  // Jail: no fine. You are locked in the town jail's cell for one night
+  // (stolen goods and scuba gear are taken; your bounty is set aside). Sleep
+  // on the cot to serve the night: a short film of the night passes and you
+  // are let out in the morning with a clean record. Or pick the cell's lock
+  // and escape: you are free, but your bounty comes back bigger.
   jail() {
-    const g = this.game, fine = this.bounty;
-    const paid = Math.min(this.money, fine);
-    this.money -= paid;
+    const g = this.game, p = g.player, C = this.jailB && this.jailB.cell;
     const lost = [];
     for (const [id, n] of Object.entries(this.stolen)) { const k = Math.min(n, g.count(id)); if (k > 0) { g.take(id, k); lost.push(t('item.' + id)); } }
     this.stolen = {};
     if (g.has('scuba')) { g.inv.counts.scuba = 0; lost.push(t('item.scuba')); }
+    if (p.riding && g.horses) g.horses.dismount(true);
+    if (this.fishing) this.fishing.reelIn();
+    const h = (g.time % 1) * 24, day = Math.floor(g.time);
+    this.jailed = { bounty: this.bounty, release: (h < 5 ? day : day + 1) + 7 / 24 };   // out at 7 in the morning
     this.bounty = 0; this.addHonor(-10); this.st.jailed++;
-    this.disband('law.released');
-    g.time = Math.floor(g.time) + 1 + 7 / 24;
-    this.farm.neglectAll();
-    this.wakeAtHome();
+    this.disband('law.lockedUp');
+    if (C) { this.cellDoor(true); p.pos.set(C.inside.x, C.inside.y, C.inside.z); p.vel.set(0, 0, 0); p.yaw = Math.atan2(-(C.door[0][0] + 1 - C.inside.x), -(C.door[0][2] + 0.5 - C.inside.z)); p.pitch = 0; }
     g.hud.dirtyHotbar = true;
-    g.app.openPanel('jailed', { paid, fine, lost });
+    g.app.openPanel('jailed', { lost });
+  }
+  // the cell's door of bars: shut (and unbreakable) while you are locked up
+  cellDoor(shut, first = false) {
+    const C = this.jailB && this.jailB.cell, w = this.game.world;
+    if (!C) return;
+    for (const [x, y, z] of C.door) {
+      if (first) { const i = w.idx(x, y, z); w.data[i] = shut ? B.FENCE : B.AIR; w.locked[i] = shut ? 1 : 0; w.markDirty(x, z); continue; }
+      w.set(x, y, z, shut ? B.FENCE : B.AIR); w.locked[w.idx(x, y, z)] = shut ? 1 : 0;
+    }
+    if (!shut) sfx.coins();               // the keys
+  }
+  // sleep on the cot: the night passes (a short film) and the sheriff lets you out
+  async serveNight() {
+    const g = this.game, J = this.jailed;
+    if (!J || this.inClip) return;
+    this.inClip = true; g.paused = true; g.app.inClip = true;
+    const day = Math.floor(g.time);
+    try { await playJailClip({ renderer: g.app.renderer, touch: g.app.input.touch, dateText: t('jail.clipDay', { n: day + 1 }) }); } catch (e) { console.error(e); }
+    g.app.inClip = false; g.paused = false; this.inClip = false;
+    const hours = Math.max(0, (J.release - g.time) * 24);
+    if (J.release > g.time) g.time = J.release;
+    this.folk.fastForward(hours);
+    this.release();
+  }
+  release(early = false) {
+    const g = this.game, C = this.jailB && this.jailB.cell;
+    this.jailed = null;
+    this.cellDoor(false);
+    if (C && !early) { g.player.pos.set(C.out.x + 0.5, C.out.y, C.out.z); g.player.vel.set(0, 0, 0); }
+    g.player.health = 100;
+    g.hud.bigMessage(t('jail.releasedTitle'), t('jail.releasedSub'));
+    g.app.saveGame(true);
+  }
+  // picking the lock: stand at the cell door; it takes a few seconds
+  startPick() {
+    if (!this.jailed || this.pick) return;
+    this.pick = { t: 0 };
+    this.game.hud.toast(t('jail.picking'));
+  }
+  updateJail(dt) {
+    const g = this.game, J = this.jailed, C = this.jailB && this.jailB.cell;
+    if (!J || !C) { this.pick = null; return; }
+    // served the night awake: the sheriff lets you out at seven
+    if (g.time >= J.release) { this.release(); return; }
+    if (this.pick) {
+      const d = Math.hypot(g.player.pos.x - (C.door[0][0] + 1), g.player.pos.z - (C.door[0][2] + 0.5));
+      if (d > 2.4) { this.pick = null; g.hud.digProgress = 0; g.hud.toast(t('jail.pickStopped')); return; }
+      this.pick.t += dt; g.hud.digProgress = this.pick.t / PICK_TIME;
+      if ((this.pick.tick = (this.pick.tick || 0) - dt) <= 0) { this.pick.tick = 0.5; sfx.craftTick(); }
+      if (this.pick.t >= PICK_TIME) {
+        // out! but the bounty is back, and bigger
+        this.pick = null; g.hud.digProgress = 0;
+        this.bounty = J.bounty + BOUNTY.escape; this.lastCrime = g.time;
+        this.jailed = null; this.cellDoor(false);
+        g.hud.alert(t('jail.escaped', { n: this.bounty })); sfx.alert();
+      }
+    }
   }
   wakeAtHome() {
     const g = this.game, c = this.cottage, p = g.player;
@@ -573,6 +645,31 @@ export class TownLife {
     this.folk.routeTo(v, { b: v.home, pos: v.home.inside });
     this.game.hud.toast(t('guest.go', { name: v.name }));
   }
+  // supper with your hosts: the family sits down at their table, plates
+  // come out, and you take the free chair facing them
+  startSupper(G, fam) {
+    const g = this.game, F = G.home.furn;
+    if (!F) { g.hud.toast(t('guest.ate')); return; }
+    const chairs = F.chairs;
+    fam.slice(0, chairs.length - 1).forEach((m, k) => { const c = chairs[k + 1]; m.seat = c; m.sleeping = false; this.folk.routeTo(m, { b: G.home, pos: { x: c.x, y: c.y, z: c.z } }); });
+    const mine = chairs[0], p = g.player;
+    p.pos.set(mine.x - mine.face.x * 0.55, mine.y, mine.z - mine.face.z * 0.55); p.vel.set(0, 0, 0);
+    p.yaw = Math.atan2(-mine.face.x, -mine.face.z); p.pitch = -0.25;
+    this.furniture.setPlates(F);
+    this.supper = { home: G.home, fam, t: 35 };
+    g.hud.bigMessage(t('guest.supper'), t('guest.supperSub'));
+  }
+  updateSupper(dt) {
+    const S = this.supper;
+    if (!S) return;
+    S.t -= dt;
+    const away = this.folk.houseAt(this.game.player.pos) < 0 || this.village.buildings[this.folk.houseAt(this.game.player.pos)] !== S.home;
+    if (S.t > 0 && !away) return;
+    for (const m of S.fam) { m.seat = null; m.sitting = false; m.route = []; m.idleT = 2; }
+    this.furniture.setPlates(null);
+    this.supper = null;
+    if (!away) this.game.hud.toast(t('guest.ate'));
+  }
   declineInvite() { this.declined = Math.min(3, (this.declined || 1) + 0.5); }
   guestCheck() {
     const g = this.game, G = this.guest;
@@ -587,7 +684,7 @@ export class TownLife {
     const g = this.game, F = this.folk, G = this.guest;
     if (!G) return;
     const fam = this.household(G);
-    if (a === 'eat') { g.player.hunger = Math.min(100, g.player.hunger + 45); this.rapport[G.hi] = (this.rapport[G.hi] || 0) + 1; g.hud.toast(t('guest.ate')); sfx.done(); return; }
+    if (a === 'eat') { g.player.hunger = Math.min(100, g.player.hunger + 45); this.rapport[G.hi] = (this.rapport[G.hi] || 0) + 1; this.startSupper(G, fam); sfx.done(); return; }
     if (a === 'chat') { this.rapport[G.hi] = (this.rapport[G.hi] || 0) + 1; this.addHonor(1); if (fam[0]) F.say(fam[0], 'say.chat' + (1 + Math.floor(Math.random() * 3))); return; }
     if (a === 'leave') { this.guest = null; return; }
     // robbing your hosts: they comply or fight back with their own guns
@@ -682,7 +779,7 @@ export class TownLife {
   // what can be done right here (buttons on phones, keys on computers)
   options() {
     const g = this.game, p = g.player.pos, out = [];
-    const v = this.folk.nearest(p, 3.4, (x) => !x.posse && !x.reportTo);
+    const v = this.folk.nearest(p, 3.4, (x) => !x.posse && !x.reportTo && !x.sleeping);     // (nobody does business in their sleep)
     // the shopkeeper counts even when a customer stands closer (that hid the Shop button)
     const keeper = this.folk.nearest(p, 3.6, (x) => x.role === 'keeper' && !x.surrendered);
     if (keeper && keeper !== v) out.push({ a: 'shop', label: t('ctx.shop'), v: keeper });
@@ -698,6 +795,12 @@ export class TownLife {
     const cow = g.animals.list.find((a) => a.owner === 'player' && a.type === 'cow' && a.state !== 'dead' && a.pos.distanceTo(p) < 2.6);
     if (cow && (g.has('bucket') || g.has('bucket_water'))) out.push({ a: 'milk', label: t('ctx.milk'), cow });
     if (g.campfires.near(p) && !(g.aimUse && g.aimUse.target)) out.push({ a: 'craft', label: t('ctx.craft') });
+    if (this.jailed && this.jailB && this.jailB.cell) {
+      const C = this.jailB.cell;
+      if (Math.hypot(C.cot.x + 1 - p.x, C.cot.z + 0.5 - p.z) < 2.2) out.push({ a: 'jailsleep', label: t('ctx.jailSleep') });
+      if (Math.hypot(C.door[0][0] + 1 - p.x, C.door[0][2] + 0.5 - p.z) < 2.2 && !this.pick) out.push({ a: 'picklock', label: t('ctx.pickLock') });
+      return out;
+    }
     const bed = this.cottage.bed;
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
     return out;
@@ -713,6 +816,8 @@ export class TownLife {
       if ((o.cow.milkT || 0) > g.time) { g.hud.toast(t('town.milkLater')); return; }
       o.cow.milkT = g.time + 1; g.give('milk', 1); sfx.splash();
     } else if (a === 'sleep') this.sleep();
+    else if (a === 'jailsleep') this.serveNight();
+    else if (a === 'picklock') this.startPick();
     else if (a === 'craft') g.app.openPanel('craft');      // (this case was missing: the Craft button did nothing)
     this.ctxT = 0;
   }
@@ -763,6 +868,9 @@ export class TownLife {
       if (s && (this.sheriffT = (this.sheriffT || 0) - dt) <= 0) { this.sheriffT = 1; if (this.folk.sees(s, 30)) { this.folk.say(s, 'say.sheriffWanted', null, 'warn'); this.formPosse(g.player.pos); } }
     }
     this.livestock(dt);
+    this.updateJail(dt);
+    this.fishing.update(dt);
+    this.updateSupper(dt);
     this.updateDoors(dt);
     this.invite(dt);
     this.guestCheck();
@@ -839,7 +947,7 @@ export class TownLife {
         money: this.money, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed,
       },
     };
   }
@@ -855,6 +963,7 @@ export class TownLife {
     stopFolk(); setWind(0);
     this.folk.dispose();
     this.bar.remove(); this.ctxEl.remove(); this.arrowEl.remove();
+    this.furniture.dispose(); this.fishing.dispose();
     if (paintSeason(null) && this.game.tex) this.game.tex.needsUpdate = true;
   }
 }

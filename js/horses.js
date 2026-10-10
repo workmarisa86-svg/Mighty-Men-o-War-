@@ -92,7 +92,9 @@ class Horse {
   unseat(v) { if (this.rider === v) this.rider = null; }
   animate(dt) {
     if (!this.mesh) return;
-    this.mesh.position.copy(this.pos); this.mesh.rotation.set(0, this.yaw, 0);
+    // the model is built facing +z; people and the horse's own movement go
+    // toward -z (yaw), so it is turned round: the head leads, the rider faces it
+    this.mesh.position.copy(this.pos); this.mesh.rotation.set(0, this.yaw + Math.PI, 0);
     if (!this.alive) {
       const k = Math.min(1, this.deadT / 0.8);
       this.mesh.rotation.z = k * Math.PI / 2 * 0.92; this.mesh.position.y = this.pos.y + 0.12 * k;
