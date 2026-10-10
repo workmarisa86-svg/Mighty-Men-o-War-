@@ -3,7 +3,7 @@
 import { t } from './i18n.js';
 import { itemIcon } from './items.js';
 import { hasTown } from './storage.js';
-import { SHOPS } from './town.js';
+import { M } from './modes.js';      // (Town Life's code is loaded once a town game starts)
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -36,7 +36,7 @@ export function installTownUI(UI) {
 
   // ---- shops: buy and sell -------------------------------------------------
   P.r_shop = function ({ shop, v, tab = 'buy' }) {
-    const g = this.app.game, T = g.town, S = SHOPS[shop];
+    const g = this.app.game, T = g.town, S = M.SHOPS[shop];
     const rows = tab === 'buy'
       ? Object.entries(S.sells).map(([id, base]) => {
         const p = T.price(id, true, base);
