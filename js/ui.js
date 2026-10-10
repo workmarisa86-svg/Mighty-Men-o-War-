@@ -280,9 +280,19 @@ export class UI {
       <div class="field"><span>${t('set.awareness')}</span>${seg('awareness', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.res')}</span>${seg('res', [['auto', t('set.resAuto')], ['sharp', t('set.resSharp')], ['balanced', t('set.resBalanced')], ['fast', t('set.resFast')]])}</div>
       <p class="muted small">${t('set.resNote')}</p>
+      <div class="field"><span>${t('set.version', { v: this.app.version })}</span><button class="btn small" id="chkupd">${t('set.checkUpdate')}</button></div>
+      <p class="muted small" id="updmsg"></p>
       <div class="field"><span>${t('set.perf')}</span>${seg('perf', [['normal', t('set.perfNormal')], ['smooth', t('set.perfSmooth')]])}</div>
       <p class="muted small">${t('set.perfNote')}</p>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => this.show(from === 'pause' ? 'pause' : from === 'town' ? 'town' : 'main') });
+    const upBtn = panel.querySelector('#chkupd'), upMsg = panel.querySelector('#updmsg');
+    upBtn.onclick = async () => {
+      if (!window.checkForUpdate) { upMsg.textContent = t('set.upNone'); return; }
+      upBtn.disabled = true; upMsg.textContent = t('set.upChecking');
+      const r = await window.checkForUpdate();
+      upMsg.textContent = t(r === 'ready' ? 'set.upReady' : r === 'offline' ? 'set.upOffline' : 'set.upLatest');
+      upBtn.disabled = false;
+    };
     panel.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
       const key = sg.dataset.key;
       let v = b.dataset.v;

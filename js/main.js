@@ -356,17 +356,30 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
         el.querySelector('button').onclick = () => { wantReload = true; w.postMessage('skipWaiting'); };
         document.body.appendChild(el);
       };
+      // a new version that is ready, or still downloading (the browser often
+      // finds it while this page loads, before we start listening)
+      const watch = (w) => { if (!w) return; if (w.state === 'installed') { if (navigator.serviceWorker.controller) notify(w); return; } w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) notify(w); }); };
       if (reg.waiting && navigator.serviceWorker.controller) notify(reg.waiting);
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) notify(w); });
-      });
+      watch(reg.installing);
+      reg.addEventListener('updatefound', () => watch(reg.installing));
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!wantReload) return; wantReload = false;   // only when the player asked for it
         if (window.app && window.app.game) window.app.saveGame(true);
         location.reload();
       });
-      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+      // look for a new version every 5 minutes, and whenever the app comes
+      // back to the screen (a phone resumes it without reloading the page)
+      const check = () => reg.update().catch(() => {});
+      setInterval(check, 5 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      addEventListener('focus', check);
+      // Settings -> Check for updates: 'ready' (the Reload offer is shown), 'latest' or 'offline'
+      window.checkForUpdate = async () => {
+        try { await reg.update(); } catch { return 'offline'; }
+        for (let i = 0; i < 40 && reg.installing; i++) await new Promise((r) => setTimeout(r, 250));
+        if (reg.waiting) { notify(reg.waiting); return 'ready'; }
+        return 'latest';
+      };
     } catch (e) { console.warn('service worker', e); }
   });
 }
