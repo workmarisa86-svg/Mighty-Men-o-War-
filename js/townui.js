@@ -105,9 +105,10 @@ export function installTownUI(UI) {
   };
 
   // ---- after jail ---------------------------------------------------------------
-  P.r_jailed = function ({ paid, fine, lost }) {
-    const body = `<p>${t('law.jailText')}</p>
-      <ul class="steps"><li>${t('law.jailFine', { n: paid, f: fine })}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t('law.jailCrops')}</li></ul>`;
+  P.r_jailed = function ({ lost = [] }) {
+    const touch = this.app.input.touch;
+    const body = `<p>${t('jail.text')}</p>
+      <ul class="steps"><li>${t('jail.noFine')}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t(touch ? 'jail.howSleepTouch' : 'jail.howSleep')}</li><li>${t(touch ? 'jail.howPickTouch' : 'jail.howPick')}</li></ul>`;
     this.panel(t('law.jailTitle'), body, { onBack: () => this.app.closePanel() });
   };
 

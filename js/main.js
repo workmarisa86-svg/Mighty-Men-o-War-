@@ -294,7 +294,8 @@ class App {
     requestAnimationFrame((t) => this.loop(t));
     this.adaptRes(dt);
     try {
-      if (this.game) {
+      if (this.inClip) { /* a short film is playing (Town Life: a night in jail) */ }
+      else if (this.game) {
         if (this.input.thit('pause') && !this.game.paused) this.pause();
         this.game.update(dt);
         if (this.game) this.game.render(this.renderer); // the run may have just ended

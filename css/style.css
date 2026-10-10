@@ -636,6 +636,7 @@ body.binoc .zbtn { display: inline-block; min-width: 46px; font-size: 22px; font
 #travel .tfade { position: absolute; inset: 0; background: #000; opacity: 1; }
 #travel::before, #travel::after { content: ''; position: absolute; left: 0; right: 0; height: 7vh; background: #000; }
 #travel::before { top: 0; } #travel::after { bottom: 0; }
+body.inclip #hud, body.inclip #touch { visibility: hidden; }
 #travel #tskip { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); pointer-events: auto; z-index: 2; min-width: 88px; min-height: 44px; }
 .choices.battles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .choice.battle .bhead { display: flex; align-items: center; gap: 8px; }

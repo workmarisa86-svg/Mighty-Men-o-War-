@@ -721,6 +721,8 @@ export class Game {
     if (def.weapon || def.throwable || def.food || def.heal) return;  // handled by combat / handleUse
     const { eye, dir } = this.aim();
     if (item === 'flint') { this.useFlint(eye, dir); return; }
+    // the fishing rod reacts to a fresh press only (cast, then reel in)
+    if (item === 'rod') { if (this.town && (input.mouse.rightPressed || input.thit('place'))) this.town.fishing.use(eye, dir); return; }
     if (this.town && this.townUse(item, def, eye, dir)) return;
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (def.place === 'watchtower') { this.placeWatchtower(hit); return; }
@@ -917,7 +919,9 @@ export class Game {
   // Solid things the player collides with besides blocks.
   obstacles() {
     const tank = this.enemies && this.enemies.tank;
-    return tank ? [...this.rafts, tank] : this.rafts;
+    const o = tank ? [...this.rafts, tank] : this.rafts;
+    // Town Life: beds, tables, sofas and cupboards nearby are solid
+    return this.town && this.town.furniture ? o.concat(this.town.furniture.obstacles(this.player.pos)) : o;
   }
 
   // Lit TNT: approaching it is risky; touching it (staying next to it)

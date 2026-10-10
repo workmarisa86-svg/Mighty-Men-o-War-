@@ -86,6 +86,15 @@ const BUILD = {
     return g;
   },
   smoke() { const g = new THREE.Group(); const c = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.14, 10), M.kit); g.add(c); g.add(bx(0.081, 0.03, 0.081, M.cross, 0, 0.02, 0)); return g; },
+  // a fishing rod: cork grip, a reel, a long thin pole raised ahead
+  rod() {
+    const g = new THREE.Group();
+    g.add(bx(0.03, 0.03, 0.18, M.rope, 0, 0, 0.08));
+    const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 12), M.steel); reel.rotation.z = Math.PI / 2; reel.position.set(0.03, -0.03, 0.04); g.add(reel);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.012, 1.1, 6), M.darkwood); pole.rotation.x = Math.PI / 2; pole.position.set(0, 0, -0.55); g.add(pole);
+    g.rotation.set(0.55, 0.1, 0.1);
+    return g;
+  },
   medkit() { const g = new THREE.Group(); g.add(bx(0.16, 0.1, 0.12, M.kit)); g.add(bx(0.06, 0.101, 0.02, M.cross, 0, 0, -0.061)); g.add(bx(0.02, 0.101, 0.06, M.cross, 0, 0, -0.061)); return g; },
 };
 

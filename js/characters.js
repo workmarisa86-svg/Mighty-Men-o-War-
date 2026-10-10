@@ -212,6 +212,15 @@ function civVariant(L, skin) {
     p.add(cyl(0.16, 0.29, 0.62), mat4([0, -0.2, 0]), L.dress, FAB);                  // skirt to mid-calf
   } else p.add(caps(0.15, 0.08), mat4([0, 0.02, 0], [0, 0, Math.PI / 2], [1, 1, 0.75]), trousers, FAB);
   p.add(cyl(0.172, 0.17, 0.05), mat4([0, 0.1, 0], 0, [1, 1, 0.72]), L.dress ? L.dress : LEATHER, L.dress ? FAB : LEA);
+  if (L.gunbelt) {
+    // a cowboy's gun belt: a wide leather belt slung low with cartridge loops,
+    // and a revolver in its holster on the right hip
+    p.add(cyl(0.182, 0.18, 0.045), mat4([0, 0.055, 0], [0, 0, 0.06], [1, 1, 0.74]), 0x5a3a22, LEA);
+    for (let k = -3; k <= 3; k++) p.add(box(0.014, 0.03, 0.012), mat4([k * 0.035, 0.055, -0.128]), 0xc8a050, MET);   // brass cartridges
+    p.add(box(0.06, 0.2, 0.1), mat4([0.19, -0.05, 0.01], [0.05, 0, 0.12]), 0x4a2e1a, LEA);                         // the holster
+    p.add(box(0.06, 0.04, 0.06), mat4([0.192, 0.055, 0.005], [0, 0, 0.12]), 0x2a2a2c, MET);                        // the cylinder showing
+    p.add(box(0.035, 0.09, 0.05), mat4([0.198, 0.1, 0.03], [-0.55, 0, 0.12]), 0x5a3a22, LEA);                      // the grip, tipped back
+  }
   v.hips = p.build();
   p = new PartList();
   p.add(caps(0.165, 0.25), mat4([0, 0.3, 0], 0, [1.03, 1, 0.66]), L.dress || shirt, FAB);
@@ -435,6 +444,19 @@ export class Character {
       return;
     }
     this.gun.visible = !!this.weapon; this.shadow.visible = true;
+    // ----- asleep in bed: lying on the back, the root at the foot of the bed,
+    // the head toward the root's +z (the bed's head); a slow breath
+    if (st.lie) {
+      body.rotation.x = Math.PI / 2; body.position.set(0, 0.1, 0);
+      this.hips.position.y = RIG.hip; this.hips.rotation.set(0, 0, 0);
+      this.legL.rotation.set(0, 0, -0.04); this.legR.rotation.set(0, 0, 0.04);
+      this.kneeL.rotation.x = -0.08; this.kneeR.rotation.x = -0.08;
+      this.spine.rotation.set(Math.sin(this.t * 1.4) * 0.015, 0, 0); this.head.rotation.set(-0.12, 0.25, 0);
+      this.armL.rotation.set(0.1, 0, -0.12); this.armR.rotation.set(0.1, 0, 0.12);
+      this.elbowL.rotation.x = -0.25; this.elbowR.rotation.x = -0.25;
+      this.gun.visible = false; this.shadow.visible = false;
+      return;
+    }
 
     // ----- legs and hips
     const crouch = s.crouch;

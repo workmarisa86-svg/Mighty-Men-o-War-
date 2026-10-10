@@ -41,6 +41,8 @@ export const ITEMS = {
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
   hide: {}, bear_hide: {},
   bucket: { tool: 'bucket' }, bucket_water: { tool: 'bucket' },
+  rod: { tool: 'rod' },                         // Town Life: cast into a river or lake, reel in on a bite
+  fish: { food: 10 }, big_fish: { food: 22 }, fish_cooked: { food: 40 },
   chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
@@ -74,6 +76,8 @@ export const RECIPES = [
   { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
   // Town Life: weapons are crafted as in War; materials are smelted on the fire
   { id: 'bread', cat: 'food', needs: { wheat: 3 }, time: 5, cook: true, town: true },
+  { id: 'fish_cooked', cat: 'food', needs: { fish: 1 }, time: 4, cook: true, town: true },
+  { id: 'rod', cat: 'gear', needs: { wood: 3 }, time: 5, town: true },
   { id: 'charcoal', cat: 'materials', needs: { wood: 2 }, time: 6, town: true },
   { id: 'brick', cat: 'materials', needs: { clay: 1, charcoal: 1 }, time: 5, out: 2, town: true },
   { id: 'glass', cat: 'materials', needs: { sand: 2, charcoal: 1 }, time: 6, out: 2, town: true },
@@ -251,6 +255,26 @@ const ICON_DRAW = {
   milk(c) { c.fillStyle = '#d8d8d0'; c.fillRect(15, 14, 18, 28); c.fillStyle = '#f4f4ee'; c.fillRect(17, 20, 14, 20); c.fillStyle = '#8a8a80'; c.fillRect(18, 8, 12, 6); },
   hide(c) { c.fillStyle = '#9a7650'; c.beginPath(); c.moveTo(8, 14); c.lineTo(20, 10); c.lineTo(28, 12); c.lineTo(40, 10); c.lineTo(38, 26); c.lineTo(42, 40); c.lineTo(26, 36); c.lineTo(8, 40); c.lineTo(12, 26); c.closePath(); c.fill(); c.fillStyle = '#7a5a3a'; c.beginPath(); c.arc(24, 24, 5, 0, Math.PI * 2); c.fill(); },
   bear_hide(c) { c.fillStyle = '#3e2c1e'; c.beginPath(); c.moveTo(6, 14); c.lineTo(20, 8); c.lineTo(28, 10); c.lineTo(42, 8); c.lineTo(40, 26); c.lineTo(44, 42); c.lineTo(26, 36); c.lineTo(6, 42); c.lineTo(10, 26); c.closePath(); c.fill(); c.fillStyle = '#5a422c'; c.beginPath(); c.arc(24, 22, 6, 0, Math.PI * 2); c.fill(); },
+  rod(c) {
+    c.strokeStyle = '#4a3422'; c.lineWidth = 3; c.beginPath(); c.moveTo(8, 42); c.lineTo(40, 6); c.stroke();
+    c.fillStyle = '#9a8a68'; c.fillRect(7, 34, 7, 8);
+    c.fillStyle = '#5a5a58'; c.beginPath(); c.arc(16, 33, 4, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#e8e8e0'; c.lineWidth = 1; c.beginPath(); c.moveTo(40, 6); c.lineTo(42, 30); c.stroke();
+    c.fillStyle = '#d02a20'; c.beginPath(); c.arc(42, 32, 3, 0, Math.PI * 2); c.fill();
+  },
+  fish(c, big = false, cooked = false) {
+    const body = cooked ? '#a8703a' : big ? '#5a6a4a' : '#7a8e9a', belly = cooked ? '#c89058' : big ? '#c8c890' : '#d8e0e4';
+    const s = big ? 1.15 : 1;
+    c.save(); c.translate(24, 24); c.scale(s, s);
+    c.fillStyle = body; c.beginPath(); c.ellipse(-2, 0, 15, 7, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.moveTo(11, 0); c.lineTo(20, -7); c.lineTo(20, 7); c.closePath(); c.fill();
+    c.fillStyle = belly; c.beginPath(); c.ellipse(-3, 3, 11, 3, 0, 0, Math.PI * 2); c.fill();
+    if (big) { c.fillStyle = '#3a4a2e'; for (let i = -10; i < 8; i += 5) c.fillRect(i, -5, 2, 4); }
+    c.fillStyle = '#101010'; c.beginPath(); c.arc(-12, -2, 1.5, 0, Math.PI * 2); c.fill();
+    c.restore();
+  },
+  big_fish(c) { ICON_DRAW.fish(c, true); },
+  fish_cooked(c) { ICON_DRAW.fish(c, false, true); },
   bucket(c) { c.fillStyle = '#7e848a'; c.beginPath(); c.moveTo(12, 16); c.lineTo(36, 16); c.lineTo(32, 40); c.lineTo(16, 40); c.closePath(); c.fill(); c.strokeStyle = '#4e5458'; c.lineWidth = 2; c.beginPath(); c.arc(24, 16, 11, Math.PI, 0); c.stroke(); },
   bucket_water(c) { ICON_DRAW.bucket(c); c.fillStyle = '#5a8ab0'; c.fillRect(14, 17, 20, 5); },
   chicken(c) { c.fillStyle = '#f0e8d8'; c.beginPath(); c.ellipse(24, 28, 12, 10, 0, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(32, 16, 6, 0, Math.PI * 2); c.fill(); c.fillStyle = '#c83a2a'; c.fillRect(31, 8, 4, 4); c.fillStyle = '#e0a030'; c.fillRect(37, 15, 5, 3); },

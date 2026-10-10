@@ -12,7 +12,7 @@ import { Simplex2, mulberry32, hash2 } from './noise.js';
 
 export { TOWN_SIZE, TOWN_LAYOUT };      // (kept in config.js so the menus don't load Town Life's code)
 // half-size of each kind of home
-export const HOME_HALF = { mansion: 6, house: 4, cottage: 3 };
+export const HOME_HALF = { mansion: 7, house: 5, cottage: 4 };
 
 export function generateTown(world) {
   const { seed } = world.cfg;
@@ -60,7 +60,8 @@ export function generateTown(world) {
   // --- homes: spread far apart over the countryside, each on dry ground
   // social status decides the home: mansions for the wealthy, houses for
   // the middle class, cottages for the poor (each home: a household of four adults)
-  const STATUS = ['mansion', 'mansion', 'mansion', ...Array(8).fill('house'), ...Array(8).fill('cottage')];
+  // fewer homes than before, but each one bigger and furnished (lighter to run)
+  const STATUS = ['mansion', 'mansion', ...Array(6).fill('house'), ...Array(5).fill('cottage')];
   const HOMES = STATUS.length, homes = [];
   const wetness = (x, z, r) => { let n = 0; for (let dz = -r; dz <= r; dz += 2) for (let dx = -r; dx <= r; dx += 2) n += water[(x + dx) + (z + dz) * W] || 0; return n; };
   const a0 = rnd() * Math.PI * 2;
@@ -276,11 +277,15 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
     put(cx + d, floorY, cz + w, B.PATH, false); put(cx + w, floorY, cz + d, B.PATH, false);
   }
   for (let dz = -7; dz <= 7; dz++) for (let dx = -7; dx <= 7; dx++) put(cx + dx, floorY, cz + dz, B.PATH, false);
-  // a stone well in the plaza
+  // a stone well in the plaza: its water stands level with the rim (no
+  // shaft to fall into: one block deep, so anyone in it can step back out),
+  // under a little thatched roof on two posts
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     const X = cx - 5 + dx, Z = cz + 5 + dz;
-    if (dx || dz) { put(X, base, Z, B.STONE); } else { put(X, floorY, Z, B.WATER, false); put(X, floorY - 1, Z, B.STONE); }
+    if (dx || dz) { put(X, base, Z, B.STONE); } else { put(X, floorY, Z, B.STONE); put(X, base, Z, B.WATER, false); }
   }
+  for (const dx of [-1, 1]) for (let y = base + 1; y <= base + 2; y++) put(cx - 5 + dx, y, cz + 5, B.LOG);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx - 5 + dx, base + 3, cz + 5 + dz, B.THATCH);
 
   const buildings = [];
   // slot: footprint and which wall has the door (facing the road)
@@ -313,16 +318,17 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
   }
   // the homes, each facing the road its path comes from, with a field beside it
   const fields = [], pens = [];
-  const WALL = { mansion: [B.BRICK, B.BRICK, B.STONE], house: [B.WOOD, B.BRICK, B.WOOD], cottage: [B.LOG, B.LOG, B.WOOD] };
-  const HIGH = { mansion: 5, house: 4, cottage: 3 };
+  const WALL = { mansion: [B.BRICK, B.BRICK, B.BRICK], house: [B.WOOD, B.BRICK, B.WOOD], cottage: [B.LOG, B.LOG, B.LOG] };
+  const HIGH = { mansion: 7, house: 4, cottage: 3 };
   const crops = ['wheat', 'carrot', 'cabbage'];
   let penDone = false;
   homes.forEach((h, k) => {
     const hb = h.y + 1, H = h.half;
     const dx = h.arm.x - h.x, dz = h.arm.z - h.z;
     const side = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'e' : 'w') : (dz > 0 ? 's' : 'n');
-    const b = building(world, put, { x0: h.x - H, z0: h.z - H, x1: h.x + H - 1, z1: h.z + H - 1, side }, hb, WALL[h.status][k % 3], 'house', HIGH[h.status]);
+    const b = building(world, put, { x0: h.x - H, z0: h.z - H, x1: h.x + H - 1, z1: h.z + H - 1, side }, hb, WALL[h.status][k % 3], 'house', HIGH[h.status], h.status);
     b.arm = h.arm; b.status = h.status;
+    homeDetails(world, put, b, hb, h.status);
     // the front door: closed, opened by the household (and for welcome guests)
     for (const [x, y, z] of b.doorCells) put(x, y, z, B.HDOOR);
     buildings.push(b);
@@ -356,7 +362,8 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
 
 // One building: walls, a door facing the road, glass windows, a plank floor,
 // a pitched thatch roof (shops and houses) or a flat brick top (town hall).
-function building(world, put, s, base, wall, type, H = 4) {
+function building(world, put, s, base, wall, type, H = 4, status = null) {
+  const roof = type === 'hall' ? B.BRICK : status === 'mansion' ? B.STONE : B.THATCH;   // mansions: a grey slate roof
   const bars = type === 'jail' ? B.FENCE : B.GLASS;
   const { x0, z0, x1, z1, side } = s;
   for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
@@ -372,7 +379,7 @@ function building(world, put, s, base, wall, type, H = 4) {
     const y = base + H + k;
     for (let z = z0 - 1; z <= z1 + 1; z++) for (let x = x0 - 1; x <= x1 + 1; x++) {
       const t = alongX ? Math.min(z - (z0 - 1), (z1 + 1) - z) : Math.min(x - (x0 - 1), (x1 + 1) - x);
-      if (t === k || (t > k && k === Math.ceil(span / 2))) put(x, y, z, type === 'hall' ? B.BRICK : B.THATCH);
+      if (t === k || (t > k && k === Math.ceil(span / 2))) put(x, y, z, roof);
       // gable ends filled with wall
       const end = alongX ? (x === x0 || x === x1) : (z === z0 || z === z1);
       if (t > k && end && x >= x0 && x <= x1 && z >= z0 && z <= z1) put(x, y, z, wall);
@@ -389,9 +396,14 @@ function building(world, put, s, base, wall, type, H = 4) {
     put(X, y, Z, B.AIR); doorCells.push([X, y, Z]);
   }
   const isDoor = (x, z) => doorCells.some(([X, , Z]) => X === x && Z === z);
-  // windows on the other walls
-  for (let x = x0 + 2; x < x1 - 1; x += 3) for (const z of [z0, z1]) if (!isDoor(x, z)) put(x, base + 1, z, bars);
-  for (let z = z0 + 2; z < z1 - 1; z += 3) for (const x of [x0, x1]) if (!isDoor(x, z)) put(x, base + 1, z, bars);
+  // windows on the other walls (mansions: two rows, upstairs too, and a
+  // wooden band between the floors)
+  const rows = status === 'mansion' ? [base + 1, base + 4] : [base + 1];
+  if (status === 'mansion') for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) if ((x === x0 || x === x1 || z === z0 || z === z1)) put(x, base + 3, z, B.WOOD);
+  for (const wy of rows) {
+    for (let x = x0 + 2; x < x1 - 1; x += 3) for (const z of [z0, z1]) if (!isDoor(x, z)) { put(x, wy, z, bars); if (status === 'mansion') put(x, wy + 1, z, bars); }
+    for (let z = z0 + 2; z < z1 - 1; z += 3) for (const x of [x0, x1]) if (!isDoor(x, z)) { put(x, wy, z, bars); if (status === 'mansion') put(x, wy + 1, z, bars); }
+  }
   const inner = { x: mx + 0.5, y: base, z: mz + 0.5 };
   const dc = { x: door.x + 0.5 + along[0] * 0.5, z: door.z + 0.5 + along[1] * 0.5 };   // the middle of the doorway
   const b = {
@@ -401,9 +413,16 @@ function building(world, put, s, base, wall, type, H = 4) {
     inside: inner,
   };
   if (type === 'jail') {
-    // a barred cell along the back wall
-    const z = side === 's' ? z0 + 2 : z1 - 2;
+    // a barred cell along the back wall; its 2-wide door of bars is shut
+    // only while you are locked up (town.js); a cot along the back wall
+    const z = side === 's' ? z0 + 2 : z1 - 2, zc = side === 's' ? z0 + 1 : z1 - 1;
     for (let x = x0 + 1; x < x1; x++) if (x !== mx && x !== mx + 1) for (let y = base; y < base + 3; y++) put(x, y, z, B.FENCE);
+    b.cell = {
+      door: [mx, mx + 1].flatMap((x) => [base, base + 1, base + 2].map((y) => [x, y, z])),
+      inside: { x: mx + 0.5 + 1, y: base, z: zc + 0.5 },
+      cot: { x: x0 + 1, z: zc, y: base, len: 2, dir: [1, 0] },          // from (x0+1) along +x, 2 long
+      out: { x: mx + 1, y: base, z: side === 's' ? z + 1.6 : z - 0.6 },
+    };
   } else if (type !== 'house') {
     // a counter across the room with the keeper behind it, and an open gap
     // at one end (the pass-through the keeper uses: he never climbs over)
@@ -421,6 +440,84 @@ function building(world, put, s, base, wall, type, H = 4) {
     b.flap = [{ x: G.x - out[0] * 1.3, y: base, z: G.z - out[1] * 1.3 }, { x: G.x, y: base, z: G.z }, { x: G.x + out[0] * 1.3, y: base, z: G.z + out[1] * 1.3 }];
   }
   return b;
+}
+
+// A home's own look and its furniture. Mansions: a pillared porch with lamps,
+// two brick chimneys and clipped hedges; houses: a covered porch on log
+// posts and a stone chimney; cottages: a stone chimney. Inside every home
+// (positions only; furniture.js draws them): a bed for each of the four who
+// live there (a double bed and two singles, along the back wall), a table with
+// chairs, a sofa, a cupboard and a rug; mansions and houses also a fireplace.
+function homeDetails(world, put, b, base, status) {
+  const out = { s: [0, 1], n: [0, -1], e: [1, 0], w: [-1, 0] }[b.side], al = out[0] ? [0, 1] : [1, 0];
+  const ix0 = b.x0 + 1, ix1 = b.x1 - 1, iz0 = b.z0 + 1, iz1 = b.z1 - 1;
+  const D = out[0] ? ix1 - ix0 + 1 : iz1 - iz0 + 1, Wd = out[0] ? iz1 - iz0 + 1 : ix1 - ix0 + 1;
+  // the back-left inside corner; a = cells from the back wall toward the door, c = cells along the back wall
+  const cx0 = out[0] < 0 ? ix1 : ix0, cz0 = out[1] < 0 ? iz1 : iz0;
+  const cell = (a, c) => ({ x: cx0 + out[0] * a + al[0] * c, z: cz0 + out[1] * a + al[1] * c });
+  const pt = (a, c) => ({ x: cx0 + 0.5 + out[0] * a + al[0] * c, y: base, z: cz0 + 0.5 + out[1] * a + al[1] * c });
+  const sideWall = (c, a) => { const q = cell(a, c); return q; };
+  const dirOut = { x: out[0], z: out[1] }, dirAl = { x: al[0], z: al[1] };
+  // beds: the parents' double bed and two singles, heads to the back wall
+  const bedC = Wd >= 12 ? [0, 8, 11] : Wd >= 8 ? [0, 5, 7] : [0, 3, 5];
+  const beds = [
+    { c: bedC[0], w: 2 }, { c: bedC[1], w: 1 }, { c: bedC[2], w: 1 },
+  ].map((q) => ({ ...q, foot: pt(1.5, q.c + (q.w - 1) / 2), head: { x: -out[0], z: -out[1] }, pos: pt(0.5, q.c + (q.w - 1) / 2) }));
+  // sleeping places: father and mother share the double bed, the sons the singles
+  const slots = [pt(0, 0), pt(0, 1), pt(0, bedC[1]), pt(0, bedC[2])].map((q) => ({ foot: { x: q.x + out[0] * 1.5, y: base, z: q.z + out[1] * 1.5 }, dir: { x: -out[0], z: -out[1] }, side: { x: q.x + out[0] * 2.4, y: base, z: q.z + out[1] * 2.4 } }));
+  // the dining table on the right side, clear of the way in from the door:
+  // mansions a long table (2 wide, 4 long) with chairs both sides; houses and
+  // cottages a narrow one (1 x 3) against the wall, chairs along it and one at the end
+  const chairs = [];
+  let table;
+  if (status === 'mansion') {
+    const ta = 5, tl = 4, tc = Wd - 3;
+    table = { center: pt(ta + 1.5, tc + 0.5), len: tl, wide: 2, dirOut, dirAl };
+    for (let i = 0; i < tl; i++) { chairs.push({ ...pt(ta + i, tc - 1), face: { x: al[0], z: al[1] } }); chairs.push({ ...pt(ta + i, tc + 2), face: { x: -al[0], z: -al[1] } }); }
+  } else {
+    const ta = status === 'house' ? 3 : 2, tl = 3, tc = Wd - 1;
+    table = { center: pt(ta + 1, tc), len: tl, wide: 1, dirOut, dirAl };
+    for (let i = 0; i < tl; i++) chairs.push({ ...pt(ta + i, tc - 1), face: { x: al[0], z: al[1] } });
+    chairs.push({ ...pt(ta + tl, tc), face: { x: -out[0], z: -out[1] } });
+  }
+  // the sofa along the left wall, facing into the room; a cupboard by the door; a rug
+  const sl = Wd >= 12 ? 3 : 2, sa = status === 'mansion' ? 6 : status === 'house' ? 4 : 3;
+  const sofa = { at: pt(sa + (sl - 1) / 2, 0), len: sl, face: { x: al[0], z: al[1] }, dirOut };
+  const cupboard = { at: pt(D - 1, 0), face: { x: -out[0], z: -out[1] } };
+  const rug = Wd >= 8 ? { at: pt(Math.floor(D / 2) + 0.5, Math.floor(Wd / 2) - 0.5), w: Wd >= 12 ? 4 : 3, d: Wd >= 12 ? 5 : 3, dirOut } : null;
+  // a fireplace in the left wall (mansions and houses): bricks in the wall, a chimney above the roof
+  let fireplace = null;
+  if (status !== 'cottage') {
+    const fa = status === 'mansion' ? 3 : 2, w = cell(fa, -1);   // the left wall cell, between the beds and the sofa
+    const roofTop = base + (status === 'mansion' ? 7 : 4) + Math.ceil(Math.max(b.x1 - b.x0, b.z1 - b.z0) / 2) + 2;
+    for (let y = base; y <= roofTop; y++) put(w.x, y, w.z, B.BRICK);
+    for (let y = base + (status === 'mansion' ? 7 : 4); y <= roofTop; y++) put(w.x - al[0], y, w.z - al[1], B.BRICK);   // the stack outside
+    fireplace = { at: pt(fa, 0), face: { x: al[0], z: al[1] } };
+  } else {
+    // a cottage's stone chimney at the back corner
+    const c = cell(-1, -1), top = base + 3 + Math.ceil((b.x1 - b.x0) / 2) + 1;
+    for (let y = base; y <= top; y++) put(c.x, y, c.z, B.STONE);
+  }
+  const front = (a, c) => ({ x: Math.floor(b.door.x - out[0] * 1.6 + 0.5 * 0) + 0, z: 0 });
+  void front; void sideWall;
+  // outside the front door
+  const dx0 = Math.floor(b.door.x - out[0] * 1.6 - al[0] * 0.5), dz0 = Math.floor(b.door.z - out[1] * 1.6 - al[1] * 0.5);   // the first doorway cell
+  const O = (u, c) => ({ x: dx0 + out[0] * u + al[0] * c, z: dz0 + out[1] * u + al[1] * c });
+  if (status === 'mansion') {
+    // a pillared porch: four stone pillars, a slate roof, lamps either side, hedges
+    for (const c of [-3, -2, 3, 4]) { const q = O(3, c); for (let y = base; y <= base + 3; y++) put(q.x, y, q.z, B.STONE); }
+    for (let u = 1; u <= 3; u++) for (let c = -3; c <= 4; c++) { const q = O(u, c); put(q.x, base + 4, q.z, u === 3 ? B.STONE : B.WOOD); }
+    for (const c of [-5, 6]) { const q = O(2, c); put(q.x, base, q.z, B.FENCE); put(q.x, base + 1, q.z, B.FENCE); put(q.x, base + 2, q.z, B.FORT_LAMP); }
+    for (const c of [-6, -5, -4, 5, 6, 7]) { const q = O(5, c); put(q.x, base, q.z, B.LEAVES); }
+    // a second brick chimney on the far side wall
+    const c2 = cell(Math.floor(D / 2), Wd), top2 = base + 7 + Math.ceil(Math.max(b.x1 - b.x0, b.z1 - b.z0) / 2) + 2;
+    for (let y = base + 7; y <= top2; y++) put(c2.x, y, c2.z, B.BRICK);
+  } else if (status === 'house') {
+    // a covered porch on two log posts
+    for (const c of [-2, 3]) { const q = O(2, c); for (let y = base; y <= base + 2; y++) put(q.x, y, q.z, B.LOG); }
+    for (let u = 1; u <= 2; u++) for (let c = -2; c <= 3; c++) { const q = O(u, c); put(q.x, base + 3, q.z, B.THATCH); }
+  }
+  b.furn = { status, beds, slots, table, chairs, sofa, cupboard, rug, fireplace, base, dirOut, dirAl };
 }
 
 // The player's cottage: stone and plank walls, thatch roof, glass windows,
