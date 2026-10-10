@@ -278,6 +278,8 @@ export class UI {
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
       <div class="field"><span>${t('set.awareness')}</span>${seg('awareness', [[true, t('set.on')], [false, t('set.off')]])}</div>
+      <div class="field"><span>${t('set.res')}</span>${seg('res', [['auto', t('set.resAuto')], ['sharp', t('set.resSharp')], ['balanced', t('set.resBalanced')], ['fast', t('set.resFast')]])}</div>
+      <p class="muted small">${t('set.resNote')}</p>
       <div class="field"><span>${t('set.perf')}</span>${seg('perf', [['normal', t('set.perfNormal')], ['smooth', t('set.perfSmooth')]])}</div>
       <p class="muted small">${t('set.perfNote')}</p>`;
     const panel = this.panel(t('set.title'), body, { onBack: () => this.show(from === 'pause' ? 'pause' : from === 'town' ? 'town' : 'main') });

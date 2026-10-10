@@ -255,8 +255,8 @@ export const MANUAL = [
     '"Marines\' Hymn", played by the United States Marine Band, plays quietly on the splash screen and the menus (after your first tap or click), loops smoothly and stops during play. Change its volume or mute it in Settings, or use the speaker icon on the start screen. Your choice is remembered.',
     'Música', 'En la pantalla de presentación y en los menús suena en voz baja el "Marines\' Hymn" interpretado por la Banda de la Infantería de Marina de los Estados Unidos (tras tu primer toque o clic); se repite sin cortes y se detiene al jugar. Cambia su volumen o silénciala en Ajustes, o usa el icono del altavoz de la pantalla de inicio. Se recuerda tu elección.'),
   E('settings', 'game', 'Settings',
-    'Language, graphics quality, render distance, sound volume, music volume and mute, mouse sensitivity and invert, blood on/off, minimap on/off and size and touch button size.',
-    'Ajustes', 'Idioma, calidad gráfica, distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión del ratón, sangre sí/no, minimapa sí/no y tamaño y tamaño de los botones táctiles.'),
+    'Language, graphics quality, sharpness (Auto keeps the picture as sharp as your device can draw smoothly; Sharp, Balanced, Fast), render distance, sound volume, music volume and mute, mouse sensitivity and invert, blood on/off, minimap on/off and size and touch button size.',
+    'Ajustes', 'Idioma, calidad gráfica, nitidez (Auto mantiene la imagen tan nítida como tu dispositivo pueda dibujar con fluidez; Nítida, Equilibrada, Rápida), distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión del ratón, sangre sí/no, minimapa sí/no y tamaño y tamaño de los botones táctiles.'),
   E('statsm', 'game', 'Statistics',
     'Days, HQs captured and lost, enemies defeated, animals hunted, countries conquered, battles completed and time played, per difficulty, plus the Town Life world. They can be reset from the Statistics screen.',
     'Estadísticas', 'Días, cuarteles capturados y perdidos, enemigos abatidos, animales cazados, países conquistados, batallas completadas y tiempo jugado, por dificultad, además del mundo de Town Life. Se pueden reiniciar desde la pantalla de Estadísticas.'),
@@ -336,8 +336,8 @@ export const MANUAL_DEVICE = {
       es: 'En la pantalla de presentación y en los menús suena en voz baja el "Marines\' Hymn" interpretado por la Banda de la Infantería de Marina de los Estados Unidos (tras tu primer clic o tecla); se repite sin cortes y se detiene al jugar. Cambia su volumen o siléncialo en Ajustes, o haz clic en el icono del altavoz de la pantalla de inicio. Se recuerda tu elección.',
     },
     settings: {
-      en: 'Language, graphics quality, render distance, sound volume, music volume and mute, mouse sensitivity and invert, blood on/off, minimap on/off and size.',
-      es: 'Idioma, calidad gráfica, distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión del ratón, sangre sí/no, minimapa sí/no y tamaño.',
+      en: 'Language, graphics quality, sharpness (Auto keeps the picture as sharp as your device can draw smoothly; Sharp, Balanced, Fast), render distance, sound volume, music volume and mute, mouse sensitivity and invert, blood on/off, minimap on/off and size.',
+      es: 'Idioma, calidad gráfica, nitidez (Auto mantiene la imagen tan nítida como tu dispositivo pueda dibujar con fluidez; Nítida, Equilibrada, Rápida), distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión del ratón, sangre sí/no, minimapa sí/no y tamaño.',
     },
   },
   touch: {
@@ -414,8 +414,8 @@ export const MANUAL_DEVICE = {
       es: 'En la pantalla de presentación y en los menús suena en voz baja el "Marines\' Hymn" interpretado por la Banda de la Infantería de Marina de los Estados Unidos (tras tu primer toque); se repite sin cortes y se detiene al jugar. Cambia su volumen o siléncialo en Ajustes, o toca el icono del altavoz de la pantalla de inicio. Se recuerda tu elección.',
     },
     settings: {
-      en: 'Language, graphics quality, render distance, sound volume, music volume and mute, look sensitivity and invert, blood on/off, minimap on/off and size and touch button size.',
-      es: 'Idioma, calidad gráfica, distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión de la vista, sangre sí/no, minimapa sí/no y tamaño y tamaño de los botones táctiles.',
+      en: 'Language, graphics quality, sharpness (Auto keeps the picture as sharp as your device can draw smoothly; Sharp, Balanced, Fast), render distance, sound volume, music volume and mute, look sensitivity and invert, blood on/off, minimap on/off and size and touch button size.',
+      es: 'Idioma, calidad gráfica, nitidez (Auto mantiene la imagen tan nítida como tu dispositivo pueda dibujar con fluidez; Nítida, Equilibrada, Rápida), distancia de dibujado, volumen del sonido, volumen y silencio de la música, sensibilidad e inversión de la vista, sangre sí/no, minimapa sí/no y tamaño y tamaño de los botones táctiles.',
     },
   },
 };

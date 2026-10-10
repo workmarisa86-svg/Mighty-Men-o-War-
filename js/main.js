@@ -1,11 +1,9 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
-import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE } from './config.js';
+import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
 import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
-import { TOWN_SIZE, TOWN_LAYOUT } from './towngen.js';
-import { startCountry } from './campaign.js';
+import { M, loadMode, loadWar } from './modes.js';
 import { BATTLE, COUNTRY, WEATHER, LANDS } from './countries.js';
-import { playTravel, warDate } from './travel.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
 import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
@@ -63,10 +61,36 @@ class App {
     setMusic(this.settings.music, this.settings.musicMute);
     setFolk(this.settings.music, this.settings.musicMute);
     const q = QUALITY[this.settings.quality] || QUALITY.medium;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio, this.settings.perf === 'smooth' ? 0.8 : 9));
+    this.resAuto = { win: 0, frames: 0, good: 0 };
+    this.res = this.resTarget();
+    this.renderer.setPixelRatio(this.res);
     applyI18n();
     document.body.classList.remove('tb-s', 'tb-m', 'tb-l'); document.body.classList.add('tb-' + (this.settings.touchSize || 'm'));
     if (this.game) { this.game.settings = this.settings; this.game.quality = q; this.game.hud.dirtyHotbar = true; this.game.queueTimer = 0; this.game.hud.minimap.applySettings(); }
+  }
+
+  // Sharpness: how many pixels the 3D view is drawn with, as a share of the
+  // screen's own (phones have 2 to 3 per point). Sharp is the screen's full
+  // detail (up to 2x), Balanced about 1.3x, Fast 0.85x (blurrier, lightest).
+  // Auto starts sharp and lowers it only while the frame rate drops below
+  // about 40 fps, raising it again when there is room.
+  resMax() { return Math.min(2, window.devicePixelRatio || 1); }
+  resTarget() {
+    const m = this.resMax(), r = this.settings.res || 'auto';
+    if (r === 'sharp') return m;
+    if (r === 'balanced') return Math.min(m, 1.3);
+    if (r === 'fast') return Math.min(m, 0.85);
+    return Math.min(m, this.input.touch ? 1.6 : m);            // auto: a sharp start, then adapt
+  }
+  adaptRes(dt) {
+    if ((this.settings.res || 'auto') !== 'auto' || !this.game || this.game.paused || this.inTravel) return;
+    const A = this.resAuto; A.win += dt; A.frames++;
+    if (A.win < 1.5) return;
+    const fps = A.frames / A.win; A.win = 0; A.frames = 0;
+    let r = this.res;
+    if (fps < 40) { r = Math.max(0.7, r - (fps < 28 ? 0.25 : 0.15)); A.good = 0; }      // too slow: fewer pixels
+    else if (fps > 55 && ++A.good >= 3 && r < this.resMax()) { r = Math.min(this.resMax(), r + 0.1); A.good = 0; }   // room to spare: sharper
+    if (Math.abs(r - this.res) > 0.01) { this.res = r; this.renderer.setPixelRatio(r); }
   }
 
   // menus: the War music, except on the Town Life menu (folk tunes)
@@ -103,7 +127,8 @@ class App {
   // War: side ('allies' | 'axis'), difficulty; day and night always cycle
   // Open World: a campaign across 14 countries, starting in your side's
   // home country. Battles: one real battle, started fresh and never saved.
-  newGame({ side = 'allies', difficulty = 'medium', name, gameType = 'open', battle = null }) {
+  async newGame({ side = 'allies', difficulty = 'medium', name, gameType = 'open', battle = null }) {
+    await loadWar();                     // War's own code (campaign, travel scenes...) loads now, not with the menus
     const size = WAR_SIZE, mode = 'war', sub = 'allies', timeMode = 'cycle', mission = null;
     const now = Date.now(), seed = (Math.random() * 2 ** 31) | 0;
     if (gameType === 'battle' && BATTLE[battle]) {
@@ -122,7 +147,7 @@ class App {
     }
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now, followers: 4,
-      cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'open', mission, country: startCountry(side) },
+      cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'open', mission, country: M.startCountry(side) },
     });
   }
   // Travel to another country (from the officer's room): this country is
@@ -150,13 +175,14 @@ class App {
     document.body.classList.remove('ingame');
     this.input.enabled = false; this.input.exitLock();
     this.ui.hide();
-    await this.travelScene({ by, to, side, n: take + 1, tod: g.time % 1, dateText: warDate(g.time), weather: WEATHER[COUNTRY[to].climate], nations: followerNations });
+    await this.travelScene({ by, to, side, n: take + 1, tod: g.time % 1, dateText: M.warDate(g.time), weather: WEATHER[COUNTRY[to].climate], nations: followerNations });
     this.startGame(next);
   }
   // the boat or plane scene (travel.js), with the squad's nations, the
   // destination's weather and time of day, and its WWII name and date
-  travelScene({ by, to, side, n, tod, dateText, weather, nations = [], normandy = false }) {
+  async travelScene({ by, to, side, n, tod, dateText, weather, nations = [], normandy = false }) {
     stopMusic();
+    await loadWar();
     const C = COUNTRY[to], pac = ['cn', 'au', 'in', 'us'].includes(to);
     // who rides along: the soldiers following you, else the side's nations that fought there
     const fill = side === 'axis' ? (pac ? ['jp'] : to === 'gr' || to === 'it' ? ['de', 'it'] : ['de'])
@@ -166,7 +192,7 @@ class App {
     const GROUND = { grass: 0x55663e, snow: 0xc8ccc8, lush: 0x4a6a34, red: 0x8a5a3a, jungle: 0x3a5a2a, dry: 0x8a8050, ash: 0x4a4640 };
     const land = LANDS[C.land] || {};
     this.inTravel = true;
-    return playTravel({ by, renderer: this.renderer, toName: t('cname.' + to), dateText, tod, weather, nations, n, side,
+    return M.playTravel({ by, renderer: this.renderer, toName: t('cname.' + to), dateText, tod, weather, nations, n, side,
       touch: this.input.touch, quality: this.settings.quality, normandy, groundColor: GROUND[land.ground] })
       .catch((e) => console.error(e)).finally(() => { this.inTravel = false; });
   }
@@ -181,6 +207,8 @@ class App {
     stopMusic();
     this.ui.show('loading', { town: save.cfg && save.cfg.mode === 'town' });
     await new Promise((r) => setTimeout(r, 30));
+    // only this game's own code is loaded (War or Town Life), the first time it is played
+    try { await loadMode(save.cfg.mode); } catch (e) { console.error(e); this.ui.show('main'); return; }
     this.game = new Game(this, save);
     if (save.cfg.gameType === 'battle') this.lastBattleSide = { side: save.cfg.side, difficulty: save.cfg.difficulty };
     document.body.classList.add('ingame');
@@ -264,6 +292,7 @@ class App {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     requestAnimationFrame((t) => this.loop(t));
+    this.adaptRes(dt);
     try {
       if (this.game) {
         if (this.input.thit('pause') && !this.game.paused) this.pause();

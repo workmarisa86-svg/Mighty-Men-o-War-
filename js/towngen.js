@@ -6,16 +6,13 @@
 // down; iron is common in it and gold very rare. Sand lines the water and
 // clay lies in the river beds. Village buildings and the cottage are locked
 // (indestructible); fields, woods and everything else can be changed.
-import { SEA } from './config.js';
+import { SEA, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
 
-export const TOWN_SIZE = 256;
+export { TOWN_SIZE, TOWN_LAYOUT };      // (kept in config.js so the menus don't load Town Life's code)
 // half-size of each kind of home
 export const HOME_HALF = { mansion: 6, house: 4, cottage: 3 };
-// the town's layout version (a save from an older layout keeps the player's
-// coins, honor, belongings and stats, but the world itself is made anew)
-export const TOWN_LAYOUT = 3;
 
 export function generateTown(world) {
   const { seed } = world.cfg;

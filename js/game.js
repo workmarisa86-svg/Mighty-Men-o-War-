@@ -4,15 +4,10 @@ import { CHUNK, SEA, DAY_SECONDS, QUALITY, SAVE_FORMAT, WORLD_H, BODY } from './
 import { B, BLOCKS } from './blocks.js';
 import { World } from './world.js';
 import { generate, landFor, hasCoast, COAST } from './worldgen.js';
-import { Campaign } from './campaign.js';
-import { Horses } from './horses.js';
-import { Vehicles } from './vehicles.js';
+import { M } from './modes.js';       // each game's own code (loaded before the game starts)
 import { Collide } from './collide.js';
 import { Battle } from './battle.js';
-import { Paratroops, DROP_Y } from './paratroops.js';
 import { COUNTRY, WEATHER } from './countries.js';
-import { generateTown } from './towngen.js';
-import { TownLife } from './town.js';
 import { Bubbles } from './bubbles.js';
 import { AimUse } from './aimuse.js';
 import { UNIFORMS } from './nations.js';
@@ -70,7 +65,7 @@ export class Game {
 
     // world
     this.world = new World(this.cfg);
-    if (this.townMode) generateTown(this.world); else generate(this.world);
+    if (this.townMode) M.generateTown(this.world); else generate(this.world);
     this.season = () => (this.town ? this.town.season : 'summer');
     this.world.applyEdits(save.edits);
     this.world.onSet = (x, y, z, old, id) => {
@@ -171,9 +166,9 @@ export class Game {
     this.combat = new Combat(this);
     this.explosives = new Explosives(this);
     // War, Stage 2: the Open World campaign (14 countries) or one battle
-    this.campaign = !this.townMode && this.cfg.gameType === 'open' && this.cfg.country ? new Campaign(this, save.campaign) : null;
+    this.campaign = !this.townMode && this.cfg.gameType === 'open' && this.cfg.country ? new M.Campaign(this, save.campaign) : null;
     this.battle = !this.townMode && this.cfg.gameType === 'battle' ? new Battle(this) : null;
-    this.paratroops = this.townMode ? null : new Paratroops(this);
+    this.paratroops = this.townMode ? null : new M.Paratroops(this);
     this.forts = new Forts(this, save.forts);
     this.cabin = new Cabin(this, save.cabin);
     this.enemies = new Enemies(this, { followers: save.followers });
@@ -193,9 +188,9 @@ export class Game {
     // overland (battles) or straight into one of your headquarters
     if (!this.townMode && (save.arrival || !save.player) && (this.campaign || this.battle)) this.arrive(save.arrival || this.defaultArrival());
     if (this.campaign) this.campaign.arrived();
-    this.horses = this.townMode ? new Horses(this, (save.town && save.town.horses) || {}) : null;
-    this.vehicles = this.townMode ? null : new Vehicles(this, save.cars);      // army cars (War)
-    this.town = this.townMode ? new TownLife(this, save.town || {}) : null;
+    this.horses = this.townMode ? new M.Horses(this, (save.town && save.town.horses) || {}) : null;
+    this.vehicles = this.townMode ? null : new M.Vehicles(this, save.cars);      // army cars (War)
+    this.town = this.townMode ? new M.TownLife(this, save.town || {}) : null;
     this.collide = new Collide(this);
     this.tmpV = new THREE.Vector3(); this.tmpD = new THREE.Vector3();
   }
@@ -490,7 +485,7 @@ export class Game {
       // your soldiers jump with you and land scattered around
       for (const s of followers) {
         const a2 = Math.random() * Math.PI * 2, r = 5 + Math.random() * 18;
-        s.pos.set(best.x + Math.cos(a2) * r, DROP_Y - 2 - Math.random() * 6, best.z + Math.sin(a2) * r);
+        s.pos.set(best.x + Math.cos(a2) * r, M.DROP_Y - 2 - Math.random() * 6, best.z + Math.sin(a2) * r);
         s.chute = { vx: (Math.random() - 0.5) * 1.4, vz: (Math.random() - 0.5) * 1.4 };
         s.chuteMesh = null; this.paratroops.air.push(s);
         this.paratroops.attachCanopy(s);
