@@ -350,17 +350,46 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       // caches from older versions of this game with other names
       if (window.caches) for (const k of await caches.keys()) if (k.startsWith('blocks-mmow-') && !k.startsWith('blocks-mmow-cache-')) await caches.delete(k);
       const reg = await navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' });
-      const notify = (w) => {
-        if (!w || document.getElementById('update')) return;
-        const el = document.createElement('div'); el.id = 'update';
-        el.innerHTML = `<span>${t('app.update')}</span><button class="btn small primary">${t('app.reload')}</button>`;
-        el.querySelector('button').onclick = () => { wantReload = true; w.postMessage('skipWaiting'); };
-        document.body.appendChild(el);
+      // Only a truly newer version is offered: the waiting worker is asked its
+      // version and it must be above the one running. (The web host can briefly
+      // hand out an older or identical copy of sw.js after a release; those used
+      // to bring the offer back again and again.) The same version is taken
+      // quietly; an older copy is ignored and replaced by the next check.
+      const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+      const askVersion = (w) => new Promise((res) => {
+        const ch = new MessageChannel(), to = setTimeout(() => res(null), 2000);
+        ch.port1.onmessage = (e) => { clearTimeout(to); res(e.data); };
+        try { w.postMessage('version', [ch.port2]); } catch { clearTimeout(to); res(null); }
+      });
+      let offered = null, closed = false;
+      const notify = async (w) => {
+        if (!w || !navigator.serviceWorker.controller || offered === w) return;
+        const v = await askVersion(w);
+        if (w !== reg.waiting) return;
+        if (v && newer(v, GAME_VERSION)) {
+          offered = w; closed = false;
+          let el = document.getElementById('update');
+          if (!el) { el = document.createElement('div'); el.id = 'update'; document.body.appendChild(el); }
+          el.innerHTML = `<span>${t('app.update')} (${v})</span><button class="btn small primary">${t('app.reload')}</button><button class="btn small upclose" aria-label="Close">✕</button>`;
+          el.querySelector('.primary').onclick = () => { wantReload = true; w.postMessage('skipWaiting'); };
+          el.querySelector('.upclose').onclick = () => { closed = true; };
+          place();
+        } else if (v === GAME_VERSION) w.postMessage('skipWaiting');        // the same version: nothing to reload
+        else setTimeout(() => reg.update().catch(() => {}), 60 * 1000);      // an old copy: the next check replaces it
       };
+      // the offer never covers the game: it shows on the menus and the pause
+      // menu (Reload saves your game first), and ✕ hides it until next time
+      const place = () => {
+        const el = document.getElementById('update');
+        if (!el) return;
+        const a = window.app, playing = a && a.game && !a.game.paused;
+        el.style.display = closed || playing || a.inClip || a.inTravel || !offered || offered !== reg.waiting ? 'none' : '';
+      };
+      setInterval(place, 500);
       // a new version that is ready, or still downloading (the browser often
       // finds it while this page loads, before we start listening)
-      const watch = (w) => { if (!w) return; if (w.state === 'installed') { if (navigator.serviceWorker.controller) notify(w); return; } w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) notify(w); }); };
-      if (reg.waiting && navigator.serviceWorker.controller) notify(reg.waiting);
+      const watch = (w) => { if (!w) return; if (w.state === 'installed') { notify(w); return; } w.addEventListener('statechange', () => { if (w.state === 'installed') notify(w); }); };
+      if (reg.waiting) notify(reg.waiting);
       watch(reg.installing);
       reg.addEventListener('updatefound', () => watch(reg.installing));
       navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -378,7 +407,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       window.checkForUpdate = async () => {
         try { await reg.update(); } catch { return 'offline'; }
         for (let i = 0; i < 40 && reg.installing; i++) await new Promise((r) => setTimeout(r, 250));
-        if (reg.waiting) { notify(reg.waiting); return 'ready'; }
+        if (reg.waiting) { await notify(reg.waiting); if (offered && offered === reg.waiting) { closed = false; place(); return 'ready'; } }
         return 'latest';
       };
     } catch (e) { console.warn('service worker', e); }
