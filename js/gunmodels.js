@@ -118,12 +118,48 @@ function pistol() {
   g.userData.length = 0.26;
   return g;
 }
+// A Bowie-style hunting knife: a clip-point steel blade (shaped, with a bright
+// ground edge along its belly and a fuller), a brass guard, a two-piece walnut
+// handle with brass rivets and a brass pommel. Points along -z, edge down.
+let KNIFE_GEO = null;
+function knifeGeo() {
+  if (KNIFE_GEO) return KNIFE_GEO;
+  const L = 0.2;
+  // the blade's side profile (x along the blade from the guard, y up): straight
+  // spine, a clip sweeping down to the point, a curved belly back to the edge
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0.016); sh.lineTo(L * 0.62, 0.016);
+  sh.quadraticCurveTo(L * 0.8, 0.015, L, -0.002);                   // the clip down to the point
+  sh.quadraticCurveTo(L * 0.82, -0.02, L * 0.55, -0.019);           // the belly
+  sh.lineTo(0.012, -0.017); sh.lineTo(0, -0.012); sh.lineTo(0, 0.016);
+  const blade = new THREE.ExtrudeGeometry(sh, { depth: 0.0035, bevelEnabled: true, bevelThickness: 0.0012, bevelSize: 0.0012, bevelSegments: 1, curveSegments: 8 });
+  blade.translate(0, 0, -0.00175);
+  // the bright ground edge: a thin strip just above the belly
+  const eg = new THREE.Shape();
+  eg.moveTo(0.012, -0.017); eg.lineTo(L * 0.55, -0.019); eg.quadraticCurveTo(L * 0.82, -0.02, L, -0.002);
+  eg.quadraticCurveTo(L * 0.8, -0.011, L * 0.55, -0.011); eg.lineTo(0.012, -0.01);
+  const edge = new THREE.ExtrudeGeometry(eg, { depth: 0.0062, bevelEnabled: false, curveSegments: 8 });
+  edge.translate(0, 0, -0.0031);
+  KNIFE_GEO = { blade, edge };
+  return KNIFE_GEO;
+}
 function knife() {
-  const M = gunMats(), g = new THREE.Group();
-  B(g, 0.03, 0.035, 0.11, M.leather, 0, 0, 0.055);
-  B(g, 0.06, 0.012, 0.016, M.brass, 0, 0, -0.005);
-  B(g, 0.008, 0.03, 0.19, M.blade, 0, 0.004, -0.105);
-  g.userData.length = 0.3;
+  const M = gunMats(), g = new THREE.Group(), G = knifeGeo();
+  if (!M.edge) { M.edge = new THREE.MeshPhongMaterial({ color: 0xf4f6f8, specular: 0xffffff, shininess: 160 }); M.kblade = new THREE.MeshPhongMaterial({ color: 0xa8aeb4, specular: 0xe0e8f0, shininess: 120 }); }
+  // blade: the shape lies in x/y; turn it so it runs along -z with the edge down
+  for (const [geo, m] of [[G.blade, M.kblade], [G.edge, M.edge]]) {
+    const o = new THREE.Mesh(geo, m); o.rotation.y = Math.PI / 2; o.position.set(0, 0.002, -0.012); g.add(o);
+  }
+  B(g, 0.0042, 0.006, 0.09, M.steel, 0, 0.007, -0.06);              // the fuller (a dark groove)
+  // brass guard with rounded quillons, a ferrule, the walnut handle, rivets, pommel
+  B(g, 0.016, 0.07, 0.012, M.brass, 0, -0.002, -0.006);
+  for (const y of [-0.036, 0.032]) { const q = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), M.brass); q.position.set(0, y, -0.006); g.add(q); }
+  C(g, 0.016, 0.012, M.brass, 0, -0.002, 0.004, 0.017, 12);
+  B(g, 0.026, 0.034, 0.105, M.wood, 0, -0.004, 0.062);
+  B(g, 0.022, 0.03, 0.11, M.darkwood, 0, -0.006, 0.064);
+  for (const z of [0.03, 0.09]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.028, 8), M.brass); r.rotation.z = Math.PI / 2; r.position.set(0, -0.004, z); g.add(r); }
+  const pm = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), M.brass); pm.scale.set(0.8, 1, 0.7); pm.position.set(0, -0.006, 0.118); g.add(pm);
+  g.userData.length = 0.33;
   return g;
 }
 
