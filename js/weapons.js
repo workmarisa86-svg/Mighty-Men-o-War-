@@ -9,14 +9,14 @@ import { gunModel } from './gunmodels.js';
 
 export const WEAPONS = {
   knife:  { melee: true, damage: 35, range: 2.6, rate: 0.45, swim: true, reticle: 'dot' },
-  pistol: { damage: 30, range: 45, rate: 0.22, spread: 0.012, loud: 30, swim: true, sound: 'pistol', kick: 0.6, reticle: 'cross' },
+  pistol: { damage: 45, range: 45, rate: 0.22, spread: 0.012, loud: 30, swim: true, sound: 'pistol', kick: 0.6, reticle: 'cross' },
   // suppressed pistol: heard only very close, no muzzle flash, a little weaker
-  spistol: { damage: 26, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
-  rifle:  { damage: 70, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
+  spistol: { damage: 40, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
+  rifle:  { damage: 95, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
   sniper: { damage: 130, range: 170, rate: 1.4, spread: 0.0015, loud: 55, sound: 'sniper', kick: 1.3, scope: true, reticle: 'cross' },
   // Town Life: a double-barrel shotgun: very strong close up, weak far away
-  shotgun: { damage: 85, range: 26, rate: 0.95, spread: 0.035, loud: 50, sound: 'rifle', kick: 1.4, reticle: 'cross', falloff: true },
-  smg:    { damage: 20, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
+  shotgun: { damage: 110, range: 26, rate: 0.95, spread: 0.035, loud: 50, sound: 'shotgun', kick: 1.4, reticle: 'cross', falloff: true },
+  smg:    { damage: 28, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
   grenade: { throw: true, rate: 0.9, reticle: 'arc' },
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
 };

@@ -141,7 +141,7 @@ export class ViewModel {
       const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.16, 10), M.steel);
       sup.rotation.x = Math.PI / 2; sup.position.set(0, 0.035, -0.24); g.add(sup);
     }
-    else if (id === 'knife') { g = gunModel('knife'); g.rotation.set(0.25, 0, 0.15); }
+    else if (id === 'knife') { g = new THREE.Group(); const k = gunModel('knife'); k.rotation.set(0.95, -0.25, 0.25); k.position.set(-0.07, 0.07, 0.0); k.scale.setScalar(1.1); g.add(k); }   // held up, blade forward, so you can see it
     else if (BUILD[id]) g = BUILD[id]();
     else if (def.tiles) {
       const a = buildAtlas();
