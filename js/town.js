@@ -179,10 +179,14 @@ export class TownLife {
       if (f.courier && f.to === v.i) { this.payJob(v, f); return; }
       this.folk.say(v, 'job.busy'); return;
     }
-    if (this.bounty > 0 || this.honor < 25) { this.folk.say(v, 'job.refuse'); return; }
+    if (this.bounty > 0) { this.folk.say(v, 'job.refuse'); return; }
     if ((this.jobCd[v.i] || 0) > g.time) { this.folk.say(v, 'job.later'); return; }
+    // low honor (but no bounty): only an odd job, for half the pay; each one
+    // done wins back a little trust, until the town offers real work again
+    const odd = this.honor < 25;
     const pick = JOBS[Math.floor(Math.random() * JOBS.length)];
-    const offer = { giver: v.i, pay: pick.pay + Math.floor(this.honor / 25), until: g.time + 2 };
+    const offer = { giver: v.i, pay: odd ? Math.max(2, Math.floor(pick.pay / 2)) : pick.pay + Math.floor(this.honor / 25), until: g.time + 2, odd };
+    if (odd) this.folk.say(v, 'job.odd');
     if (pick.courier) {
       const others = this.folk.list.filter((o) => o.alive && o !== v && o.role !== 'sheriff');
       const to = others[Math.floor(Math.random() * others.length)];
@@ -213,7 +217,7 @@ export class TownLife {
   payJob(v, f) {
     const g = this.game;
     this.money += f.pay; this.st.earned += f.pay; this.st.jobs++;
-    this.addHonor(5); this.bounty = Math.max(0, this.bounty - 15);
+    this.addHonor(f.odd ? 3 : 5); this.bounty = Math.max(0, this.bounty - 15);
     this.jobCd[f.giver] = g.time + 0.5;
     this.job = null;
     this.folk.say(v, 'job.thanks', { n: f.pay });
@@ -464,6 +468,7 @@ export class TownLife {
     this.cellDoor(false);
     if (C && !early) { g.player.pos.set(C.out.x + 0.5, C.out.y, C.out.z); g.player.vel.set(0, 0, 0); }
     g.player.health = 100;
+    this.addHonor(5);                     // you served your time: the town gives you a little credit back
     g.hud.bigMessage(t('jail.releasedTitle'), t('jail.releasedSub'));
     g.app.saveGame(true);
   }
@@ -860,6 +865,8 @@ export class TownLife {
         this.bounty = Math.floor(this.bounty * 0.8);
         if (this.bounty < 5) { this.bounty = 0; g.hud.toast(t('law.layLow')); }
       }
+      // honor slowly heals on quiet days (no bounty, no crime for a day), up to 50
+      if (this.bounty === 0 && g.time - this.lastCrime > 1 && this.honor < 50) this.addHonor(2);
       if (this.job && this.job.until < g.time) { this.job = null; this.addHonor(-3); g.hud.toast(t('job.expired')); }
     }
     // the sheriff spots a wanted player

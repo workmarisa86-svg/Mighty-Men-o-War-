@@ -361,7 +361,7 @@ export class Townsfolk {
     const moving = Math.hypot(g.player.vel.x, g.player.vel.z) > 1;
     const hitP = Math.min(0.85, Math.max(0.12, Math.min(0.7, 0.78 - d / 55)) * (g.player.crouch ? 0.7 : 1) * (moving ? 0.75 : 1) * (v.posse ? 1.3 : aimK) * (g.player.riding ? 0.8 : 1));
     if (v.armed === 'shotgun' && d > 28) return;                  // a shotgun only reaches so far
-    sfx.shot(v.armed === 'pistol' ? 'pistol' : 'rifle', Math.max(0.2, 1 - d / 60));
+    sfx.shot(v.armed === 'pistol' ? 'pistol' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.2, 1 - d / 60));
     const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z);
     const b = new THREE.Vector3(p.x + (Math.random() - 0.5) * (Math.random() < hitP ? 0.2 : 2.5), p.y + 1.2, p.z + (Math.random() - 0.5) * 1.5);
     const tr = this.tracers[this.trI++ % this.tracers.length];
@@ -437,6 +437,7 @@ export class Townsfolk {
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
         const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed);
         rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
+        if (v.flinchT > 0) { v.flinchT -= dt; rig.body.rotation.x -= Math.sin(Math.max(0, v.flinchT) / 0.35 * Math.PI) * 0.4; }   // hit: they jerk back
       }
       if (v.posse || v.fight || v.surrendered > 0 || v.reportTo || v.route.length) { v.sleeping = false; v.sitting = false; }
       const sl = v.sleeping && v.home.furn && v.home.furn.slots[v.bed];
@@ -506,11 +507,14 @@ export class Townsfolk {
   hurt(v, dmg, { silent = false, head = false } = {}) {
     if (!v.alive) return false;
     const g = this.game;
-    if (head) dmg *= 2.5;
+    // a bullet (or a thrown knife) to the head kills outright; body hits hurt as they would
+    if (head) dmg = dmg >= 25 ? v.hp + 1 : dmg * 2.5;
     if (silent && !this.sees(v, 40)) dmg *= 3;
     v.hp -= dmg;
     const blood = g.settings.blood;
-    g.particles.burst(v.pos.x, v.pos.y + (head ? 1.65 : 1.15), v.pos.z, blood ? [0.42, 0.06, 0.05] : [0.4, 0.36, 0.3], blood ? 4 : 3, 1, 0.5, 14);
+    g.particles.burst(v.pos.x, v.pos.y + (head ? 1.65 : 1.15), v.pos.z, blood ? [0.42, 0.06, 0.05] : [0.4, 0.36, 0.3], blood ? (head ? 14 : 9) : 3, head ? 1.6 : 1.2, 0.6, 14);
+    if (blood) g.particles.burst(v.pos.x, v.pos.y + 0.05, v.pos.z, [0.3, 0.03, 0.03], 5, 0.3, 0.9, 2);   // drops on the ground
+    v.flinchT = 0.35;
     if (v.hp <= 0) { this.kill(v); return true; }
     v.scaredT = 12;
     return false;

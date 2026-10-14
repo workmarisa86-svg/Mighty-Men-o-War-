@@ -1,5 +1,5 @@
 // Every sound is synthesized live with the Web Audio API (no audio files).
-let ctx = null, master = null, noiseBuf = null, muffle = null;
+let ctx = null, master = null, noiseBuf = null, muffle = null, verb = null;
 let volume = 0.7;
 let rainNode = null, rainGain = null;
 
@@ -9,7 +9,9 @@ export function initAudio() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain(); master.gain.value = volume;
     muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.Q.value = 0.7;
-    master.connect(muffle); muffle.connect(ctx.destination);
+    // a gentle limiter so loud gunfire never clips
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.18;
+    master.connect(muffle); muffle.connect(comp); comp.connect(ctx.destination);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -19,7 +21,21 @@ export function initAudio() {
 export function setMuffled(on) { if (muffle) muffle.frequency.setTargetAtTime(on ? 650 : 20000, ctx.currentTime, 0.12); }
 export function setVolume(v) { volume = v; if (master) master.gain.value = v; }
 
-function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 0.005, freqEnd = null, delay = 0 } = {}) {
+// the outdoor echo: a short synthetic reverb (made once, on first use), so
+// gunshots roll off the hills instead of stopping dead
+function reverb() {
+  if (verb || !ctx) return verb;
+  const len = Math.floor(ctx.sampleRate * 1.6), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) { const k = i / len; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - k, 3) * (i < ctx.sampleRate * 0.03 ? 0.2 : 1); }
+  }
+  verb = ctx.createConvolver(); verb.buffer = ir;
+  const g = ctx.createGain(); g.gain.value = 0.5; verb.connect(g); g.connect(master);
+  return verb;
+}
+function wetSend(g, wet) { if (wet > 0 && reverb()) { const s = ctx.createGain(); s.gain.value = wet; g.connect(s); s.connect(verb); } }
+function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 0.005, freqEnd = null, delay = 0, wet = 0 } = {}) {
   if (!ctx || !(gain > 0.0005)) return;
   const t = ctx.currentTime + delay;
   const src = ctx.createBufferSource(); src.buffer = noiseBuf;
@@ -30,10 +46,10 @@ function noise(dur, { type = 'lowpass', freq = 800, q = 1, gain = 0.5, attack = 
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f); f.connect(g); g.connect(master);
+  src.connect(f); f.connect(g); g.connect(master); wetSend(g, wet);
   src.start(t, Math.random()); src.stop(t + dur + 0.05);
 }
-function tone(freq, dur, { type = 'sine', gain = 0.3, freqEnd = null, delay = 0, attack = 0.005 } = {}) {
+function tone(freq, dur, { type = 'sine', gain = 0.3, freqEnd = null, delay = 0, attack = 0.005, wet = 0 } = {}) {
   if (!ctx || !(gain > 0.0005)) return;
   const t = ctx.currentTime + delay;
   const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
@@ -42,7 +58,7 @@ function tone(freq, dur, { type = 'sine', gain = 0.3, freqEnd = null, delay = 0,
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+  o.connect(g); g.connect(master); wetSend(g, wet); o.start(t); o.stop(t + dur + 0.05);
 }
 
 export const sfx = {
@@ -72,14 +88,36 @@ export const sfx = {
   craftTick() { tone(300 + Math.random() * 80, 0.05, { type: 'square', gain: 0.04 }); },
   done() { tone(523, 0.1, { type: 'triangle', gain: 0.15 }); tone(784, 0.18, { type: 'triangle', gain: 0.15, delay: 0.1 }); },
   error() { tone(200, 0.15, { type: 'square', gain: 0.06, freqEnd: 150 }); },
-  // gunshots: sharp crack + body thump; vol falls off with distance (0..1)
+  // Gunshots, built like the real thing: the sharp muzzle crack (and the
+  // bullet's supersonic snap for rifles), the blast, a deep low boom you feel,
+  // the echo rolling back off the land, and the gun's own action (the pistol's
+  // slide, the rifle's bolt, the shotgun's double report). Far away the crack
+  // and the highs fade first and more of what you hear is echo.
   shot(kind, vol = 1) {
-    if (kind === 'suppressed') { noise(0.07, { type: 'bandpass', freq: 1400, gain: 0.12 * vol, q: 1.2 }); tone(180, 0.05, { type: 'triangle', gain: 0.05 * vol, freqEnd: 90 }); return; }
-    const g = { pistol: 0.45, rifle: 0.7, sniper: 0.85, smg: 0.38 }[kind] || 0.5;
-    const f = { pistol: 1800, rifle: 1200, sniper: 900, smg: 2000 }[kind] || 1500;
-    noise(0.05, { type: 'highpass', freq: f, gain: g * vol });
-    noise(kind === 'sniper' ? 0.9 : kind === 'rifle' ? 0.6 : 0.3, { freq: f / 3, gain: g * 0.8 * vol, freqEnd: 80 });
-    tone(kind === 'sniper' ? 70 : 110, 0.18, { type: 'triangle', gain: g * 0.6 * vol, freqEnd: 40 });
+    if (kind === 'suppressed') {
+      noise(0.05, { type: 'bandpass', freq: 1100, gain: 0.16 * vol, q: 1.4 }); noise(0.09, { type: 'lowpass', freq: 600, gain: 0.08 * vol, freqEnd: 200 });
+      tone(2400, 0.015, { type: 'square', gain: 0.02 * vol, delay: 0.06 });          // the slide
+      return;
+    }
+    const P = {
+      pistol:  { g: 0.55, crack: 3200, blast: 0.16, lo: 120, tail: 0.9, snap: 0 },
+      smg:     { g: 0.42, crack: 3600, blast: 0.1, lo: 130, tail: 0.5, snap: 0 },
+      rifle:   { g: 0.75, crack: 2600, blast: 0.26, lo: 90, tail: 1.4, snap: 0.5 },
+      sniper:  { g: 0.85, crack: 2400, blast: 0.32, lo: 75, tail: 1.6, snap: 0.6 },
+      shotgun: { g: 0.85, crack: 1800, blast: 0.3, lo: 70, tail: 1.3, snap: 0 },
+    }[kind] || { g: 0.6, crack: 3000, blast: 0.2, lo: 100, tail: 1, snap: 0 };
+    const v = Math.max(0, Math.min(1, vol)), far = 1 - v, top = 1500 + 8500 * v * v, G = P.g * (0.35 + 0.65 * v);
+    if (P.snap) noise(0.012, { type: 'highpass', freq: 4500, gain: P.snap * (0.4 + 0.6 * v) });                     // supersonic snap
+    noise(0.025, { type: 'highpass', freq: Math.min(P.crack, top), gain: G * 1.1 * v + 0.02 });                      // muzzle crack
+    noise(P.blast, { type: 'lowpass', freq: Math.min(5000, top), gain: G, freqEnd: 220, attack: 0.001, q: 0.7, wet: 0.35 + far });   // blast
+    tone(P.lo * 1.5, 0.32, { type: 'sine', gain: G * 0.9, freqEnd: P.lo * 0.42, attack: 0.002 });               // the low boom
+    noise(0.12, { type: 'lowpass', freq: 260, gain: G * 0.6, freqEnd: 60, attack: 0.002 });
+    noise(P.tail, { type: 'lowpass', freq: Math.min(1100, top), gain: G * (0.16 + far * 0.25), freqEnd: 120, attack: 0.05, delay: 0.06 + far * 0.15, wet: 0.9 });   // the echo
+    if (kind === 'shotgun') { noise(0.2, { type: 'lowpass', freq: Math.min(3500, top), gain: G * 0.45, freqEnd: 200, delay: 0.035, attack: 0.002 }); }
+    if (v > 0.6) {    // the action, only heard close by
+      if (kind === 'pistol') { tone(2600, 0.012, { type: 'square', gain: 0.025, delay: 0.05 }); tone(1700, 0.015, { type: 'square', gain: 0.02, delay: 0.075 }); }
+      if (kind === 'rifle' || kind === 'sniper') { noise(0.04, { type: 'bandpass', freq: 2200, gain: 0.07, q: 3, delay: 0.5 }); noise(0.05, { type: 'bandpass', freq: 1700, gain: 0.08, q: 3, delay: 0.68 }); tone(900, 0.02, { type: 'square', gain: 0.02, delay: 0.78 }); }
+    }
   },
   swish() { noise(0.16, { type: 'bandpass', freq: 2400, gain: 0.12, freqEnd: 900, q: 2, attack: 0.04 }); },
   stab() { noise(0.08, { freq: 500, gain: 0.25 }); tone(140, 0.08, { type: 'triangle', gain: 0.1, freqEnd: 80 }); },

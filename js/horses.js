@@ -17,6 +17,10 @@ const JUMP_V = 8.6, HORSE_G = 24;
 // neck and head carriage (radians, each part relative to the one before):
 // lower neck ~45° forward of upright, upper neck ~22° (an arched crest),
 // head ~118° from upright (nose forward and a little down)
+// points of the horse's body checked against blocks: [forward, side, from height, to height]
+const BODY_PTS = [];
+for (const f of [-0.95, -0.45, 0, 0.45, 0.9]) for (const sd of [-0.32, 0.32]) BODY_PTS.push([f, sd, 1.05, 1.95]);
+for (const sd of [-0.15, 0.15]) BODY_PTS.push([1.3, sd, 1.6, 2.45]);   // the neck and head
 const NECK = { base: 0.8, upper: -0.42, head: 1.68 };         // a jump clears about a block and a half
 export const SADDLE_ROOT = 0.6;          // where a rider's feet-root goes above the horse's hooves
 const COATS = [0x5a3a24, 0x3a2618, 0x7a5a3a, 0x2a2420, 0x8a7a68, 0x6a4a2e];
@@ -156,7 +160,7 @@ export class Horses {
       if (h.owner === 'stable' || h.owner === 'farm') T.crime('horsetheft', { pos: h.pos.clone() });
       h.owner = 'player';
     }
-    h.rider = 'player'; p.riding = h; p.vel.set(0, 0, 0); p.crouch = false;
+    h.rider = 'player'; h.settled = false; p.riding = h; p.vel.set(0, 0, 0); p.crouch = false;
     g.hud.toast(t('horse.mounted'));
     sfx.thump();
   }
@@ -218,7 +222,7 @@ export class Horses {
     let target = (swimming ? SWIM : gallop ? GALLOP : WALK) * Math.min(1, wl);
     if (!swimming && wTop != null) target *= 0.55;                     // wading
     h.speed += (target - h.speed) * Math.min(1, dt * (target > h.speed ? 2.5 : 4));
-    if (wl > 0.05) h.yaw = turnTo(h.yaw, Math.atan2(-wx, -wz), dt * 5);
+    if (wl > 0.05) { const ny = turnTo(h.yaw, Math.atan2(-wx, -wz), dt * 5); if (this.clear(h.pos.x, h.pos.y, h.pos.z, ny) || !this.clear(h.pos.x, h.pos.y, h.pos.z, h.yaw)) h.yaw = ny; }   // no turning its head into a wall
     // the ground under the horse now, and whether it stands on it
     h.vy = h.vy || 0;
     const floorHere = bottom ?? -99;
@@ -231,7 +235,7 @@ export class Horses {
       const climb = swimming ? 1.7 : 1.05;                                  // out of the water onto a bank
       const gy = this.floorUnder(x, z, h.pos.y + climb);
       if (gy == null || gy > h.pos.y + climb) return null;                  // the edge of the world, or a wall too high (jump it)
-      return this.clear(x, Math.max(gy, h.pos.y + (swimming ? 1 : 0)), z) ? true : null;   // swimming, its legs hang below the bank's edge
+      return this.clear(x, Math.max(gy, h.pos.y + (swimming ? 1 : 0)), z, h.yaw) ? true : null;   // swimming, its legs hang below the bank's edge
     };
     if (ok(nx, nz)) { h.pos.x = nx; h.pos.z = nz; }
     else if (Math.abs(nx - h.pos.x) > 0.002 && ok(nx, h.pos.z)) h.pos.x = nx;
@@ -262,11 +266,16 @@ export class Horses {
     this.bar.firstChild.style.width = Math.round(this.stamina * 100) + '%';
     if (h.speed > 1 && (h.stepAcc = (h.stepAcc || 0) + h.speed * dt) > 2.4) { h.stepAcc = 0; sfx.step('dirt'); }
   }
-  // the horse's body (a little wider than its hooves) is free of blocks
-  // (from y + 1.05 up: the legs may straddle a one-block step, up or down)
-  clear(x, y, z) {
-    const w = this.game.world;
-    for (const [ox, oz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) for (let yy = Math.floor(y + 1.05); yy <= Math.floor(y + 2.4); yy++) if (SOLID[w.get(Math.floor(x + ox), yy, Math.floor(z + oz))]) return false;
+  // the whole horse is free of blocks: its long body from rump to chest, and
+  // its neck and head reaching forward and up (from y + 1.05 up: the legs may
+  // straddle a one-block step, up or down). Turned by its heading, so neither
+  // the head nor the rump can sink into a wall.
+  clear(x, y, z, yaw = 0) {
+    const w = this.game.world, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    for (const [f, s, y0, y1] of BODY_PTS) {
+      const px = x + fx * f - fz * s, pz = z + fz * f + fx * s;
+      for (let yy = Math.floor(y + y0); yy <= Math.floor(y + y1); yy++) if (SOLID[w.get(Math.floor(px), yy, Math.floor(pz))]) return false;
+    }
     return true;
   }
 
@@ -307,14 +316,16 @@ export class Horses {
     for (const h of this.list) {
       if (!h.alive) { h.deadT += dt; continue; }
       if (h.rider) continue;
+      // a horse placed (or left) with its head or rump in a wall turns to a free heading
+      if (!h.settled) { h.settled = true; if (!this.clear(h.pos.x, h.pos.y, h.pos.z, h.yaw)) for (let k = 1; k < 16; k++) { const y = h.yaw + k * Math.PI / 8; if (this.clear(h.pos.x, h.pos.y, h.pos.z, y)) { h.yaw = y; break; } } }
       // grazing and ambling around home; a lost posse horse stays where it is
       h.wanderT -= dt;
       if (h.wanderT <= 0) { h.wanderT = 5 + Math.random() * 8; const a = Math.random() * 6.28, r = Math.random() * (h.owner === 'stable' ? 1.5 : 4); h.goal = h.owner === 'posse' ? null : { x: h.home.x + Math.cos(a) * r, z: h.home.z + Math.sin(a) * r }; }
       if (h.goal && Math.hypot(h.goal.x - h.pos.x, h.goal.z - h.pos.z) > 0.4 && Math.hypot(h.pos.x - P.x, h.pos.z - P.z) < MODEL_M) {
         const a = Math.atan2(-(h.goal.x - h.pos.x), -(h.goal.z - h.pos.z));
-        h.yaw = turnTo(h.yaw, a, dt * 2);
+        { const ny = turnTo(h.yaw, a, dt * 2); if (this.clear(h.pos.x, h.pos.y, h.pos.z, ny)) h.yaw = ny; else h.goal = null; }
         const nx = h.pos.x - Math.sin(h.yaw) * 1.1 * dt, nz = h.pos.z - Math.cos(h.yaw) * 1.1 * dt, gy = this.ground(nx, nz, h.pos.y + 1);
-        if (gy != null && Math.abs(gy - h.pos.y) <= 1 && this.clear(nx, gy, nz)) { h.pos.x = nx; h.pos.z = nz; h.pos.y = gy; h.speed = 1.1; } else { h.goal = null; h.speed = 0; }
+        if (gy != null && Math.abs(gy - h.pos.y) <= 1 && this.clear(nx, gy, nz, h.yaw)) { h.pos.x = nx; h.pos.z = nz; h.pos.y = gy; h.speed = 1.1; } else { h.goal = null; h.speed = 0; }
       } else h.speed = Math.max(0, h.speed - dt * 3);
     }
     // bodies are taken away after a while

@@ -2158,11 +2158,12 @@ export class Enemies {
     if (!s.alive) return false;
     const unaware = !s.alerted && !s.sees;
     if (silent && unaware) dmg *= 4;
-    if (head) dmg *= 2.5;
+    if (head) dmg = dmg >= 25 ? s.hp + 1 : dmg * 2.5;      // a bullet to the head kills outright
     s.hp -= dmg; s.hurtT = 0;
     const g = this.game;
     const col = g.settings.blood ? [0.42, 0.06, 0.05] : [0.4, 0.36, 0.3];
-    g.particles.burst(s.pos.x, s.pos.y + (head ? 1.65 : 1.2), s.pos.z, col, g.settings.blood ? 6 : 4, 1.2, 0.6, 14);
+    g.particles.burst(s.pos.x, s.pos.y + (head ? 1.65 : 1.2), s.pos.z, col, g.settings.blood ? (head ? 14 : 9) : 4, head ? 1.6 : 1.2, 0.6, 14);
+    if (g.settings.blood) g.particles.burst(s.pos.x, s.pos.y + 0.05, s.pos.z, [0.3, 0.03, 0.03], 5, 0.3, 0.9, 2);
     if (s.hp <= 0) { this.kill(s, by, silent && unaware); return true; }
     this.alertSquad(s.squad, by === 'player' ? g.player.pos : s.pos);
     s.alerted = true; s.coverT = 0;   // move to better cover (orders keep their spot)

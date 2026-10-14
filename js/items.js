@@ -104,11 +104,14 @@ const ICON_DRAW = {
     c.restore();
   },
   knife(c) {
+    // a Bowie knife: walnut handle with brass rivets and pommel, brass guard, clip-point blade
     c.save(); c.translate(24, 24); c.rotate(-Math.PI / 4);
-    c.fillStyle = '#3d2f22'; c.fillRect(-3, 4, 6, 14);
-    c.fillStyle = '#5a5a52'; c.fillRect(-6, 2, 12, 3);
-    c.fillStyle = '#b9bcb4'; c.beginPath(); c.moveTo(-3, 2); c.lineTo(3, 2); c.lineTo(2, -18); c.lineTo(-1, -21); c.lineTo(-3, -16); c.fill();
-    c.fillStyle = '#e2e4dc'; c.fillRect(-1, -14, 1, 14);
+    c.fillStyle = '#5a3a20'; c.fillRect(-3.5, 4, 7, 14);
+    c.fillStyle = '#c8a050'; c.fillRect(-1, 7, 2, 2); c.fillRect(-1, 13, 2, 2); c.beginPath(); c.arc(0, 19, 3.6, 0, Math.PI * 2); c.fill();
+    c.fillRect(-7, 1.5, 14, 3);
+    c.fillStyle = '#b8bec4'; c.beginPath(); c.moveTo(-3, 1.5); c.lineTo(3, 1.5); c.lineTo(3, -12); c.quadraticCurveTo(2.5, -18, -0.5, -22); c.quadraticCurveTo(-3.5, -15, -3, -8); c.closePath(); c.fill();
+    c.fillStyle = '#eef2f4'; c.fillRect(-3, -10, 1.2, 11);
+    c.fillStyle = '#7a8088'; c.fillRect(1, -10, 0.8, 10);
     c.restore();
   },
   pistol(c) {

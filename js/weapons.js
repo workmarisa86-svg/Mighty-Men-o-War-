@@ -5,17 +5,18 @@ import * as THREE from 'three';
 import { B, BLOCKS } from './blocks.js';
 import { sfx } from './audio.js';
 import { t } from './i18n.js';
+import { gunModel } from './gunmodels.js';
 
 export const WEAPONS = {
   knife:  { melee: true, damage: 35, range: 2.6, rate: 0.45, swim: true, reticle: 'dot' },
-  pistol: { damage: 30, range: 45, rate: 0.22, spread: 0.012, loud: 30, swim: true, sound: 'pistol', kick: 0.6, reticle: 'cross' },
+  pistol: { damage: 45, range: 45, rate: 0.22, spread: 0.012, loud: 30, swim: true, sound: 'pistol', kick: 0.6, reticle: 'cross' },
   // suppressed pistol: heard only very close, no muzzle flash, a little weaker
-  spistol: { damage: 26, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
-  rifle:  { damage: 70, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
+  spistol: { damage: 40, range: 40, rate: 0.26, spread: 0.013, loud: 5, swim: true, sound: 'suppressed', kick: 0.4, reticle: 'cross', silent: true },
+  rifle:  { damage: 95, range: 90, rate: 0.85, spread: 0.004, loud: 45, sound: 'rifle', kick: 1, bayonet: 45, reticle: 'cross' },
   sniper: { damage: 130, range: 170, rate: 1.4, spread: 0.0015, loud: 55, sound: 'sniper', kick: 1.3, scope: true, reticle: 'cross' },
   // Town Life: a double-barrel shotgun: very strong close up, weak far away
-  shotgun: { damage: 85, range: 26, rate: 0.95, spread: 0.035, loud: 50, sound: 'rifle', kick: 1.4, reticle: 'cross', falloff: true },
-  smg:    { damage: 20, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
+  shotgun: { damage: 110, range: 26, rate: 0.95, spread: 0.035, loud: 50, sound: 'shotgun', kick: 1.4, reticle: 'cross', falloff: true },
+  smg:    { damage: 28, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
   grenade: { throw: true, rate: 0.9, reticle: 'arc' },
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
 };
@@ -41,6 +42,7 @@ export class Combat {
     const g = this.game;
     this.cool -= dt; this.swimWarn -= dt;
     for (const tr of this.tracers) if (tr.t > 0) { tr.t -= dt; tr.l.material.opacity = Math.max(0, tr.t / 0.07) * 0.8; if (tr.t <= 0) tr.l.visible = false; }
+    this.updateKnives(dt);
     const id = g.selected();
     if (!playing) return;
     const W = WEAPONS[id];
@@ -60,6 +62,8 @@ export class Combat {
       else if (W.throw) this.throwIt(id);
       else this.shoot(id, W);
     }
+    // the knife: right click / USE throws it (unless that click used something you aim at)
+    if (id === 'knife' && (input.mouse.rightPressed || input.thit('place')) && !g.townKey && this.cool <= 0 && !g.player.swimming) { this.cool = 0.7; this.throwKnife(); }
     if (W.bayonet && (input.mouse.rightPressed || input.thit('place')) && this.cool <= 0 && !g.player.swimming) {
       this.cool = 0.6;
       this.melee(W.bayonet, 2.9, false);
@@ -113,6 +117,55 @@ export class Combat {
     g.hud.dirtyHotbar = true;
   }
 
+  // A thrown knife spins end over end along a falling arc. It hits the first
+  // person, animal or horse in its path (more than a stab: 60) or sticks in a
+  // block; then it lies there until you walk over it and pick it up.
+  throwKnife() {
+    const g = this.game, p = g.player;
+    if (!g.has('knife')) return;
+    g.take('knife'); g.hud.dirtyHotbar = true;
+    const { eye, dir } = g.aim();
+    const mesh = gunModel('knife'); mesh.scale.setScalar(1.3); g.scene.add(mesh);
+    const k = { mesh, pos: eye.clone().addScaledVector(dir, 0.6), vel: dir.clone().multiplyScalar(19).add(new THREE.Vector3(p.vel.x * 0.5, 1.2, p.vel.z * 0.5)), spin: 0, yaw: Math.atan2(dir.x, dir.z) + Math.PI, flying: true, t: 0 };
+    mesh.position.copy(k.pos);
+    (this.knives || (this.knives = [])).push(k);
+    g.vm.doSwing(); sfx.swish();
+  }
+  updateKnives(dt) {
+    const L = this.knives, g = this.game;
+    if (!L || !L.length) return;
+    const d = new THREE.Vector3(), p = g.player.pos;
+    for (const k of L.slice()) {
+      k.t += dt;
+      if (k.flying) {
+        k.vel.y -= 14 * dt;
+        const step = k.vel.length() * dt; d.copy(k.vel).normalize();
+        const block = g.world.raycast(k.pos.x, k.pos.y, k.pos.z, d.x, d.y, d.z, step, false, 'bullet');
+        const hit = this.target(k.pos, d, block ? block.dist : step);
+        if (hit) {
+          this.applyHit(hit, 60, { silent: true }); sfx.stab();
+          k.flying = false; k.pos.copy(hit.point || k.pos.clone().addScaledVector(d, hit.dist || 0)); k.drop = true;
+        } else if (block) {
+          k.pos.addScaledVector(d, Math.max(0, block.dist - 0.08)); k.flying = false; sfx.thump && sfx.thump();
+          k.mesh.rotation.set(0, 0, 0); k.mesh.rotation.y = k.yaw; k.mesh.rotateX(-Math.atan2(-d.y, Math.hypot(d.x, d.z)));   // stuck in, point first
+        } else { k.pos.addScaledVector(d, step); k.spin += dt * 22; }
+        if (k.flying) { k.mesh.rotation.set(0, k.yaw, 0); k.mesh.rotateX(-k.spin); }
+        if (k.t > 6) { k.flying = false; k.drop = true; }
+      } else if (k.drop) {
+        // fallen beside its target: drop to the ground and lie flat
+        const y = g.world.surfaceY(Math.floor(k.pos.x), Math.floor(k.pos.z)) + 1.02;
+        k.pos.y = Math.max(y, k.pos.y - dt * 6); if (k.pos.y <= y + 0.001) k.drop = false;
+        k.mesh.rotation.set(0, k.yaw, Math.PI / 2);
+      }
+      k.mesh.position.copy(k.pos);
+      // pick it back up (walk over it), or it is lost after a few minutes
+      if (!k.flying && Math.hypot(k.pos.x - p.x, k.pos.z - p.z) < 1.6 && Math.abs(k.pos.y - p.y - 0.5) < 2) {
+        g.give('knife', 1); g.hud.dirtyHotbar = true; sfx.pick && sfx.pick(); this.dropKnife(k);
+      } else if (k.t > 300) this.dropKnife(k);
+    }
+  }
+  dropKnife(k) { this.game.scene.remove(k.mesh); this.knives = this.knives.filter((x) => x !== k); }
+
   shoot(id, W) {
     const g = this.game, p = g.player;
     const { eye, dir } = g.aim();
@@ -155,5 +208,5 @@ export class Combat {
     if (g.town) g.town.hearShot(p.pos);
   }
 
-  dispose() { for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); } }
+  dispose() { for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); } for (const k of this.knives || []) this.game.scene.remove(k.mesh); this.knives = []; }
 }
