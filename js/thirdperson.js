@@ -22,7 +22,9 @@ export class ThirdPerson {
   }
   wanted() {
     const g = this.game;
-    return g.settings.camera === 'third' && !g.dying && g.scopeView.ease() < 0.02 && !g.scopeView.kind;
+    if (g.dying) return !!this.deathThird;          // a death seen in third person stays in third person
+    this.deathThird = false;
+    return g.settings.camera === 'third' && g.scopeView.ease() < 0.02 && !g.scopeView.kind;
   }
   build() {
     const g = this.game, low = g.settings.camDetail === 'low';
@@ -47,8 +49,17 @@ export class ThirdPerson {
     const sel = g.selected(), wpn = sel && hasGunModel(sel) ? sel : null;
     if (wpn !== this.weapon) { this.weapon = wpn; R.setWeapon(wpn); }
     const speed = Math.hypot(p.vel.x, p.vel.z), riding = p.riding, car = p.car;
-    R.pose({ speed: riding || car ? 0 : speed, run: p.running, crouch: p.crouch, swim: p.swimming && !riding, ride: !!riding, sit: !!car,
+    if (g.dying) return this.deathView(dt);
+    if (g.knockT > 0) { R.pose({ dead: Math.min(0.6, (g.knockLen - g.knockT) * 2), fallDir: g.knockRoll > 0 ? 1 : -1 }, dt); R.place(p.pos, p.yaw, p.pos.y); }
+    else R.pose({ speed: riding || car ? 0 : speed, run: p.running, crouch: p.crouch, swim: p.swimming && !riding, ride: !!riding, sit: !!car,
       aim: !!wpn && !riding && !car && wpn !== 'knife', look: 0, pitch: p.pitch * 0.6, fired: g.shotT > 0.25 }, dt);
+    // the knife throw: the arm winds back over the shoulder with the body turned, then whips through
+    const kp = g.combat.knifePose();
+    if (sel === 'knife' && (kp.charge || kp.swing)) {
+      const c = kp.charge, sw = kp.swing;
+      R.armR.rotation.x = sw ? -2.8 + 3.3 * sw : -2.8 * c; R.elbowR.rotation.x = -1.2 * (sw ? 1 - sw : c);
+      R.body.rotation.y += 0.5 * c - 0.8 * Math.sin(sw * Math.PI);
+    }
     if (riding) R.place(riding.saddle(), p.yaw, riding.pos.y);
     else if (car) R.place(this.v.set(p.pos.x, p.pos.y + p.eyeOffset - 1.28, p.pos.z), p.yaw, car.pos.y);
     else R.place(p.pos, p.yaw, p.pos.y);
@@ -70,6 +81,22 @@ export class ThirdPerson {
     g.camera.position.copy(this.cam);
     // hide the character when the camera is pressed right up against it
     R.root.visible = this.dist > 0.7;
+  }
+  // your death in third person: the body crumples and falls (in the slow
+  // motion of the death), the camera stays and slowly rises to look down on it
+  deathView(dt) {
+    const g = this.game, p = g.player, R = this.rig, D = g.dying;
+    R.pose({ dead: D.t * 0.55, fallDir: 1 }, dt);
+    R.place(p.pos, p.yaw, p.pos.y);
+    const k = Math.min(1, D.t / 3.2), e = k * k * (3 - 2 * k);
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+    const d = 3.2 + e * 1.2, h = 1.9 + e * 2.2, sd = 0.6 + e * 1.4;
+    this.cam.set(p.pos.x - fx * d + rx * sd, p.pos.y + h, p.pos.z - fz * d + rz * sd);
+    const hit = g.world.raycast(p.pos.x, p.pos.y + 1.2, p.pos.z, this.cam.x - p.pos.x, this.cam.y - p.pos.y - 1.2, this.cam.z - p.pos.z, 1, false);
+    if (hit && hit.dist < 0.95) this.cam.lerp(this.v.set(p.pos.x, p.pos.y + 1.2, p.pos.z), 1 - hit.dist * 0.9);
+    g.camera.position.copy(this.cam);
+    g.camera.lookAt(p.pos.x, p.pos.y + 0.4, p.pos.z);
+    R.root.visible = true;
   }
   // where aiming starts: on the camera's line of sight, level with you
   aimOrigin(out) {

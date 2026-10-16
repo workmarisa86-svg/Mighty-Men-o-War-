@@ -7,6 +7,7 @@ export const ITEMS = {
   flint: { tool: 'flint' },
   knife: { weapon: true }, pistol: { weapon: true }, spistol: { weapon: true }, rifle: { weapon: true },
   sniper: { weapon: true }, smg: { weapon: true }, shotgun: { weapon: true },
+  revolver: { weapon: true }, lever: { weapon: true },     // Town Life: 1870s guns (War keeps its WWII weapons)
   dynamite: { tool: 'dynamite' },              // Town Life: blows open a locked door (only the door)
   grenade: { throwable: true }, smoke: { throwable: true },
   dirt: { block: B.DIRT, tiles: ['dirt_top', 'dirt'] },
@@ -36,6 +37,7 @@ export const ITEMS = {
   charcoal: { block: B.CHARCOAL, tiles: ['charcoal', 'charcoal'] },
   gold: { block: B.GOLD, tiles: ['gold', 'gold'] },
   fence: { block: B.FENCE, tiles: ['fence', 'fence'] },
+  gate: { block: B.GATE, tiles: ['gate', 'gate'] },
   seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
   wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
@@ -46,7 +48,7 @@ export const ITEMS = {
   chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
 export const MATERIALS = ['dirt', 'wood', 'stone', 'iron', 'tnt', 'sandbag', 'wire'];
-export const WEAPON_IDS = ['knife', 'pistol', 'spistol', 'rifle', 'sniper', 'smg', 'shotgun', 'grenade', 'smoke'];
+export const WEAPON_IDS = ['knife', 'pistol', 'spistol', 'rifle', 'sniper', 'smg', 'shotgun', 'revolver', 'lever', 'grenade', 'smoke'];
 export const LOOT_IDS = [...WEAPON_IDS, 'tnt'];
 
 // Crafting happens at a campfire. Weapon times rise 2 s per level of
@@ -85,11 +87,14 @@ export const RECIPES = [
   { id: 'glass', cat: 'materials', needs: { sand: 2, charcoal: 1 }, time: 6, out: 2, town: true },
   { id: 'thatch', cat: 'materials', needs: { wheat: 2 }, time: 3, out: 2, town: true },
   { id: 'fence', cat: 'materials', needs: { wood: 2 }, time: 3, out: 3, town: true },
+  { id: 'gate', cat: 'materials', needs: { wood: 3 }, time: 4, out: 1, town: true },
   { id: 'shotgun', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 10, town: true },
+  { id: 'revolver', cat: 'weapons', needs: { iron: 2, wood: 1 }, time: 7, town: true },
+  { id: 'lever', cat: 'weapons', needs: { iron: 3, wood: 2 }, time: 9, town: true },
   { id: 'dynamite', cat: 'weapons', needs: { charcoal: 2, clay: 1, sand: 1 }, time: 8, town: true },
 ];
 // which recipes each game offers
-const WAR_ONLY = ['car', 'grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
+const WAR_ONLY = ['car', 'grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol', 'pistol', 'rifle', 'sniper'];   // Town Life has only period guns
 export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) && !r.war : !r.town); }
 
 const ICON_DRAW = {
@@ -136,6 +141,24 @@ const ICON_DRAW = {
     c.fillStyle = '#20221e'; c.fillRect(18, 14, 14, 5); c.fillRect(16, 15, 3, 3); c.fillRect(31, 15, 3, 3);
     c.fillStyle = '#6a8a9a'; c.fillRect(32, 15, 1, 3);
     c.clearRect(38, 18, 10, 4);
+  },
+  // a single-action revolver: long barrel, round cylinder, curved walnut grip
+  revolver(c) {
+    c.fillStyle = '#2a2c2e'; c.fillRect(6, 17, 22, 4);                       // barrel
+    c.fillStyle = '#3c3e40'; c.fillRect(6, 21, 18, 2);                       // ejector rod
+    c.fillStyle = '#34363a'; c.beginPath(); c.arc(29, 20, 5, 0, Math.PI * 2); c.fill();   // cylinder
+    c.fillStyle = '#1e2022'; for (let k = 0; k < 3; k++) c.fillRect(26 + k * 2.5, 17, 1, 6);
+    c.fillStyle = '#2a2c2e'; c.fillRect(32, 16, 6, 8); c.fillRect(36, 13, 3, 4);  // frame and hammer
+    c.fillStyle = '#6a4428'; c.beginPath(); c.moveTo(34, 23); c.lineTo(39, 23); c.quadraticCurveTo(44, 32, 42, 40); c.lineTo(36, 40); c.quadraticCurveTo(37, 31, 34, 27); c.fill();   // grip
+    c.strokeStyle = '#c8a050'; c.lineWidth = 1.5; c.beginPath(); c.arc(32, 26, 3.5, 0, Math.PI); c.stroke();   // brass trigger guard
+  },
+  // a lever-action rifle: brass receiver, octagonal barrel, the loop lever
+  lever(c) {
+    c.fillStyle = '#6a4428'; c.beginPath(); c.moveTo(2, 30); c.lineTo(13, 25); c.lineTo(20, 25); c.lineTo(20, 29); c.lineTo(8, 35); c.fill();
+    c.fillStyle = '#c8a050'; c.fillRect(19, 23, 7, 6);
+    c.fillStyle = '#2a2c2e'; c.fillRect(26, 23, 21, 2); c.fillStyle = '#3c3e40'; c.fillRect(26, 25, 17, 2);
+    c.fillStyle = '#6a4428'; c.fillRect(27, 25, 9, 3);
+    c.strokeStyle = '#2a2c2e'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(18, 29); c.lineTo(18, 33); c.lineTo(23, 33); c.lineTo(23, 29); c.stroke();
   },
   shotgun(c) {
     c.fillStyle = '#6a4a2e'; c.beginPath(); c.moveTo(2, 30); c.lineTo(14, 25); c.lineTo(22, 25); c.lineTo(22, 29); c.lineTo(10, 35); c.fill();

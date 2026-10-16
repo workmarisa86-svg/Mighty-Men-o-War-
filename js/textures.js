@@ -14,7 +14,7 @@ const TILE_NAMES = [
   'ladder', 'ladder_top',
   // War headquarters rooms
   'med_side', 'med_top', 'rack', 'map_top',
-  'door',
+  'door', 'gate', 'gate_open',
 ];
 // season currently painted into the seasonal tiles (grass, leaves): null = War look
 let SEASON = null;
@@ -375,6 +375,18 @@ const PAINT = {
     p.rect(2, 0, 5, 32, c); p.rect(25, 0, 5, 32, c); p.rect(2, 0, 1, 32, d); p.rect(25, 0, 1, 32, d);
     p.rect(0, 7, 32, 4, c); p.rect(0, 19, 32, 4, c); p.rect(0, 10, 32, 1, d); p.rect(0, 22, 32, 1, d);
   },
+  // a pen gate: a framed plank door with a diagonal brace and an iron latch
+  gate(p) {
+    p.clear();
+    const c = [122, 90, 56], d = [80, 58, 36];
+    p.rect(1, 0, 4, 32, d); p.rect(27, 0, 4, 32, d);
+    p.rect(5, 4, 22, 4, c); p.rect(5, 15, 22, 3, c); p.rect(5, 25, 22, 4, c);
+    for (let i = 0; i < 20; i++) p.rect(6 + i, 26 - i, 2, 2, c);
+    p.rect(5, 7, 22, 1, d); p.rect(5, 28, 22, 1, d);
+    p.rect(23, 14, 3, 5, [70, 70, 74]);
+  },
+  // open: only the posts remain, the gate swung back against one of them
+  gate_open(p) { p.clear(); const d = [80, 58, 36]; p.rect(1, 0, 4, 32, d); p.rect(5, 4, 3, 25, [122, 90, 56]); },
   sprout(p) { p.clear(); for (let i = 0; i < 6; i++) { const x = 4 + i * 5; p.rect(x, 24, 1, 8, [80, 130, 50]); p.rect(x - 1, 24, 3, 2, [100, 160, 60]); } },
   wheat_g(p) { p.clear(); for (let i = 0; i < 9; i++) { const x = 2 + i * 3.4 | 0, h = 14 + (p.r() * 6 | 0); p.rect(x, 32 - h, 1, h, [96, 150, 58]); p.rect(x - 1, 32 - h, 3, 3, [120, 170, 70]); } },
   wheat_r(p) { p.clear(); for (let i = 0; i < 9; i++) { const x = 2 + i * 3.4 | 0, h = 20 + (p.r() * 6 | 0); p.rect(x, 32 - h, 1, h, [190, 160, 70]); p.rect(x - 1, 32 - h, 3, 6, [222, 190, 92]); } },

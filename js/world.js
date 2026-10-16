@@ -13,7 +13,8 @@ export class World {
     this.glow = new Uint8Array(this.W * this.D * this.H);
     this.forts = [];
     this.edits = new Map();
-    this.editsVersion = 0;     // bumps on every change (Town Life saves edits only when it moved)
+    this.editsVersion = 0;
+    this.solidVersion = 0;     // bumps on every change (Town Life saves edits only when it moved)
     this.cx = Math.ceil(this.W / CHUNK);
     this.cz = Math.ceil(this.D / CHUNK);
     this.dirty = new Set();
@@ -40,6 +41,7 @@ export class World {
     this.data[i] = id;
     this.edits.set(i, id);
     this.editsVersion++;
+    if (SOLID[old] !== SOLID[id]) this.solidVersion++;      // something walkable became a wall or the other way (pens.js)
     this.markDirty(x, z);
     if (this.onSet) this.onSet(x, y, z, old, id);
     return true;

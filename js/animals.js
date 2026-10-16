@@ -525,7 +525,7 @@ export class Animals {
       if (a.type === 'bird' && (a.state !== 'calm')) this.updateFlying(a, dt, d);
       else {
         if (!(a.T.fierce && this.updateBear(a, dt, d)) && !(a.T.pack && this.updateWolf(a, dt, d))) this.updateWalker(a, dt);
-        this.settle(a, dt);
+        if (!a.leap) this.settle(a, dt);
       }
       // calls
       a.callT -= dt;
@@ -554,7 +554,14 @@ export class Animals {
   updateWalker(a, dt) {
     a.timer -= dt;
     let speed = 0, tx, tz;
-    if (a.state === 'flee') {
+    const R = a.owner === 'player' ? a.region : null;      // your pen (pens.js): they stay on its tiles
+    if (a.led) {
+      // led on a rope: it follows a couple of steps behind you
+      const P = this.game.player.pos, dx = a.pos.x - P.x, dz = a.pos.z - P.z, dd = Math.hypot(dx, dz) || 1;
+      if (dd > 2.2) { tx = P.x + dx / dd * 1.6; tz = P.z + dz / dd * 1.6; speed = Math.min(a.T.flee, a.T.walk * (dd > 4 ? 2.6 : 1.4)); }
+      if (dd > 24) { a.led = false; if (this.onLetGo) this.onLetGo(a); }   // too far: the rope slips
+      a.state = 'calm'; a.target = null;
+    } else if (a.state === 'flee') {
       speed = a.T.flee;
       const dx = a.pos.x - a.from.x, dz = a.pos.z - a.from.z, dd = Math.hypot(dx, dz) || 1;
       tx = a.pos.x + dx / dd * 4 + (this.r() - 0.5); tz = a.pos.z + dz / dd * 4 + (this.r() - 0.5);
@@ -564,7 +571,8 @@ export class Animals {
       if (!a.target || a.timer <= 0) {
         a.timer = 3 + this.r() * 6;
         const pen = a.pen;
-        a.target = this.r() < 0.45 ? null : pen ? { x: pen.x0 + 1.5 + this.r() * (pen.x1 - pen.x0 - 2), z: pen.z0 + 1.5 + this.r() * (pen.z1 - pen.z0 - 2) }
+        a.target = this.r() < 0.45 ? null : R ? (({ x, z }) => ({ x: x + 0.2 + this.r() * 0.6, z: z + 0.2 + this.r() * 0.6 }))(R.list[Math.floor(this.r() * R.list.length)])
+          : pen ? { x: pen.x0 + 1.5 + this.r() * (pen.x1 - pen.x0 - 2), z: pen.z0 + 1.5 + this.r() * (pen.z1 - pen.z0 - 2) }
           : { x: a.herd.cx + (this.r() - 0.5) * 10, z: a.herd.cz + (this.r() - 0.5) * 10 };
         if (!a.target) a.timer = 2 + this.r() * 4; // graze / peck
       }
@@ -580,7 +588,7 @@ export class Animals {
       this.face(a, Math.atan2(-dx, -dz), dt);
       const nx = a.pos.x + dx / dd * speed * dt, nz = a.pos.z + dz / dd * speed * dt;
       // grazers keep out of water unless fleeing; bears and wolves swim when they must
-      if (!this.step(a, nx, nz, a.state === 'flee' || (a.T.swim && a.state === 'flee'))) {
+      if ((R && !R.tiles.has(Math.floor(nx) * 8192 + Math.floor(nz))) || !this.step(a, nx, nz, a.state === 'flee' || (a.T.swim && a.state === 'flee'))) {
         a.target = null; if (a.state === 'flee') a.from.set(nx * 2 - a.from.x, 0, nz * 2 - a.from.z);
       }
     }
@@ -751,10 +759,17 @@ export class Animals {
     const g = this.game, pl = g.player.pos, H = a.herd, P = H.pack;
     if (!P || P.mode === 'roam' || P.mode === 'flee' || !a.hunting) { if (a.atk) this.endAttack(a); return false; }
     const n = H.members.length, dx = pl.x - a.pos.x, dz = pl.z - a.pos.z, dd = Math.hypot(dx, dz) || 1;
+    if (a.leap) return this.leapStep(a, dt);
     if (a.atk) { this.attackStep(a, dt, dd, dx, dz); this.legsAnim(a, dt, 0); return true; }
+    a.pounceCool = (a.pounceCool || 2 + this.r() * 2) - dt;
     let tx, tz, sp;
     const ang = P.spin + (a.slot / n) * Math.PI * 2;
-    if (P.mode === 'circle') { const R = 9; tx = pl.x + Math.cos(ang) * R; tz = pl.z + Math.sin(ang) * R; sp = 4.4; }
+    if (P.mode === 'circle') {
+      // circling, and now and then a fast dart in at you from the edge of the ring, snarling, and back out
+      a.dartT = (a.dartT ?? 2 + this.r() * 4) - dt;
+      if (a.dartT < 0) { if (a.dartT < -0.9) a.dartT = 3 + this.r() * 4; else if (a.dartT > -dt * 1.5) sfx.snarl(0.6); }
+      const R = a.dartT < 0 && a.dartT > -0.45 ? 4.5 : 9; tx = pl.x + Math.cos(ang) * R; tz = pl.z + Math.sin(ang) * R; sp = a.dartT < 0 ? 8 : 4.4;
+    }
     else {
       a.wait = (a.wait || 0) - dt; a.retreat = Math.max(0, (a.retreat || 0) - dt); a.cool = (a.cool || 0) - dt;
       if (a.wait > 0 || a.retreat > 0) { const R = a.retreat > 0 ? 5.5 : 8; tx = pl.x + Math.cos(ang) * R; tz = pl.z + Math.sin(ang) * R; sp = a.retreat > 0 ? 6 : 4; }
@@ -763,6 +778,8 @@ export class Animals {
         const side = Math.min(1, Math.max(0, (dd - 2) / 6));
         tx = pl.x + Math.cos(ang) * 2.2 * side; tz = pl.z + Math.sin(ang) * 2.2 * side; sp = a.swimming ? 2.4 : 7.6;
         if (dd < 1.75 && a.cool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 2) { this.face(a, Math.atan2(-dx, -dz), 1); this.startAttack(a, 'bite'); return true; }
+        // from a few metres out it may launch itself at you: a pounce
+        if (dd > 3 && dd < 6.5 && a.pounceCool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 1.5 && this.r() < dt * 2.5) return this.startLeap(a, dx, dz, dd);
       }
     }
     const ex = tx - a.pos.x, ez = tz - a.pos.z, ed = Math.hypot(ex, ez);
@@ -777,6 +794,34 @@ export class Animals {
     else if (a.head) a.head.rotation.x = 0.1;
     if (a.body) a.body.rotation.x *= 0.8;
     this.legsAnim(a, dt, a.speed);
+    return true;
+  }
+  // a pounce: a short arc through the air at where you are; landing on you is
+  // a heavy hit that knocks you down for about a second
+  startLeap(a, dx, dz, dd) {
+    const pl = this.game.player.pos;
+    this.face(a, Math.atan2(-dx, -dz), 1);
+    a.leap = { t: 0, dur: 0.32 + dd * 0.045, fx: a.pos.x, fz: a.pos.z, fy: a.pos.y, tx: pl.x - dx / dd * 0.6, tz: pl.z - dz / dd * 0.6, ty: pl.y };
+    a.pounceCool = 3.5 + this.r() * 3; sfx.snarl(1);
+    return true;
+  }
+  leapStep(a, dt) {
+    const L = a.leap, g = this.game, P = g.player;
+    L.t += dt;
+    const k = Math.min(1, L.t / L.dur);
+    a.pos.x = L.fx + (L.tx - L.fx) * k; a.pos.z = L.fz + (L.tz - L.fz) * k;
+    a.pos.y = L.fy + (L.ty - L.fy) * k + Math.sin(k * Math.PI) * 1.1;
+    a.body.rotation.x = 0.5 - k * 0.9; a.head.rotation.x = -0.2; a.jaw.rotation.x = 0.7;
+    a.legs.forEach((l, i) => { l.rotation.x = i < 2 ? -1.2 : 1.0; });
+    if (k >= 1) {
+      a.leap = null; a.body.rotation.x = 0; a.vy = 0;
+      const d = Math.hypot(P.pos.x - a.pos.x, P.pos.z - a.pos.z);
+      if (d < 1.8 && Math.abs(P.pos.y - a.pos.y) < 1.6 && !g.dying && !g.dead) {
+        sfx.bite(1); g.damage(7, 'wolf', a.pos, { heavy: true, bleed: true });
+        if (g.knockDown) g.knockDown(1, a.pos);
+      } else sfx.swish();
+      a.retreat = 1.2 + this.r(); a.cool = 0.4;
+    }
     return true;
   }
   // Keep at most two packs near the player. Town Life: they come out at
