@@ -32,7 +32,7 @@ export class Duels {
   }
   canChallenge(v) {
     const g = this.game;
-    return !this.duel && v.alive && !v.female && !v.posse && !v.fight && !v.surrendered && !v.away && g.has('revolver') && !this.town.posse;
+    return !this.duel && v.alive && !v.female && !v.posse && !v.fight && !v.surrendered && !v.away && !v.gang && !v.cuffed && g.has('revolver') && !this.town.posse;
   }
   challenge(v) {
     const g = this.game, F = this.town.folk;
@@ -109,10 +109,12 @@ export class Duels {
       const prize = Math.min(15, 6 + (v.money || 0));
       T.money += prize; v.money = Math.max(0, (v.money || 0) - prize);
       T.st.duels = (T.st.duels || 0) + 1;
+      if (v.outlaw) T.trades.rep('law', 2);
       if (v.alive) { v.surrendered = 20; F.armed(v, null); F.say(v, 'say.duelLost'); }
       else {
         const witnesses = F.list.filter((o) => o !== v && o.alive && !o.away && o.pos.distanceTo(v.pos) < 35).length;
-        if (witnesses) { T.addHonor(-2); g.hud.toast(t('duel.fair')); } else T.crime('murder', { dead: v });
+        if (v.extra) g.hud.toast(t('duel.fair'));                 // a wanted outlaw: no crime either way
+        else if (witnesses) { T.addHonor(-2); g.hud.toast(t('duel.fair')); } else T.crime('murder', { dead: v });
       }
       g.hud.bigMessage(t('duel.won'), t('duel.prize', { n: prize }));
       sfx.coins();
@@ -136,14 +138,14 @@ export class Duels {
     if (!gun || g.overlay) { this.pointed = null; return; }
     const { eye, dir } = g.aim(), hit = F.raycast(eye, dir, 16);
     const v = hit && hit.villager;
-    if (!v || v.female || !v.alive || v.posse || v.fight || v.surrendered || v.duel || !F.bestGun(v)) { this.pointed = null; return; }
+    if (!v || v.female || !v.alive || v.posse || v.fight || v.surrendered || v.duel || v.gang || v.cuffed || !F.bestGun(v)) { this.pointed = null; return; }
     if (this.pointed !== v) { this.pointed = v; this.pointT = 0; v.faceT = 2.5; F.say(v, 'say.easy', null, 'warn'); return; }
     this.pointT += 0.25; v.faceT = 2;
     // a man with nerve won't stand there long with a gun on him: he goes for his own
     if (this.pointT > 2.2 && v.brave > 0.7) {
       v.fight = { armed: F.bestGun(v) }; F.armed(v, v.fight.armed); v.cool = this.reaction(v);
       F.say(v, 'say.draw', null, 'warn'); sfx.leather(); this.pointed = null;
-      T.crime('holdup', { victim: v });
+      if (!v.extra) T.crime('holdup', { victim: v });
     }
   }
 }

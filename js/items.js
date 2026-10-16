@@ -8,7 +8,9 @@ export const ITEMS = {
   knife: { weapon: true }, pistol: { weapon: true }, spistol: { weapon: true }, rifle: { weapon: true },
   sniper: { weapon: true }, smg: { weapon: true }, shotgun: { weapon: true },
   revolver: { weapon: true }, lever: { weapon: true },     // Town Life: 1870s guns (War keeps its WWII weapons)
-  dynamite: { tool: 'dynamite' },              // Town Life: blows open a locked door (only the door)
+  dynamite: { tool: 'dynamite' },
+  trap: { tool: 'trap' },                        // Town Life: a steel trap, set on the ground (hunter-trapper)
+  handcuffs: { tool: 'handcuffs' },              // Town Life: cuff an outlaw who gave up, walk him to the sheriff              // Town Life: blows open a locked door (only the door)
   grenade: { throwable: true }, smoke: { throwable: true },
   dirt: { block: B.DIRT, tiles: ['dirt_top', 'dirt'] },
   wood: { block: B.WOOD, tiles: ['planks', 'planks'] },
@@ -91,6 +93,7 @@ export const RECIPES = [
   { id: 'shotgun', cat: 'weapons', needs: { iron: 4, wood: 2 }, time: 10, town: true },
   { id: 'revolver', cat: 'weapons', needs: { iron: 2, wood: 1 }, time: 7, town: true },
   { id: 'lever', cat: 'weapons', needs: { iron: 3, wood: 2 }, time: 9, town: true },
+  { id: 'trap', cat: 'gear', needs: { iron: 2, wood: 1 }, time: 6, town: true },
   { id: 'dynamite', cat: 'weapons', needs: { charcoal: 2, clay: 1, sand: 1 }, time: 8, town: true },
 ];
 // which recipes each game offers
@@ -174,6 +177,18 @@ const ICON_DRAW = {
   },
   coins(c) {
     for (const [x, y] of [[16, 30], [26, 28], [21, 22]]) { c.fillStyle = '#c8a040'; c.beginPath(); c.ellipse(x, y, 9, 5, 0, 0, Math.PI * 2); c.fill(); c.strokeStyle = '#7a5a20'; c.lineWidth = 1.5; c.stroke(); }
+  },
+  trap(c) {
+    c.strokeStyle = '#5a5a5e'; c.lineWidth = 3; c.beginPath(); c.ellipse(24, 28, 16, 8, 0, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = '#8a8a90'; c.lineWidth = 2;
+    for (let x = 12; x <= 36; x += 4) { c.beginPath(); c.moveTo(x, 24); c.lineTo(x + 2, 18); c.stroke(); }
+    c.fillStyle = '#6a5a3a'; c.fillRect(21, 26, 6, 5);
+    c.strokeStyle = '#4a4a4e'; c.lineWidth = 2; c.beginPath(); c.moveTo(40, 30); c.quadraticCurveTo(46, 36, 42, 42); c.stroke();
+  },
+  handcuffs(c) {
+    c.strokeStyle = '#9a9aa2'; c.lineWidth = 4;
+    c.beginPath(); c.arc(15, 28, 8, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.arc(33, 28, 8, 0, Math.PI * 2); c.stroke();
+    c.lineWidth = 2; c.strokeStyle = '#6a6a72'; c.beginPath(); c.moveTo(22, 24); c.lineTo(26, 24); c.stroke();
   },
   dynamite(c) {
     c.fillStyle = '#a8442e'; for (const x of [14, 21, 28]) c.fillRect(x, 14, 6, 24);

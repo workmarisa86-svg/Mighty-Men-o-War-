@@ -213,6 +213,7 @@ export class HUD {
   }
 
   toast(msg, kind = '') {
+    if (this.disposed) return;
     const el = document.createElement('div');
     el.className = 'toast ' + kind;
     el.textContent = msg;
@@ -239,6 +240,7 @@ export class HUD {
     sfx.radio();
   }
   alert(text) {
+    if (this.disposed) return;
     this.alertEl.textContent = text;
     this.alertEl.classList.remove('on'); void this.alertEl.offsetWidth; this.alertEl.classList.add('on');
   }
@@ -267,6 +269,7 @@ export class HUD {
     });
   }
   bigMessage(title, sub = '') {
+    if (this.disposed) return;
     this.big.innerHTML = '';
     const h = document.createElement('h2'); h.textContent = title; this.big.appendChild(h);
     if (sub) { const p = document.createElement('p'); p.textContent = sub; this.big.appendChild(p); }
@@ -279,6 +282,11 @@ export class HUD {
     if (this.fpsEl) { this.fpsEl.remove(); this.fpsEl = null; }
     this.toasts.innerHTML = '';
     this.radioEl.innerHTML = '';
+    // the next game shows the HUD again, which would replay any finished
+    // message animation (a Town Life alert showing up in War): clear them all
+    for (const el of [this.big, this.alertEl, this.flashEl, this.dmgEl, this.hitEl]) if (el) el.classList.remove('on');
+    this.big.innerHTML = ''; this.alertEl.textContent = '';
+    this.disposed = true;
   }
 
   // looking at one of your forts' ration crates (checked a few times a second)

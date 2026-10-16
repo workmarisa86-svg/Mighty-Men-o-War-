@@ -49,10 +49,13 @@ export class ThirdPerson {
     const sel = g.selected(), wpn = sel && hasGunModel(sel) ? sel : null;
     if (wpn !== this.weapon) { this.weapon = wpn; R.setWeapon(wpn); }
     const speed = Math.hypot(p.vel.x, p.vel.z), riding = p.riding, car = p.car;
+    // swimming: deep water under you (not just wading), held a moment so bobbing at the surface doesn't flip it
+    if (p.swimming || (p.inWater && !p.onGround)) this.swimT = 0.5; else this.swimT = Math.max(0, (this.swimT || 0) - dt);
+    const swim = this.swimT > 0 && !riding && !car;
     if (g.dying) return this.deathView(dt);
     if (g.knockT > 0) { R.pose({ dead: Math.min(0.6, (g.knockLen - g.knockT) * 2), fallDir: g.knockRoll > 0 ? 1 : -1 }, dt); R.place(p.pos, p.yaw, p.pos.y); }
-    else R.pose({ speed: riding || car ? 0 : speed, run: p.running, crouch: p.crouch, swim: p.swimming && !riding, ride: !!riding, sit: !!car,
-      aim: !!wpn && !riding && !car && wpn !== 'knife', look: 0, pitch: p.pitch * 0.6, fired: g.shotT > 0.25 }, dt);
+    else R.pose({ speed: riding || car ? 0 : speed, run: p.running, crouch: p.crouch, swim, ride: !!riding, sit: !!car,
+      aim: !!wpn && !riding && !car && !swim && wpn !== 'knife', look: 0, pitch: p.pitch * 0.6, fired: g.shotT > 0.25 }, dt);
     // the knife throw: the arm winds back over the shoulder with the body turned, then whips through
     const kp = g.combat.knifePose();
     if (sel === 'knife' && (kp.charge || kp.swing)) {

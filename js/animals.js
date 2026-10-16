@@ -19,6 +19,8 @@ import { B, SOLID } from './blocks.js';
 import { sfx } from './audio.js';
 import { PartList, mat4 } from './merge.js';
 
+// what a wolf pack will eat (a fresh kill nearby)
+const FOOD = new Set(['deer', 'pig', 'cow', 'chicken']);
 export const TYPES = {
   pig:  { hp: 40, meat: 2, walk: 1.1, flee: 5.4, group: [3, 6], sense: 1.0, half: 0.5, height: 0.9 },
   cow:  { hp: 70, meat: 3, walk: 0.9, flee: 4.8, group: [3, 5], sense: 0.9, half: 0.75, height: 1.5 },
@@ -734,7 +736,26 @@ export class Animals {
     const lead = alive[0], d = Math.hypot(lead.pos.x - pl.x, lead.pos.z - pl.z);
     P.t += dt;
     const hungry = this.wolvesHunt();
-    if (g.dead || g.dying) { if (P.mode !== 'roam') { P.mode = 'roam'; for (const m of alive) { this.endAttack(m); m.hunting = false; } } return; }
+    if (g.dead || g.dying) { if (P.mode !== 'roam' && P.mode !== 'feed') { P.mode = 'roam'; for (const m of alive) { this.endAttack(m); m.hunting = false; } } return; }
+    // a fresh kill nearby (a deer you shot): the pack comes to eat it
+    if (P.mode === 'roam' || P.mode === 'circle') {
+      P.foodT = (P.foodT || 0) - dt;
+      if (P.foodT <= 0) {
+        P.foodT = 1;
+        const food = this.list.find((c) => c.state === 'dead' && FOOD.has(c.type) && !c.eaten && c.dead > 1.5 && Math.hypot(c.pos.x - lead.pos.x, c.pos.z - lead.pos.z) < 70);
+        if (food) { P.mode = 'feed'; P.food = food; P.t = 0; P.howled = false; food.eaters = (food.eaters || 0) + 1; alive.forEach((m, i) => { this.endAttack(m); m.slot = i; m.hunting = true; m.state = 'calm'; }); sfx.howl(Math.max(0.2, 0.8 - d / 80)); }
+      }
+    }
+    if (P.mode === 'feed') {
+      const F = P.food, gone = !F || !this.list.includes(F) || F.skinned;
+      const fd = F ? Math.hypot(F.pos.x - pl.x, F.pos.z - pl.z) : 99;
+      if (P.hurt || fd < 5) { P.mode = 'attack'; P.food = null; alive.forEach((m, i) => { m.wait = i * 0.3; m.hunting = true; }); sfx.snarl(1); return; }   // you came for their meal
+      if (gone || P.t > 50) {
+        if (!gone) { F.eaten = true; this.remove(F); }      // picked clean
+        P.mode = 'roam'; P.food = null; for (const m of alive) m.hunting = false;
+      }
+      return;
+    }
     if (P.mode === 'roam') {
       if ((d < 34 && hungry) || P.hurt) { P.mode = 'circle'; P.t = 0; P.spin = this.r() * 6.28; P.circleFor = 4 + this.r() * 4; alive.forEach((m, i) => { m.slot = i; m.hunting = true; m.state = 'calm'; }); }
     } else if (P.mode === 'circle') {
@@ -749,6 +770,35 @@ export class Animals {
       if (d > 70) { P.mode = 'roam'; P.howled = false; for (const m of alive) { this.endAttack(m); m.hunting = false; } }
     }
   }
+  // crowding round a carcass: each at its own place, heads down, tearing at it and snarling at the others
+  feedStep(a, dt, P) {
+    const F = P.food, n = a.herd.members.length, ang = (a.slot / n) * Math.PI * 2 + 0.4;
+    const tx = F.pos.x + Math.cos(ang) * 1.15, tz = F.pos.z + Math.sin(ang) * 1.15;
+    const ex = tx - a.pos.x, ez = tz - a.pos.z, ed = Math.hypot(ex, ez);
+    if (ed > 0.35) {
+      const sp = ed > 6 ? 6.8 : 3.2, vx = ex / ed, vz = ez / ed;
+      this.face(a, Math.atan2(-vx, -vz), dt, 7);
+      this.go(a, vx, vz, Math.min(sp * dt, ed), dt);
+      a.speed = sp;
+      if (a.head) a.head.rotation.x = 0.1;
+    } else {
+      a.speed = 0;
+      this.face(a, Math.atan2(-(F.pos.x - a.pos.x), -(F.pos.z - a.pos.z)), dt, 5);
+      a.phase += dt * 9;
+      if (a.head) a.head.rotation.x = 0.75 + Math.sin(a.phase) * 0.18;     // tearing at the meat
+      if (a.jaw) a.jaw.rotation.x = Math.max(0, Math.sin(a.phase * 1.3)) * 0.4;
+      if (this.r() < dt * 0.25) sfx.snarl(0.35);
+    }
+    if (a.body) a.body.rotation.x *= 0.8;
+    this.legsAnim(a, dt, a.speed);
+    return true;
+  }
+  // wild animals that are a danger right now: an angry bear, a pack that is after you
+  danger() {
+    const out = [];
+    for (const a of this.list) if (a.state !== 'dead' && ((a.T.fierce && (a.rage > 0 || a.atk)) || (a.T.pack && a.hunting && a.herd.pack && a.herd.pack.mode !== 'feed' && a.herd.pack.mode !== 'roam'))) out.push(a);
+    return out;
+  }
   wolvesHunt() {
     const T = this.game.town;
     if (!T) return true;                                     // War: always hungry
@@ -757,6 +807,7 @@ export class Animals {
   }
   updateWolf(a, dt, d) {
     const g = this.game, pl = g.player.pos, H = a.herd, P = H.pack;
+    if (P && P.mode === 'feed' && P.food) return this.feedStep(a, dt, P);
     if (!P || P.mode === 'roam' || P.mode === 'flee' || !a.hunting) { if (a.atk) this.endAttack(a); return false; }
     const n = H.members.length, dx = pl.x - a.pos.x, dz = pl.z - a.pos.z, dd = Math.hypot(dx, dz) || 1;
     if (a.leap) return this.leapStep(a, dt);
@@ -892,7 +943,7 @@ export class Animals {
       if (a.type === 'bird' && a.pos.y > 0) { const gy = this.ground(a.pos.x, a.pos.z, a.pos.y); if (gy == null || a.pos.y > gy + 0.05) a.pos.y -= dt * 8; if (gy != null && a.pos.y < gy) a.pos.y = gy; }
       a.mesh.position.copy(a.pos);
       if (!a.counted && a.dead > 1) { a.counted = true; if (!a.owner) this.game.stats.animals = (this.game.stats.animals || 0) + 1; }
-      if (a.dead > 240) this.remove(a);
+      if (a.dead > 240 && !a.trapped) this.remove(a);            // (a catch stays in its trap until you take it)
       return;
     }
     a.mesh.rotation.z = Math.min(Math.PI / 2, a.dead * 5);
@@ -908,7 +959,7 @@ export class Animals {
       this.game.pickups.spawn('meat_raw', a.T.meat, a.pos.x, a.pos.y + 0.5, a.pos.z);
       this.game.stats.animals = (this.game.stats.animals || 0) + 1;
     }
-    if (a.dead > 2.5) this.remove(a);
+    if (a.dead > (a.type === 'bird' || !FOOD.has(a.type) ? 2.5 : a.eaters ? 70 : 45)) this.remove(a);
   }
 
   dispose() { for (const a of this.list.slice()) this.remove(a); }

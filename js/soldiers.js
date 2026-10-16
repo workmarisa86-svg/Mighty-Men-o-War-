@@ -465,6 +465,13 @@ export class Enemies {
     if (s.faction === 'enemy' && !(g.dead || g.dying)) out.push({ kind: 'player', pos: g.player.pos, ref: null });
     for (const o of this.list) if (o.alive && !o.surrender && o.faction !== s.faction) out.push({ kind: 'soldier', pos: o.pos, ref: o });
     if (s.faction === 'ally' && this.tank && this.tank.alive) out.push({ kind: 'tank', pos: this.tank.pos, ref: this.tank });
+    // your squad helps you with wild animals: a bear or wolves coming at you (or at them)
+    if (s.faction === 'ally' && PSQ.has(s.role) && g.animals) {
+      for (const a of g.animals.danger()) {
+        if (Math.hypot(a.pos.x - g.player.pos.x, a.pos.z - g.player.pos.z) > 40 && Math.hypot(a.pos.x - s.pos.x, a.pos.z - s.pos.z) > 15) continue;
+        out.push({ kind: 'animal', pos: a.pos, ref: a.foe || (a.foe = { crouch: a.T.height < 1, hurt: (d) => g.animals.hurt(a, d * 1.8) }), animal: a });
+      }
+    }
     return out;
   }
   // nearest hostile this soldier can actually see
@@ -482,7 +489,7 @@ export class Enemies {
       // unaware soldiers only look ahead; up close they hear footsteps (not sneaking,
       // and less in rain or snow)
       const quiet = g.weather.rain > 0.3 ? 0.6 : 1;
-      const footsteps = h.kind !== 'player' ? d < 5 : (!pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) > 0.5 && d < (pl.running ? 9 : 4) * quiet);
+      const footsteps = h.kind === 'animal' ? d < 30 : h.kind !== 'player' ? d < 5 : (!pl.crouch && Math.hypot(pl.vel.x, pl.vel.z) > 0.5 && d < (pl.running ? 9 : 4) * quiet);
       if (!s.alerted && !footsteps) {
         // unaware: they look ahead; a light or a muzzle flash catches the eye from the side too
         const lit = h.kind === 'player' && (g.lightOn || g.shotT > 0 || (pl.car && pl.car.lights));
@@ -1810,7 +1817,7 @@ export class Enemies {
     const g = this.game;
     if (tgt.kind === 'player') g.damage(dmg * DMG[this.diff], 'combat', s.pos);
     else if (tgt.kind === 'soldier') this.hurt(tgt.ref, dmg, { by: s.faction });
-    else if (tgt.kind === 'tank') tgt.ref.hurt(dmg, false);
+    else if (tgt.kind === 'tank' || tgt.kind === 'animal') tgt.ref.hurt(dmg, false);
   }
 
   unarmedBehaviour(s, dt, dist) {
