@@ -572,13 +572,13 @@ function buildCottage(world, put, cx, by, cz, vx, vz) {
   const bed = { x: cx + 0.5 + out[1] * 1.4, y: base, z: cz + 0.5 + out[0] * 1.4 };
   put(fire.x, fire.y, fire.z, B.CAMPFIRE);
   put(chest.x, chest.y, chest.z, B.SUPPLY);
-  // pen beside the cottage (gap = gate) and a tilled garden in front
+  // pen beside the cottage (with a two-part gate) and a tilled garden in front
   const px = cx + out[1] * 9 - 4, pz = cz + out[0] * 9 - 4;
   const pen = { x0: px, z0: pz, x1: px + 8, z1: pz + 8, owner: 'player' };
   for (let x = pen.x0; x <= pen.x1; x++) for (const z of [pen.z0, pen.z1]) put(x, base, z, B.FENCE);
   for (let z = pen.z0; z <= pen.z1; z++) for (const x of [pen.x0, pen.x1]) put(x, base, z, B.FENCE);
   const gx = Math.floor((pen.x0 + pen.x1) / 2), gz = pen.z0;
-  put(gx, base, gz, B.AIR); put(gx + 1, base, gz, B.AIR);
+  put(gx, base, gz, B.GATE); put(gx + 1, base, gz, B.GATE);
   pen.gate = { x: gx + 1, z: gz - 1.5 };
   const garden = [];
   for (let a = -2; a <= 2; a++) for (let b = 5; b <= 7; b++) {

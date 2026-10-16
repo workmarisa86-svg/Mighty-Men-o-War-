@@ -311,7 +311,8 @@ export class Game {
     // what you aim at takes E and taps first; Town Life's nearby actions use the other keys
     this.townKey = this.aimUse.update(dt, input, playing) || (this.town ? this.town.updateContext(dt, input) : false);
     if (playing) this.handleLook(input);
-    const it = playing ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
+    const still = (this.town && this.town.duels && this.town.duels.duel && this.town.duels.duel.phase !== 'draw') || this.knockT > 0;   // a duel's standoff, or knocked down
+    const it = playing && !still ? this.intent(input) : { fwd: 0, strafe: 0, run: false, crouch: false, jump: false, jumpHeld: false, crouchHeld: false };
     if (playing) this.handleKeys(input);
 
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
@@ -370,15 +371,22 @@ export class Game {
     this.camera.position.y += this.injury.bob(p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5);
     this.scopeView.update(dt, input, playing);
     this.camera.rotation.set(p.pitch + this.scopeView.pitch, p.yaw + this.scopeView.yaw, 0);
-    if (this.dying) {
+    if (this.dying && !(this.thirdPerson && this.thirdPerson.deathThird)) {
       // the fall: the view sinks to the ground and tips over
       const k = Math.min(1, this.dying.t / 1.9), e = k * k * (3 - 2 * k);
       this.camera.position.y -= e * (p.eyeOffset - 0.25);
       this.camera.rotation.set(p.pitch * (1 - e) - 0.25 * e, p.yaw, e * 1.15, 'YXZ');
     } else this.camera.rotation.order = 'YXZ';
+    // knocked down (a wolf's pounce): the view drops to the ground and tips, then you get back up
+    if (this.knockT > 0) {
+      this.knockT = Math.max(0, this.knockT - this.realDt);
+      const k = Math.min(1, this.knockT / 0.25, (this.knockLen - this.knockT) / 0.18), e = Math.max(0, k);
+      this.camera.position.y -= e * (p.eyeOffset - 0.35);
+      this.camera.rotation.set(p.pitch * (1 - e) + 0.35 * e, p.yaw, this.knockRoll * e, 'YXZ');
+    }
     if (this.thirdPerson) this.thirdPerson.update(dt, this.dying);
     const scoped = this.scopeView.ease() > 0.5;
-    const targetFov = this.scopeView.fov(p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
+    const targetFov = this.scopeView.fov(p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75) * (1 - 0.24 * (this.duelZoom || 0));   // a duel's standoff: the view slowly closes in
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
       this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 10);
       this.camera.updateProjectionMatrix();
@@ -395,6 +403,7 @@ export class Game {
 
     this.updateChunks(dt);
     this.vm.set(scoped || this.dying ? null : this.selected());
+    this.vm.knife = this.combat.knifePose();
     this.vm.update(dt, {
       moving: p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5, sprint: p.running,
       light: Math.min(1, this.sky.daylight * (this.eyeSky ?? 1) + (this.lightOn ? 0.45 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
@@ -1037,6 +1046,13 @@ export class Game {
 
   // Death rules. Starving alone ends the game; starving with allies costs one
   // weapon; any other death loses every carried weapon.
+  // knocked to the ground for a moment (no button mashing: you get up by yourself)
+  knockDown(sec = 1, from = null) {
+    if (this.dying || this.player.riding || this.player.car) return;
+    this.knockT = this.knockLen = sec;
+    this.knockRoll = (from && ((from.x - this.player.pos.x) * Math.cos(this.player.yaw) - (from.z - this.player.pos.z) * Math.sin(this.player.yaw)) > 0 ? -1 : 1) * 0.55;
+    this.player.vel.set(0, 0, 0); this.scopeView.close();
+  }
   // Every death starts with the slow-motion fall (see injury.js); then dieNow.
   die(cause) {
     if (this.dead || this.dying) return;
@@ -1045,6 +1061,7 @@ export class Game {
     this.scopeView.close();
     this.player.vel.set(0, 0, 0);
     this.dying = { t: 0, cause };
+    if (this.thirdPerson) this.thirdPerson.deathThird = !!this.thirdPerson.on;    // die in third person: see your body fall
     this.injury.startDeath();
   }
   dieNow(cause) {

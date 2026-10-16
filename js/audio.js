@@ -130,6 +130,7 @@ export const sfx = {
     }
     const P = {
       pistol:  { g: 0.55, crack: 3200, blast: 0.16, lo: 120, tail: 0.9, snap: 0 },
+      revolver: { g: 0.62, crack: 2600, blast: 0.24, lo: 95, tail: 1.3, snap: 0 },   // black powder: a deeper, rolling boom
       smg:     { g: 0.42, crack: 3600, blast: 0.1, lo: 130, tail: 0.5, snap: 0 },
       rifle:   { g: 0.75, crack: 2600, blast: 0.26, lo: 90, tail: 1.4, snap: 0.5 },
       sniper:  { g: 0.85, crack: 2400, blast: 0.32, lo: 75, tail: 1.6, snap: 0.6 },
@@ -177,6 +178,22 @@ export const sfx = {
   cannon(vol = 1) { noise(0.9, { freq: 600, gain: 0.8 * vol, freqEnd: 40 }); tone(45, 0.8, { type: 'sine', gain: 0.6 * vol, freqEnd: 25 }); },
   engine(vol = 1) { tone(38 + Math.random() * 6, 0.5, { type: 'sawtooth', gain: 0.05 * vol, attack: 0.1 }); },
   thump() { tone(90, 0.12, { type: 'sine', gain: 0.25, freqEnd: 50 }); },
+  // ---- the guns' mechanics and the frontier (Town Life)
+  dryFire() { tone(vary(2300), 0.012, { type: 'square', gain: 0.05 }); noise(0.02, { type: 'highpass', freq: 3000, gain: 0.06 }); },   // the hammer on an empty chamber
+  cock() { tone(vary(1900), 0.014, { type: 'square', gain: 0.035 }); tone(vary(2700), 0.01, { type: 'square', gain: 0.04, delay: 0.07 }); noise(0.03, { type: 'bandpass', freq: 2500, q: 3, gain: 0.05, delay: 0.07 }); },
+  gate() { tone(vary(1500), 0.02, { type: 'square', gain: 0.03 }); noise(0.03, { type: 'bandpass', freq: 1800, q: 2, gain: 0.04 }); },
+  eject() { tone(vary(3200), 0.04, { type: 'triangle', gain: 0.03, freqEnd: 2600, delay: 0.05 }); tone(vary(4100), 0.03, { type: 'triangle', gain: 0.02, delay: 0.16 }); },   // a brass case dropping
+  shellIn() { noise(0.035, { type: 'bandpass', freq: vary(1400), q: 2.5, gain: 0.06 }); tone(vary(900), 0.02, { type: 'square', gain: 0.02, delay: 0.02 }); },
+  breakOpen() { tone(vary(700), 0.05, { type: 'square', gain: 0.04, freqEnd: 500 }); noise(0.08, { type: 'bandpass', freq: 1200, q: 1.5, gain: 0.07 }); },
+  breakClose() { noise(0.05, { type: 'bandpass', freq: 900, q: 1.5, gain: 0.1 }); tone(vary(320), 0.06, { type: 'square', gain: 0.05, freqEnd: 200 }); },
+  lever() { noise(0.05, { type: 'bandpass', freq: vary(1600), q: 2, gain: 0.08 }); tone(vary(1100), 0.02, { type: 'square', gain: 0.03, delay: 0.05 }); noise(0.05, { type: 'bandpass', freq: vary(1300), q: 2, gain: 0.08, delay: 0.17 }); tone(vary(1700), 0.02, { type: 'square', gain: 0.035, delay: 0.22 }); },
+  leather() { noise(0.18, { type: 'bandpass', freq: vary(600), q: 3, gain: 0.07, attack: 0.03 }); noise(0.12, { type: 'bandpass', freq: vary(1100), q: 4, gain: 0.04, delay: 0.1 }); },   // a gun leaving a leather holster
+  spur(vol = 1) { for (let i = 0; i < 3; i++) tone(vary(3400, 0.08), 0.06, { type: 'triangle', gain: 0.012 * vol, delay: i * vary(0.045), freqEnd: 3000 }); },   // the jingle of spurs
+  dust(vol = 1) { noise(vary(2.4), { type: 'bandpass', freq: vary(700), q: 0.6, gain: 0.06 * vol, attack: 0.8, wet: 0.3 }); },   // a dusty gust down the street
+  bell(vol = 1) { for (const [f, gg, d] of [[vary(392, 0.02), 0.16, 2.4], [392 * 2.01, 0.07, 1.6], [392 * 2.76, 0.05, 1.1], [392 * 5.4, 0.025, 0.6]]) tone(f, d, { type: 'sine', gain: gg * vol, attack: 0.004, wet: 0.6 }); },   // a church bell
+  tick(vol = 1) { tone(vary(1800, 0.03), 0.015, { type: 'square', gain: 0.02 * vol }); },   // a clock
+  thunk() { noise(0.05, { type: 'lowpass', freq: 900, gain: 0.22 }); tone(vary(180), 0.08, { type: 'triangle', gain: 0.12, freqEnd: 110 }); },   // a blade biting into wood
+  clang() { tone(vary(2900), 0.18, { type: 'triangle', gain: 0.05, freqEnd: 2200 }); noise(0.04, { type: 'highpass', freq: 3500, gain: 0.08 }); },   // steel glancing off stone
   // ---- creatures and bodies (layered and varied: no two the same)
   growl(vol = 1) {
     const d = vary(1.1, 0.25);
@@ -303,7 +320,7 @@ export function setRain(intensity) {
 // sounds/README.md). Each entry: the sfx it replaces and which argument
 // carries the volume (-1: none). Missing files simply aren't used.
 export const SOUND_FILES = {
-  gunshot_pistol: ['shot', 1, 'pistol'], gunshot_rifle: ['shot', 1, 'rifle'], gunshot_sniper: ['shot', 1, 'sniper'],
+  gunshot_pistol: ['shot', 1, 'pistol'], gunshot_revolver: ['shot', 1, 'revolver'], gunshot_rifle: ['shot', 1, 'rifle'], gunshot_sniper: ['shot', 1, 'sniper'],
   gunshot_smg: ['shot', 1, 'smg'], gunshot_shotgun: ['shot', 1, 'shotgun'], gunshot_suppressed: ['shot', 1, 'suppressed'],
   explosion: ['explosion', 0], bear_roar: ['roar', 0], bear_growl: ['growl', 0], wolf_howl: ['howl', 0], wolf_snarl: ['snarl', 0],
   wolf_yelp: ['yelp', 0], bite: ['bite', 0], claw: ['claw', -1], impact: ['impact', 0], pain: ['hurt', 0], heartbeat: ['heartbeat', 0],

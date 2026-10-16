@@ -110,6 +110,8 @@ export class ViewModel {
     this.cache = {};
     this.current = null; this.id = undefined;
     this.swing = 0; this.recoil = 0; this.bobT = 0; this.swapT = 0;
+    // moving parts and poses set each frame by the weapons (weapons.js)
+    this.anim = { reload: 0, round: 0, cock: 0, lever: 0, cyl: 0 }; this.holsterT = 0; this.knife = { charge: 0, swing: 0 };
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.16),
       new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
     this.flash = fl; fl.visible = false;
@@ -132,7 +134,8 @@ export class ViewModel {
     if (this.cache[id]) return this.cache[id];
     let g;
     const def = ITEMS[id] || {};
-    if (id === 'rifle' || id === 'sniper' || id === 'shotgun') g = BUILD.realRifle(id);
+    if (id === 'rifle' || id === 'sniper' || id === 'shotgun' || id === 'lever') g = BUILD.realRifle(id);
+    else if (id === 'revolver') { g = gunModel('revolver'); g.scale.setScalar(1.15); g.position.set(0.0, 0.0, 0.0); }
     else if (id === 'smg') { g = gunModel('smg'); g.scale.setScalar(0.6); }
     else if (id === 'pistol') { g = gunModel('pistol'); g.position.z = 0.02; }
     else if (id === 'spistol') {
@@ -186,8 +189,35 @@ export class ViewModel {
     if (this.flash.visible) this.flash.rotation.z = Math.random() * 3;
     const sw = Math.sin(this.swing * Math.PI);
     const baseX = aim ? 0.0 : 0.26, baseY = aim ? -0.12 : -0.24;
-    this.holder.position.set(baseX + Math.cos(this.bobT) * amp, baseY + Math.abs(Math.sin(this.bobT)) * amp - this.swapT * 0.6, -0.42 + this.recoil * 0.05);
-    this.holder.rotation.set(-sw * 0.9 + this.recoil * 0.12, sw * 0.3, 0);
+    this.holster = Math.max(0, (this.holsterT || 0)); this.holsterT = Math.max(0, this.holsterT - dt);
+    const H = this.holster / 0.45, A = this.anim, K = this.knife, id = this.id;
+    let px = baseX + Math.cos(this.bobT) * amp, py = baseY + Math.abs(Math.sin(this.bobT)) * amp - this.swapT * 0.6, pz = -0.42 + this.recoil * 0.05;
+    let rx = -sw * 0.9 + this.recoil * 0.12, ry = sw * 0.3, rz = 0;
+    // drawn from the hip holster: up from low and to the right, muzzle swinging up
+    if (H > 0) { py -= H * 0.32; px += H * 0.08; rx -= H * 1.3; rz -= H * 0.4; }
+    // the reload pose: the revolver tipped up and over to the gate; the rifle
+    // rolled to show its loading gate; the shotgun broken open
+    if (A.reload > 0.01) {
+      if (id === 'revolver') { rx += A.reload * 0.75; rz += A.reload * 0.7; px -= A.reload * 0.06; py += A.reload * 0.04 - A.round * 0.015; }
+      else if (id === 'lever') { rz -= A.reload * 0.55; rx += A.reload * 0.2; py += A.reload * 0.03 - A.round * 0.02; }
+      else if (id === 'shotgun') { rx += A.reload * 0.25; py += A.reload * 0.03 - A.round * 0.02; }
+    }
+    // the knife: wound back over the shoulder while charging, then the throw and the follow-through
+    if (id === 'knife') {
+      const c = K.charge, s2 = K.swing ? Math.sin(K.swing * Math.PI) : 0, f = K.swing;
+      px += c * 0.06; py += c * 0.14; pz += c * 0.16 - s2 * 0.22; rx -= c * 1.25 - f * 1.6 * (1 - f) * 2; rz += c * 0.35;
+    }
+    this.holder.position.set(px, py, pz);
+    this.holder.rotation.set(rx, ry, rz);
+    // the guns' moving parts
+    const ud = this.current && this.current.userData;
+    if (ud) {
+      if (ud.hammer) ud.hammer.rotation.x = -0.85 * A.cock;
+      if (ud.cylinder) ud.cylinder.rotation.z = A.cyl;
+      if (ud.gate) ud.gate.rotation.y = 1.3 * A.reload;
+      if (ud.lever) ud.lever.rotation.x = 0.85 * A.lever;
+      if (ud.barrels) ud.barrels.rotation.x = 0.6 * (id === 'shotgun' ? A.reload : 0);
+    }
     this.hemi.intensity = 0.25 + light * 0.9;
     this.dir.intensity = 0.15 + light * 0.5;
   }

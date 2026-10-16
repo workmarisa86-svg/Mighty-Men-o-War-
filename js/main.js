@@ -1,7 +1,7 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
-import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown } from './storage.js';
+import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown, townNewStory } from './storage.js';
 import { M, loadMode, loadWar } from './modes.js';
 import { BATTLE, COUNTRY, WEATHER, LANDS } from './countries.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
@@ -16,6 +16,7 @@ class App {
   constructor() {
     this.version = GAME_VERSION;
     this.settings = loadSettings();
+    this.townNewStory = townNewStory();       // once: the old Town Life world is cleared for a new story
     onLang(() => applyI18n());
     // phones/tablets and computers get their own control descriptions
     setDevice(matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window ? 'touch' : 'pc');

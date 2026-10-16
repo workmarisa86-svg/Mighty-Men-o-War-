@@ -228,6 +228,7 @@ export class Player {
         else if (!this.crouch || Math.random() < 0.3) {
           const under = world.get(Math.floor(p.x), Math.floor(p.y - 0.1), Math.floor(p.z));
           sfx.step(under === B.MUD ? 'mud' : (under === B.WOOD || under === B.LOG || this.raft) ? 'wood' : (under === B.STONE || under === B.IRON || under === B.RUBBLE) ? 'stone' : 'dirt');
+          if (this.spurs && (this.spurStep = (this.spurStep || 0) + 1) % 2 === 0) sfx.spur(this.running ? 0.9 : 0.6);   // Town Life: your spurs jingle
         }
       }
     }

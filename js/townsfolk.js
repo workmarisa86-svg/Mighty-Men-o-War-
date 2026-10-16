@@ -37,7 +37,7 @@ const ACTIVE_M = 80;            // only people this close to the player are acti
 const RIG_IN = 85, RIG_OUT = 105;   // a person only has a 3D model this close (the rest are simple data)
 // what each status owns: coins carried and the weapons a man keeps
 const WEALTH = { mansion: [60, 150], house: [18, 55], cottage: [2, 14] };
-const GUNS = { mansion: [['pistol', 'rifle'], ['pistol']], house: [['pistol'], ['shotgun'], ['rifle']], cottage: [['shotgun'], [], []] };
+const GUNS = { mansion: [['revolver', 'lever'], ['revolver']], house: [['revolver'], ['shotgun'], ['lever']], cottage: [['shotgun'], [], []] };
 
 export class Townsfolk {
   constructor(game, saved = {}) {
@@ -89,7 +89,7 @@ export class Townsfolk {
     const look = female
       ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, style: ['long', 'bun', 'braid', 'ponytail'][Math.floor(r() * 4)], hat: 'none' }
       : { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], trousers: DARK[Math.floor(r() * DARK.length)], hair: HAIR[Math.floor(r() * HAIR.length)], vest: r() < 0.45 ? DARK[Math.floor(r() * DARK.length)] : null, hat: r() < 0.5 ? 'cap' : r() < 0.6 ? 'felt' : 'none', moustache: r() < 0.35, rolled: r() < 0.4, braces: r() < 0.3 ? 0x3a2a1c : null };
-    if (!female) look.gunbelt = true;              // 1940s frontier town: every man wears a revolver on his hip
+    if (!female) look.gunbelt = true;              // frontier town: every man wears a revolver on his hip
     if (status === 'mansion' && !female) { look.vest = 0x2e2a26; look.hat = 'felt'; look.hatColor = 0x2a2420; }
     if (shop === 'butcher') look.apron = 0xe8e4dc;
     if (shop === 'general') look.apron = 0x7a5a3a;
@@ -103,7 +103,7 @@ export class Townsfolk {
     const [lo, hi] = WEALTH[status] || WEALTH.house;
     const opts = GUNS[status] || GUNS.house;
     let guns = female ? [] : opts[Math.floor(r() * opts.length)].slice();
-    if (role === 'sheriff') guns = ['pistol', 'rifle'];
+    if (role === 'sheriff') guns = ['revolver', 'lever'];
     if (shop === 'hunting') guns = ['shotgun'];
     const v = {
       i, role, shop, home, work, name, female, status, kin: sp.kin, homeIdx: sp.homeIdx, fam: sp.fam, bed: this.specs.filter((q) => q.fam === sp.fam).indexOf(sp), look, lookKey: 'v' + i + '_' + gen, skin: Math.floor(r() * 5),
@@ -361,14 +361,14 @@ export class Townsfolk {
     const moving = Math.hypot(g.player.vel.x, g.player.vel.z) > 1;
     const hitP = Math.min(0.85, Math.max(0.12, Math.min(0.7, 0.78 - d / 55)) * (g.player.crouch ? 0.7 : 1) * (moving ? 0.75 : 1) * (v.posse ? 1.3 : aimK) * (g.player.riding ? 0.8 : 1));
     if (v.armed === 'shotgun' && d > 28) return;                  // a shotgun only reaches so far
-    sfx.shot(v.armed === 'pistol' ? 'pistol' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.2, 1 - d / 60));
+    sfx.shot(v.armed === 'revolver' ? 'revolver' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.2, 1 - d / 60));
     const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z);
     const b = new THREE.Vector3(p.x + (Math.random() - 0.5) * (Math.random() < hitP ? 0.2 : 2.5), p.y + 1.2, p.z + (Math.random() - 0.5) * 1.5);
     const tr = this.tracers[this.trI++ % this.tracers.length];
     const pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
-    if (Math.random() < hitP) g.damage(v.armed === 'pistol' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
+    if (Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
   }
   // cover from the player: a nearby spot with a block between
   coverSpot(v) {
@@ -426,6 +426,7 @@ export class Townsfolk {
       if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
       else if (v.posse) T.posseBehaviour(v, dt, d);
       else if (v.fight) this.fightBehaviour(v, dt, d);
+      else if (v.duel) this.duelBehaviour(v, dt);
       else if (v.reportTo) this.reportBehaviour(v, dt);
       else this.dailyBehaviour(v, dt, d);
       if (v.horse) v.horse.carry(v);
@@ -442,7 +443,7 @@ export class Townsfolk {
       rig.root.visible = true;
       if (relod) rig.setLod(d < 30 ? 0 : 1);
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
-        const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed);
+        const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed) || v.duelAim;
         rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
         if (v.flinchT > 0) { v.flinchT -= dt; rig.body.rotation.x -= Math.sin(Math.max(0, v.flinchT) / 0.35 * Math.PI) * 0.4; }   // hit: they jerk back
       }
@@ -602,9 +603,17 @@ export class Townsfolk {
   }
   armed(v, weapon) { v.armed = weapon; if (v.rig) v.rig.setWeapon(weapon); }
   // the best gun a person owns (or null)
-  bestGun(v) { const order = ['rifle', 'shotgun', 'pistol']; return order.find((g) => v.guns && v.guns.includes(g)) || null; }
+  bestGun(v) { const order = ['lever', 'shotgun', 'revolver']; return order.find((g) => v.guns && v.guns.includes(g)) || null; }
 
   // ---- held up: hands up, then (after a while) off to tell the sheriff ---------
+  // a duel: walk to his mark, then stand square to you, hand near the holster
+  duelBehaviour(v, dt) {
+    const D = this.game.town.duels.duel, P = this.game.player.pos;
+    if (!D || D.v !== v) { v.duel = false; return; }
+    if (D.phase === 'walk' && Math.hypot(D.him.x - v.pos.x, D.him.z - v.pos.z) > 0.5) this.goDirect(v, { x: D.him.x, y: v.pos.y, z: D.him.z }, 1.6, dt, 0.4);
+    else v.speed = 0;
+    if (D.phase !== 'walk' || v.speed === 0) v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
+  }
   surrenderBehaviour(v, dt) {
     v.surrendered -= dt; v.speed = 0; v.route = [];
     const P = this.game.player.pos;

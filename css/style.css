@@ -734,3 +734,8 @@ body.driving #aimprompt { display: none; }
   background: radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.85)); }
 #injury .died.on { opacity: 1; }
 #injury .died p { margin: 0; font: 600 clamp(34px, 8vw, 72px) var(--stencil); letter-spacing: 0.12em; color: #c8b8a0; text-shadow: 0 3px 18px #000; }
+
+/* the knife's charge bar, under the crosshair */
+#chargebar { position: absolute; left: 50%; top: calc(50% + 26px); width: 74px; height: 5px; margin-left: -37px; background: rgba(20, 18, 12, 0.6); border: 1px solid rgba(240, 228, 192, 0.5); border-radius: 3px; overflow: hidden; }
+#chargebar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #d8c48a, #f4e2a8); }
+#chargebar.full i { background: #ffd070; box-shadow: 0 0 6px #ffd070; }
