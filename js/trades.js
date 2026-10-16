@@ -488,7 +488,7 @@ export class Trades {
     if (cmd === 'distract') {
       const p = this.order.point;
       const v = this.gang.filter((m) => m.alive).sort((a, b) => a.pos.distanceTo(p) - b.pos.distanceTo(p))[0];
-      if (v) { v.distractT = 25; v.distracted = false; }
+      if (v) { v.distractT = 25; v.distracted = false; v.distractAt = null; }
     }
     g.hud.toast(t('gang.order', { o: t('ord.' + cmd) }));
     sfx.toggle();
@@ -537,8 +537,9 @@ export class Trades {
     if (d > 70 && O.cmd === 'follow') { const a = i / n * 6.28; v.pos.set(P.x + Math.cos(a) * 4, P.y, P.z + Math.sin(a) * 4); v.route = []; }     // they catch up (a long ride, a night's sleep)
     if (v.distractT > 0) {
       v.distractT -= dt;
-      const p = O.point;
-      if (Math.hypot(p.x - v.pos.x, p.z - v.pos.z) > 2.5) { goal = p; run = true; }
+      if (!v.distractAt) { const q = O.point, gy = F.ground(q.x, q.z, q.y + 2); v.distractAt = gy != null ? { x: q.x, y: gy, z: q.z } : q; }
+      const p = v.distractAt, dp = Math.hypot(p.x - v.pos.x, p.z - v.pos.z);
+      if (dp > 2.5 && !(dp < 5 && v.stuckT > 0.5) && !v.distracted) { goal = p; run = true; }       // (close enough to be heard is close enough)
       else if (!v.distracted) {
         v.distracted = true; F.say(v, 'say.gangDistract');
         sfx.whistle ? sfx.whistle(0.8) : sfx.alert();
@@ -565,10 +566,16 @@ export class Trades {
       if (v.spotT >= 3) {
         v.spotT = 0; v.spotBest = null; v.route = [];
         const R = O.cmd === 'spread' ? 6 : 3, a = Math.atan2(v.pos.z - O.point.z, v.pos.x - O.point.x);
-        for (const r of [R, R + 2, R - 2, R + 4]) {
+        const far = Math.hypot(v.pos.x - O.point.x, v.pos.z - O.point.z);
+        let got = null;
+        // the nearest place on his side of the ring that he can really get to (else he holds where he is)
+        for (let r = R; r < far - 1 && !got; r += 2) {
           const x = O.point.x + Math.cos(a) * r, z = O.point.z + Math.sin(a) * r, gy = F.ground(x, z, v.pos.y + 2);
-          if (gy != null && F.free(x, gy, z)) { v.spot = { x, y: gy, z }; break; }
+          if (gy == null || !F.free(x, gy, z)) continue;
+          const path = findPath(this.game.world, v.pos, { x, y: gy, z }, 700, true);
+          if (path && path.length) { got = { x, y: gy, z }; v.route = path; v.detourT = 6; }
         }
+        v.spot = got || { x: v.pos.x, y: v.pos.y, z: v.pos.z };
       }
       goal = v.spot;
       run = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 3;
