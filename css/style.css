@@ -720,3 +720,17 @@ body.driving #aimprompt { display: none; }
   .panel.mapfull .seg.tabs { grid-column: 1; grid-row: 1; flex-direction: row; justify-content: center; }
   .panel.mapfull .legend { grid-column: 1; grid-row: 3; flex-direction: row; flex-wrap: wrap; justify-content: center; }
 }
+
+/* ---- injuries: blood on the lens, the badly-hurt pulse, "You died" ---- */
+#injury { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+#injury .lowhp { position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(40,0,0,0.55) 78%, rgba(90,0,0,0.85) 100%); }
+#injury .lowhp.noblood { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.6) 100%); }
+#injury .splats i { position: absolute; display: block; border-radius: 48% 52% 45% 55% / 55% 45% 55% 45%;
+  background: radial-gradient(circle at 40% 38%, rgba(150,10,8,0.55), rgba(95,0,0,0.75) 45%, rgba(60,0,0,0.0) 72%);
+  animation: splat 3.2s ease-in forwards; filter: blur(0.4px); }
+@keyframes splat { 0% { opacity: 0.95; margin-top: 0; } 70% { opacity: 0.7; } 100% { opacity: 0; margin-top: 3vmin; } }
+#injury .died { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .9s ease;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0.85)); }
+#injury .died.on { opacity: 1; }
+#injury .died p { margin: 0; font: 600 clamp(34px, 8vw, 72px) var(--stencil); letter-spacing: 0.12em; color: #c8b8a0; text-shadow: 0 3px 18px #000; }

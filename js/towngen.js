@@ -297,6 +297,7 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
     ['butcher', slot(-19, 4, -12, 11, 'n'), B.BRICK],
     ['hunting', slot(11, 4, 18, 11, 'n'), B.LOG],
     ['stable', slot(14, 14, 23, 22, 'w'), B.WOOD],
+    ['hospital', slot(-10, 12, -3, 20, 'e'), B.STONE],     // south of the plaza, its door on the road
   ];
   for (const [type, s, wall] of plan) buildings.push(building(world, put, s, base, wall, type));
   // the hitching rail in front of the stable, where its horses wait
@@ -313,7 +314,8 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
   };
   {
     const s = stall(cx + 2, cz - 6, null);
-    buildings.push({ type: 'market', door: { x: cx + 4.5, y: base, z: s.z1 + 1.6 }, inside: { x: cx + 4.5, y: base, z: s.z0 + 0.5 }, keeper: { x: cx + 4.5, y: base, z: s.z1 - 1 + 0.4 }, x0: s.x0, z0: s.z0, x1: s.x1, z1: s.z1 });
+    buildings.push({ type: 'market', door: { x: cx + 4.5, y: base, z: s.z1 + 1.6 }, inside: { x: cx + 4.5, y: base, z: s.z0 + 0.5 }, keeper: { x: cx + 4.5, y: base, z: s.z1 - 1 + 0.4 }, x0: s.x0, z0: s.z0, x1: s.x1, z1: s.z1,
+      sign: { x: cx + 4.5, y: base + 3.55, z: s.z1 + 2.08, face: [0, 1] } });       // on the front of the canopy
     stall(cx + 2, cz + 4, [B.CABBAGE_R, B.SUPPLY, B.CARROT_R]);
   }
   // the homes, each facing the road its path comes from, with a field beside it
@@ -412,6 +414,8 @@ function building(world, put, s, base, wall, type, H = 4, status = null) {
     doorIn: { x: dc.x - out[0] * 1.4, y: base, z: dc.z - out[1] * 1.4 },
     inside: inner,
   };
+  // the lettered sign over the door of every shop and public building
+  if (type !== 'house') b.sign = { x: dc.x + out[0] * 0.56, y: base + 3.42, z: dc.z + out[1] * 0.56, face: out };
   if (type === 'jail') {
     // a barred cell along the back wall; its 2-wide door of bars is shut
     // only while you are locked up (town.js); a cot along the back wall
@@ -423,6 +427,21 @@ function building(world, put, s, base, wall, type, H = 4, status = null) {
       cot: { x: x0 + 1, z: zc, y: base, len: 2, dir: [1, 0] },          // from (x0+1) along +x, 2 long
       out: { x: mx + 1, y: base, z: side === 's' ? z + 1.6 : z - 0.6 },
     };
+  } else if (type === 'hospital') {
+    // the hospital: a ward of beds along the back wall (heads to the wall),
+    // the doctor in the middle of the room
+    const back = [-out[0], -out[1]], bx = side === 'e' ? x0 + 1 : side === 'w' ? x1 - 1 : mx, bz = side === 's' ? z0 + 1 : side === 'n' ? z1 - 1 : mz;
+    b.beds = [];
+    for (let k = -1; k <= 1; k++) {
+      const X = bx + along[0] * k * 2, Z = bz + along[1] * k * 2;
+      if (X <= x0 || X >= x1 || Z <= z0 || Z >= z1) continue;
+      b.beds.push({ x: X + 0.5 - back[0] * 0.5, y: base, z: Z + 0.5 - back[1] * 0.5, head: { x: back[0], z: back[1] } });
+    }
+    b.keeper = { x: inner.x - back[0] * 0.5 + along[0] * 1.5, y: base, z: inner.z - back[1] * 0.5 + along[1] * 1.5 };
+    b.wake = { x: b.beds[1] ? b.beds[1].x - back[0] * 1.6 : inner.x, y: base, z: b.beds[1] ? b.beds[1].z - back[1] * 1.6 : inner.z };   // beside the middle bed
+    // a red cross on the wall over the door
+    const cxx = door.x + along[0] * 0.5, czz2 = door.z + along[1] * 0.5;
+    void cxx; void czz2;
   } else if (type !== 'house') {
     // a counter across the room with the keeper behind it, and an open gap
     // at one end (the pass-through the keeper uses: he never climbs over)

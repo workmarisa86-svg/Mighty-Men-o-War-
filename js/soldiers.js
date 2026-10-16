@@ -462,7 +462,7 @@ export class Enemies {
   hostiles(s) {
     const out = [];
     const g = this.game;
-    if (s.faction === 'enemy' && !g.dead) out.push({ kind: 'player', pos: g.player.pos, ref: null });
+    if (s.faction === 'enemy' && !(g.dead || g.dying)) out.push({ kind: 'player', pos: g.player.pos, ref: null });
     for (const o of this.list) if (o.alive && !o.surrender && o.faction !== s.faction) out.push({ kind: 'soldier', pos: o.pos, ref: o });
     if (s.faction === 'ally' && this.tank && this.tank.alive) out.push({ kind: 'tank', pos: this.tank.pos, ref: this.tank });
     return out;
@@ -1011,7 +1011,7 @@ export class Enemies {
       const cabin = g.world.sites.find((st) => st.type === 'cabin');
       if (cabin) list.push({ cabin, x: cabin.x + 0.5, z: cabin.z + 0.5 });
     }
-    if (faction === 'enemy' && this.allies && !list.length && !g.dead) list.push({ player: true, x: g.player.pos.x, z: g.player.pos.z });
+    if (faction === 'enemy' && this.allies && !list.length && !(g.dead || g.dying)) list.push({ player: true, x: g.player.pos.x, z: g.player.pos.z });
     return list.sort((a, b) => this.d2(a, from) - this.d2(b, from));
   }
   // Mission squads: fresh soldiers that appear at `at` and go for `obj`
@@ -2377,7 +2377,7 @@ class Tank {
     this.turret = this.mgr.turn(this.turret, tw, dt * 1.5);
     this.cool -= dt;
     const muzzle = new THREE.Vector3(this.pos.x, this.pos.y + 1.85, this.pos.z);
-    if (this.cool <= 0 && dist < 70 && !g.dead) {
+    if (this.cool <= 0 && dist < 70 && !(g.dead || g.dying)) {
       const tgt = pl.pos.clone(); tgt.y += 1.0;   // aim at the body
       if (this.mgr.clearLine(muzzle, pl.eye(), 'bullet')) {
         this.cool = 5 + Math.random() * 3;

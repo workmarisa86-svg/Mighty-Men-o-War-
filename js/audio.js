@@ -15,6 +15,7 @@ export function initAudio() {
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    setTimeout(loadSamples, 1500);         // any recordings dropped into sounds/
   } catch { ctx = null; }
 }
 // under water every sound is muffled
@@ -61,6 +62,36 @@ function tone(freq, dur, { type = 'sine', gain = 0.3, freqEnd = null, delay = 0,
   o.connect(g); g.connect(master); wetSend(g, wet); o.start(t); o.stop(t + dur + 0.05);
 }
 
+// A throat: a buzzing oscillator (its pitch following a curve, with a little
+// wobble) through two vocal-tract resonances, under a noisy breath. Used for
+// growls, roars, howls, yelps and grunts; every call varies slightly.
+function voice(dur, { f = [120, 90], type = 'sawtooth', gain = 0.2, form = [500, 1100], q = 4, breath = 0.3, vib = 6, vibAmt = 0.03, attack = 0.04, delay = 0, wet = 0.15, rough = 0 } = {}) {
+  if (!ctx || !(gain > 0.0005)) return;
+  const t = ctx.currentTime + delay, v = 0.94 + Math.random() * 0.12;
+  const o = ctx.createOscillator(); o.type = type;
+  const curve = new Float32Array(f.map((x) => x * v));
+  o.frequency.setValueCurveAtTime(curve, t, dur);
+  const lfo = ctx.createOscillator(); lfo.frequency.value = vib * (0.85 + Math.random() * 0.3);
+  const lg = ctx.createGain(); lg.gain.value = f[0] * v * vibAmt; lfo.connect(lg); lg.connect(o.frequency);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack);
+  g.gain.setValueAtTime(gain, t + Math.max(attack, dur * 0.6)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  let src = o;
+  if (rough) {                         // a rattling, gravelly throat: amplitude flutter
+    const am = ctx.createGain(), fl = ctx.createOscillator(), fg = ctx.createGain();
+    fl.frequency.value = 22 + Math.random() * 14; fg.gain.value = rough; am.gain.value = 1 - rough * 0.5;
+    fl.connect(fg); fg.connect(am.gain); o.connect(am); src = am; fl.start(t); fl.stop(t + dur + 0.05);
+  }
+  for (const [fq, k] of [[form[0], 1], [form[1], 0.6]]) {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fq * (0.92 + Math.random() * 0.16); bp.Q.value = q;
+    const kg = ctx.createGain(); kg.gain.value = k * 3; src.connect(bp); bp.connect(kg); kg.connect(g);
+  }
+  g.connect(master); wetSend(g, wet);
+  o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  if (breath) noise(dur * 0.9, { type: 'bandpass', freq: form[0] * 1.3, q: 1.2, gain: gain * breath, attack: attack * 1.5, delay, wet });
+}
+const vary = (x, k = 0.12) => x * (1 - k + Math.random() * 2 * k);
+
 export const sfx = {
   step(surface) {
     if (surface === 'mud') noise(0.16, { freq: 420, gain: 0.22, q: 3, freqEnd: 220 });
@@ -80,11 +111,9 @@ export const sfx = {
   },
   fell() { noise(1.1, { freq: 700, gain: 0.35, freqEnd: 90, attack: 0.05 }); tone(70, 0.8, { type: 'triangle', gain: 0.2, freqEnd: 40, delay: 0.5 }); },
   place() { tone(160, 0.08, { type: 'triangle', gain: 0.2, freqEnd: 90 }); noise(0.06, { freq: 900, gain: 0.12 }); },
-  splash() { noise(0.5, { type: 'bandpass', freq: 1800, gain: 0.3, freqEnd: 400, q: 0.8 }); },
   swim() { noise(0.3, { type: 'bandpass', freq: 900, gain: 0.12, freqEnd: 500, q: 1 }); },
   click() { tone(520, 0.05, { type: 'square', gain: 0.06 }); },
   toggle() { tone(880, 0.04, { type: 'square', gain: 0.05 }); tone(660, 0.05, { type: 'square', gain: 0.05, delay: 0.05 }); },
-  hurt() { tone(160, 0.2, { type: 'sawtooth', gain: 0.12, freqEnd: 90 }); noise(0.15, { freq: 400, gain: 0.15 }); },
   craftTick() { tone(300 + Math.random() * 80, 0.05, { type: 'square', gain: 0.04 }); },
   done() { tone(523, 0.1, { type: 'triangle', gain: 0.15 }); tone(784, 0.18, { type: 'triangle', gain: 0.15, delay: 0.1 }); },
   error() { tone(200, 0.15, { type: 'square', gain: 0.06, freqEnd: 150 }); },
@@ -148,6 +177,64 @@ export const sfx = {
   cannon(vol = 1) { noise(0.9, { freq: 600, gain: 0.8 * vol, freqEnd: 40 }); tone(45, 0.8, { type: 'sine', gain: 0.6 * vol, freqEnd: 25 }); },
   engine(vol = 1) { tone(38 + Math.random() * 6, 0.5, { type: 'sawtooth', gain: 0.05 * vol, attack: 0.1 }); },
   thump() { tone(90, 0.12, { type: 'sine', gain: 0.25, freqEnd: 50 }); },
+  // ---- creatures and bodies (layered and varied: no two the same)
+  growl(vol = 1) {
+    const d = vary(1.1, 0.25);
+    voice(d, { f: [vary(78), vary(92), vary(70), vary(62)], gain: 0.22 * vol, form: [vary(320), vary(700)], q: 3, breath: 0.6, rough: 0.7, vib: 4, attack: 0.12, wet: 0.2 });
+    noise(d, { type: 'lowpass', freq: 240, gain: 0.18 * vol, freqEnd: 110, attack: 0.1 });
+  },
+  roar(vol = 1) {
+    const d = vary(1.7, 0.15);
+    voice(d, { f: [vary(95), vary(150), vary(170), vary(120), vary(80)], gain: 0.34 * vol, form: [vary(480), vary(1050)], q: 2.5, breath: 0.9, rough: 0.8, vib: 5, vibAmt: 0.05, attack: 0.15, wet: 0.45 });
+    voice(d * 0.9, { f: [vary(48), vary(70), vary(60)], type: 'square', gain: 0.12 * vol, form: [220, 420], q: 2, breath: 0, rough: 0.6, attack: 0.2 });
+    noise(d, { type: 'bandpass', freq: vary(900), q: 0.8, gain: 0.2 * vol, freqEnd: 300, attack: 0.18, wet: 0.4 });
+  },
+  howl(vol = 1) {
+    const d = vary(2.6, 0.15), lo = vary(330, 0.08), hi = lo * vary(1.55, 0.06);
+    voice(d, { f: [lo, hi, hi * 1.02, hi * 0.98, hi * 0.9, lo * 0.95], type: 'triangle', gain: 0.16 * vol, form: [vary(850), vary(1700)], q: 3, breath: 0.15, vib: 5.5, vibAmt: 0.012, attack: 0.35, wet: 0.8 });
+  },
+  snarl(vol = 1) {
+    const n = 8 + (Math.random() * 6 | 0);
+    for (let i = 0; i < n; i++) noise(0.05, { type: 'bandpass', freq: vary(780, 0.25), q: 2.2, gain: 0.13 * vol, delay: i * vary(0.045, 0.2), attack: 0.004 });
+    voice(n * 0.045 + 0.1, { f: [vary(140), vary(180), vary(130)], gain: 0.1 * vol, form: [650, 1500], q: 3, breath: 0.5, rough: 0.9, attack: 0.03 });
+  },
+  yelp(vol = 1) { voice(vary(0.32), { f: [vary(700), vary(1300), vary(850)], type: 'triangle', gain: 0.14 * vol, form: [1100, 2200], q: 2.5, breath: 0.1, attack: 0.01, wet: 0.3 }); },
+  bite(vol = 1) {
+    noise(0.05, { type: 'highpass', freq: 1800, gain: 0.32 * vol, attack: 0.002 });                    // teeth
+    noise(0.12, { type: 'lowpass', freq: 700, gain: 0.3 * vol, freqEnd: 200, attack: 0.003, delay: 0.02 });   // the crunch
+    tone(vary(110), 0.14, { type: 'sine', gain: 0.25 * vol, freqEnd: 50, delay: 0.02 });
+  },
+  claw() {
+    for (let i = 0; i < 3; i++) noise(0.09, { type: 'bandpass', freq: vary(2600), q: 1.5, gain: 0.22, freqEnd: 900, delay: i * vary(0.05), attack: 0.01 });   // the swipe
+    noise(0.2, { type: 'bandpass', freq: vary(1300), q: 0.9, gain: 0.25, freqEnd: 500, delay: 0.06, attack: 0.005 });        // cloth and skin tearing
+    sfx.impact(0.8);
+  },
+  // a heavy blow landing on you: a deep thud you feel
+  impact(vol = 1) {
+    tone(vary(68), 0.3, { type: 'sine', gain: 0.5 * vol, freqEnd: 32, attack: 0.002 });
+    noise(0.16, { type: 'lowpass', freq: 320, gain: 0.45 * vol, freqEnd: 70, attack: 0.002 });
+    noise(0.04, { type: 'bandpass', freq: 1200, gain: 0.15 * vol, q: 1 });
+  },
+  // your own pain: a short grunt (bigger hits, deeper and louder)
+  hurt(vol = 1) {
+    const big = vol > 0.9;
+    voice(vary(big ? 0.38 : 0.26), { f: [vary(big ? 150 : 170), vary(big ? 120 : 145), vary(100)], gain: (big ? 0.2 : 0.14) * Math.min(1.3, vol), form: [vary(600), vary(1300)], q: 4, breath: 0.7, rough: big ? 0.4 : 0.2, attack: 0.012, wet: 0.05 });
+  },
+  heartbeat(vol = 1, rate = 1) {
+    tone(54, 0.14, { type: 'sine', gain: 0.5 * vol, freqEnd: 38, attack: 0.008 }); noise(0.1, { type: 'lowpass', freq: 110, gain: 0.35 * vol, attack: 0.008 });
+    const d2 = 0.28 / rate;
+    tone(48, 0.16, { type: 'sine', gain: 0.32 * vol, freqEnd: 34, attack: 0.01, delay: d2 }); noise(0.1, { type: 'lowpass', freq: 100, gain: 0.22 * vol, attack: 0.01, delay: d2 });
+  },
+  splash(vol = 1) {
+    noise(vary(0.5), { type: 'bandpass', freq: vary(1700), gain: 0.3 * vol, freqEnd: 380, q: 0.8, attack: 0.01 });
+    for (let i = 0; i < 4; i++) tone(vary(900, 0.4), 0.05, { type: 'sine', gain: 0.03 * vol, freqEnd: vary(1800, 0.3), delay: 0.08 + i * vary(0.07, 0.4) });   // droplets
+  },
+  fishCast() { noise(0.35, { type: 'bandpass', freq: 3000, q: 1.5, gain: 0.1, freqEnd: 1200, attack: 0.05 }); for (let i = 0; i < 6; i++) tone(2400, 0.015, { type: 'square', gain: 0.015, delay: 0.05 + i * 0.035 }); },
+  fishPlop(vol = 1) { tone(vary(520), 0.12, { type: 'sine', gain: 0.12 * vol, freqEnd: 180 }); noise(0.15, { type: 'bandpass', freq: 1400, gain: 0.08 * vol, q: 1 }); },
+  fishBite() { sfx.splash(0.8); tone(vary(380), 0.1, { type: 'sine', gain: 0.1, freqEnd: 150, delay: 0.05 }); },
+  fishReel() { for (let i = 0; i < 14; i++) tone(vary(2100, 0.05), 0.012, { type: 'square', gain: 0.02, delay: i * 0.045 }); sfx.splash(0.5); },
+  // your death: a long low fall of sound
+  death() { voice(2.6, { f: [140, 110, 70, 45], gain: 0.12, form: [400, 900], q: 3, breath: 0.8, attack: 0.05, wet: 0.6 }); noise(2.8, { type: 'lowpass', freq: 400, gain: 0.18, freqEnd: 60, attack: 0.3, wet: 0.7 }); },
   // air-raid style siren: rising and falling wail
   siren() {
     if (!ctx) return;
@@ -175,7 +262,6 @@ export const sfx = {
     }
   },
   cluck(vol = 1) { for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) tone(520 + Math.random() * 120, 0.05, { type: 'square', gain: 0.035 * vol, freqEnd: 380, delay: i * 0.11 }); },
-  growl(vol = 1) { noise(0.9, { type: 'lowpass', freq: 260, gain: 0.25 * vol, freqEnd: 120, attack: 0.08 }); tone(70, 0.8, { type: 'sawtooth', gain: 0.06 * vol, freqEnd: 55, attack: 0.1 }); },
   deer(vol = 1) { tone(900, 0.18, { type: 'triangle', gain: 0.05 * vol, freqEnd: 500 }); },
   owl(vol = 1) { tone(420, 0.35, { type: 'sine', gain: 0.05 * vol, freqEnd: 380, attack: 0.05 }); tone(400, 0.6, { type: 'sine', gain: 0.05 * vol, freqEnd: 360, delay: 0.5, attack: 0.08 }); },
   cricket(vol = 1) { for (let i = 0; i < 3; i++) tone(4300 + Math.random() * 300, 0.03, { type: 'sine', gain: 0.018 * vol, delay: i * 0.05 }); },
@@ -210,6 +296,58 @@ export function setRain(intensity) {
     rainNode.connect(f); f.connect(rainGain); rainGain.connect(master); rainNode.start();
   }
   rainGain.gain.setTargetAtTime(intensity * 0.16, ctx.currentTime, 0.5);
+}
+// ---- drop-in recordings --------------------------------------------------------
+// Put a recording in the sounds/ folder with one of these names (.ogg or .mp3)
+// and the game plays it instead of the sound it makes itself (see
+// sounds/README.md). Each entry: the sfx it replaces and which argument
+// carries the volume (-1: none). Missing files simply aren't used.
+export const SOUND_FILES = {
+  gunshot_pistol: ['shot', 1, 'pistol'], gunshot_rifle: ['shot', 1, 'rifle'], gunshot_sniper: ['shot', 1, 'sniper'],
+  gunshot_smg: ['shot', 1, 'smg'], gunshot_shotgun: ['shot', 1, 'shotgun'], gunshot_suppressed: ['shot', 1, 'suppressed'],
+  explosion: ['explosion', 0], bear_roar: ['roar', 0], bear_growl: ['growl', 0], wolf_howl: ['howl', 0], wolf_snarl: ['snarl', 0],
+  wolf_yelp: ['yelp', 0], bite: ['bite', 0], claw: ['claw', -1], impact: ['impact', 0], pain: ['hurt', 0], heartbeat: ['heartbeat', 0],
+  splash: ['splash', 0], fish_cast: ['fishCast', -1], fish_plop: ['fishPlop', 0], fish_bite: ['fishBite', -1], fish_reel: ['fishReel', -1],
+  death: ['death', -1], thunder: ['thunder', -1], footstep: ['step', -1],
+};
+const samples = {};
+let samplesTried = false;
+async function loadSamples() {
+  if (samplesTried || !ctx) return; samplesTried = true;
+  const base = new URL('../sounds/', import.meta.url);
+  for (const name of Object.keys(SOUND_FILES)) {
+    for (const ext of ['ogg', 'mp3']) {
+      try {
+        const r = await fetch(new URL(name + '.' + ext, base));
+        if (!r.ok) continue;
+        samples[name] = await ctx.decodeAudioData(await r.arrayBuffer());
+        break;
+      } catch { /* not there, or this browser can't play the format */ }
+    }
+  }
+}
+function playSample(name, vol = 1) {
+  const buf = samples[name];
+  if (!buf || !ctx) return false;
+  const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = 0.96 + Math.random() * 0.08;   // never quite the same twice
+  const g = ctx.createGain(); g.gain.value = Math.max(0, Math.min(1.5, vol));
+  src.connect(g); g.connect(master); wetSend(g, 0.15); src.start();
+  return true;
+}
+// wrap each replaceable sfx: a recording when there is one, else the made sound
+for (const [name, [fn, volArg, kind]] of Object.entries(SOUND_FILES)) {
+  const orig = sfx[fn];
+  if (!orig || orig.wrapped) continue;
+  const names = Object.entries(SOUND_FILES).filter(([, v]) => v[0] === fn);
+  const w = function (...args) {
+    for (const [nm, [, va, kd]] of names) {
+      if (kd && args[0] !== kd) continue;
+      if (samples[nm] && playSample(nm, va >= 0 && args[va] != null ? args[va] : 1)) return;
+    }
+    return orig.apply(sfx, args);
+  };
+  w.wrapped = true; sfx[fn] = w;
+  void name; void volArg; void kind;
 }
 export function audioCtx() { return ctx; }
 export function audioOut() { return master || (ctx && ctx.destination); }

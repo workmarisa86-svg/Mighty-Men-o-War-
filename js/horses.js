@@ -144,6 +144,12 @@ export class Horses {
   }
   add(x, y, z, owner, home, coat) { const h = new Horse(this, x, y, z, owner, home, coat); this.list.push(h); return h; }
   // a horse for a posse rider (only so many horses at once)
+  // a horse back to the stable: posse horses go away (the stable keeps its own
+  // string); stable and farm horses return to their rail or yard
+  stable(h) {
+    if (h.owner === 'posse') { h.alive = false; h.deadT = 999; h.drop(); this.list = this.list.filter((x) => x !== h); return; }
+    if (h.home) { h.pos.set(h.home.x, h.home.y, h.home.z); h.goal = null; }
+  }
   mountFor(v) {
     if (this.list.filter((h) => h.alive).length >= 32) return null;          // (only the nearest MAX_MODELS are drawn)
     const h = this.add(v.pos.x, v.pos.y, v.pos.z, 'posse', null);
@@ -309,13 +315,26 @@ export class Horses {
     if (by === 'player' && (h.owner === 'stable' || h.owner === 'farm')) g.town.crime('livestock', { pos: h.pos.clone() });
   }
 
+  fall(h, dt) {
+    const wt = this.waterTop(h.pos.x, h.pos.y, h.pos.z), fy = this.floorUnder(h.pos.x, h.pos.z, h.pos.y + 0.5);
+    if (wt != null && (fy == null || wt - fy >= 1.6)) { h.vy = 0; h.pos.y += (wt - 1.35 - h.pos.y) * Math.min(1, dt * 3); return; }
+    if (fy == null) return;
+    if (h.pos.y > fy + 0.03) { h.vy = Math.max(-25, (h.vy || 0) - 22 * dt); h.pos.y = Math.max(fy, h.pos.y + h.vy * dt); if (h.pos.y <= fy) h.vy = 0; }
+    else if (h.pos.y < fy - 0.03 && fy - h.pos.y < 1.1) h.pos.y = fy;
+  }
   // ---- per frame -------------------------------------------------------------------
   update(dt) {
     const g = this.game, P = g.player.pos;
     this.dt = dt;
     for (const h of this.list) {
-      if (!h.alive) { h.deadT += dt; continue; }
+      if (!h.alive) { h.deadT += dt; this.fall(h, dt); continue; }
       if (h.rider) continue;
+      // standing horses obey gravity too: one left on a ledge, on a bridge
+      // that was dug away or after a jump comes down (or floats in water)
+      this.fall(h, dt);
+      // a loose posse horse far from you goes back; so do stable and farm horses that strayed
+      const dP = Math.hypot(h.pos.x - P.x, h.pos.z - P.z);
+      if (dP > 90 && ((h.owner === 'posse' && !h.rider) || ((h.owner === 'stable' || h.owner === 'farm') && h.home && Math.hypot(h.pos.x - h.home.x, h.pos.z - h.home.z) > 12))) { this.stable(h); continue; }
       // a horse placed (or left) with its head or rump in a wall turns to a free heading
       if (!h.settled) { h.settled = true; if (!this.clear(h.pos.x, h.pos.y, h.pos.z, h.yaw)) for (let k = 1; k < 16; k++) { const y = h.yaw + k * Math.PI / 8; if (this.clear(h.pos.x, h.pos.y, h.pos.z, y)) { h.yaw = y; break; } } }
       // grazing and ambling around home; a lost posse horse stays where it is

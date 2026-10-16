@@ -15,7 +15,8 @@ import { saveTown } from './storage.js';
 import { TOWN_LAYOUT } from './towngen.js';
 import { WEAPONS } from './weapons.js';
 import { Furniture } from './furniture.js';
-import { Fishing } from './fishing.js';
+import { Signs } from './signs.js';
+import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
 
@@ -26,7 +27,7 @@ export const SHOPS = {
   general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, glass: 3, fence: 2 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
   butcher: { sells: { meat_cooked: 6, meat_raw: 4, fish_cooked: 6 }, buys: { meat_raw: 3, meat_cooked: 4, fish: 3, big_fish: 12, fish_cooked: 5 } },
-  hunting: { sells: { rod: 6, knife: 10, pistol: 45, shotgun: 55, rifle: 80, sniper: 140, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, meat_raw: 2 } },
+  hunting: { sells: { rod: 6, knife: 10, pistol: 45, shotgun: 55, rifle: 80, sniper: 140, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, wolf_hide: 18, meat_raw: 2 } },
   stable: { sells: { horse: 60 }, buys: { wheat: 3 } },
   market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2, fish: 3, big_fish: 10 } },
 };
@@ -43,6 +44,7 @@ export class TownLife {
     this.game = game;
     const g = game;
     this.money = saved.money ?? 0;
+    this.debt = saved.debt ?? 0;                   // an unpaid hospital bill, taken from job pay
     this.honor = saved.honor ?? 50;
     this.bounty = saved.bounty ?? 0;
     this.lastCrime = saved.lastCrime ?? -9;
@@ -73,8 +75,18 @@ export class TownLife {
     for (let k = g.animals.herds.filter((h) => h.type === 'bear').length; k < 4; k++) g.animals.spawnHerd(true, 'bear');
     // furniture in every home and the jail cot; fishing; a night in jail in progress
     this.furniture = new Furniture(g, this.village);
-    this.fishing = new Fishing(g);
+    this.fishing = g.fishing;              // (fishing works in both games: game.js)
     this.jailB = this.village.buildings.find((b) => b.type === 'jail');
+    // the hospital, its doctor, and the lettered signs over the doors
+    this.hospital = this.village.buildings.find((b) => b.type === 'hospital') || null;
+    if (this.hospital) {
+      civLook('doctor', { shirt: 0xeceae2, vest: 0xf0eee8, trousers: 0x2e2e32, hat: 'none', hair: 0x8a8a84, moustache: true });
+      this.doctor = new Character('civ', 'doctor', 0);
+      const k = this.hospital.keeper, d = this.hospital.door;
+      this.doctor.place(new THREE.Vector3(k.x, k.y, k.z), Math.atan2(-(d.x - k.x), -(d.z - k.z)), k.y);
+      g.scene.add(this.doctor.root);
+    }
+    this.signs = new Signs(g, this.village);
     this.jailed = saved.jailed || null;
     if (this.jailed) this.cellDoor(true, true);
     g.animals.onKill = (a) => { if (a.owner === 'village') this.crime('livestock', { pos: a.pos }); };
@@ -218,6 +230,8 @@ export class TownLife {
     const g = this.game;
     this.money += f.pay; this.st.earned += f.pay; this.st.jobs++;
     this.addHonor(f.odd ? 3 : 5); this.bounty = Math.max(0, this.bounty - 15);
+    // an unpaid hospital bill comes out of your pay first
+    if (this.debt > 0) { const k = Math.min(this.debt, f.pay); this.debt -= k; this.money -= k; g.hud.toast(t('hosp.debtPaid', { n: k, left: this.debt })); }
     this.jobCd[f.giver] = g.time + 0.5;
     this.job = null;
     this.folk.say(v, 'job.thanks', { n: f.pay });
@@ -338,7 +352,7 @@ export class TownLife {
     if (P.seenT < 2) {
       // approach and question first
       const leader = P.members.find((m) => m.alive);
-      if (v === leader && d < 4.5 && !g.overlay && !g.dead) { this.question(); return; }
+      if (v === leader && d < 4.5 && !g.overlay && !(g.dead || g.dying)) { this.question(); return; }
       F.goDirect(v, v === leader ? pl : { x: pl.x + spread.x, y: pl.y, z: pl.z + spread.z }, (v.horse ? 1.9 : 1) * (4.4), dt, v === leader ? 3.2 : 2);
       return;
     }
@@ -378,10 +392,24 @@ export class TownLife {
     for (const m of P.members) {
       m.posse = false; m.route = []; m.idleT = 0; m.cover = null; this.folk.armed(m, null);
       if (m.alive && msgKey === 'law.gaveUp') this.folk.say(m, 'say.posseLost');
-      if (m.horse) { const h = m.horse; m.horse = null; h.rider = null; h.alive = false; h.deadT = 999; }   // they ride home (the horse goes back)
+      if (m.horse) m.rideHome = true;     // they ride back to town on their horses (stabled once out of sight)
     }
     this.posse = null;
     this.game.hud.toast(t(msgKey));
+  }
+  // posse riders going home: once they are out of sight (or home) their
+  // horses go back to the stable; no horse is ever left loose
+  horsesHome() {
+    const g = this.game, P = g.player.pos;
+    this.homeT = (this.homeT || 0) - 1;
+    if (this.homeT > 0) return;
+    this.homeT = 30;
+    for (const m of this.folk.list) {
+      if (!m.rideHome || m.posse) continue;
+      const h = m.horse;
+      if (!h || !m.alive) { m.rideHome = false; continue; }
+      if (Math.hypot(m.pos.x - P.x, m.pos.z - P.z) > 55 || !m.route.length) { m.horse = null; m.rideHome = false; h.rider = null; g.horses.stable(h); }
+    }
   }
   question() {
     const P = this.posse;
@@ -503,14 +531,36 @@ export class TownLife {
     p.health = 100; g.breath = 20;
   }
   // death or starvation: you wake up in the cottage (no game over)
+  // Every death in Town Life ends in the hospital (after the slow-motion
+  // fall). Wanted: you wake there and the sheriff takes you straight to jail
+  // (no resisting, no running: the posse's search ends here). Not wanted: you
+  // pay a small treatment fee; if you can't, the townspeople pay it when your
+  // honor is good, otherwise the rest becomes a small debt taken from your
+  // job pay (never more than 30 coins).
   onDeath(cause) {
-    const g = this.game;
-    g.inv.counts.scuba = 0;
-    if (cause === 'starve') { g.player.hunger = 60; g.hungerStage = 0; }
-    if (this.posse) this.disband('law.gaveUp');
-    this.wakeAtHome();
+    const g = this.game, p = g.player, H = this.hospital;
+    if (cause === 'starve') { p.hunger = 60; g.hungerStage = 0; }
+    if (this.fishing) this.fishing.reelIn();
+    const wanted = this.bounty > 0 || !!(this.posse && this.posse.hostile);
+    if (this.posse) this.disband(wanted ? 'law.taken' : 'law.gaveUp');
+    p.health = 100; g.breath = 20; p.vel.set(0, 0, 0);
+    if (H) { p.pos.set(H.wake.x, H.wake.y, H.wake.z); p.yaw = Math.atan2(-(H.door.x - H.wake.x), -(H.door.z - H.wake.z)); p.pitch = 0; }
+    else this.wakeAtHome();
     g.hud.dirtyHotbar = true;
-    g.hud.bigMessage(t('town.woke'), t(cause === 'starve' ? 'town.wokeStarve' : 'town.wokeHurt'));
+    if (wanted) { this.arrestPending = true; g.app.openPanel('hospital', { mode: 'arrest' }); return; }
+    const fee = 12;
+    let paid = Math.min(this.money, fee), help = 0, owe = 0;
+    this.money -= paid;
+    const rest = fee - paid;
+    if (rest > 0) { if (this.honor >= 50) help = rest; else { owe = Math.min(rest, Math.max(0, 30 - this.debt)); this.debt += owe; } }
+    g.app.openPanel('hospital', { mode: 'treated', fee, paid, help, owe, debt: this.debt, starve: cause === 'starve' });
+  }
+  // from the hospital to the cell: the usual jail, and your crops nearly die
+  hospitalToJail() {
+    if (!this.arrestPending) return;
+    this.arrestPending = false;
+    this.farm.neglectAll();
+    this.jail();
   }
   // sleep in your bed, at any time of day: until night or until morning.
   // Time passes for everyone: crops grow, witnesses reach the sheriff, a
@@ -812,7 +862,7 @@ export class TownLife {
   }
   doAction(a) {
     const g = this.game, o = this.ctx.find((x) => x.a === a);
-    if (!o || g.paused || g.overlay || g.dead) return;
+    if (!o || g.paused || g.overlay || g.dead || g.dying) return;
     if (a === 'shop') { this.shopKeeper = o.v; g.app.openPanel('shop', { shop: o.v.shop, v: o.v }); }
     else if (a === 'sheriff') g.app.openPanel('sheriff', { v: o.v });
     else if (a === 'job') this.askJob(o.v);
@@ -851,6 +901,10 @@ export class TownLife {
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
     if (g.paused) return;
     this.folk.update(dt);
+    this.signs.update(dt);
+    if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
+    this.horsesHome();
+    if (this.doctor && this.hospital) { const k = this.hospital.keeper, P = g.player.pos; if (Math.abs(k.x - P.x) + Math.abs(k.z - P.z) < 40) this.doctor.pose({ speed: 0, look: Math.sin(g.time * 300) * 0.4 }, dt); }
     this.farm.update(dt);
     this.farm.updateReplant();
     if (this.posse) {
@@ -876,7 +930,6 @@ export class TownLife {
     }
     this.livestock(dt);
     this.updateJail(dt);
-    this.fishing.update(dt);
     this.updateSupper(dt);
     this.updateDoors(dt);
     this.invite(dt);
@@ -951,7 +1004,7 @@ export class TownLife {
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, hunger: p.hunger },
       inv: g.inv, stats: g.stats, pickups: g.pickups.toSave(), rafts: g.rafts.map((r) => ({ x: r.x, z: r.z })), cabin: g.cabin.toSave(),
       town: {
-        money: this.money, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
+        money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
         horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed,
@@ -970,7 +1023,7 @@ export class TownLife {
     stopFolk(); setWind(0);
     this.folk.dispose();
     this.bar.remove(); this.ctxEl.remove(); this.arrowEl.remove();
-    this.furniture.dispose(); this.fishing.dispose();
+    this.furniture.dispose(); if (this.signs) this.signs.dispose(); if (this.doctor) this.doctor.dispose();
     if (paintSeason(null) && this.game.tex) this.game.tex.needsUpdate = true;
   }
 }
