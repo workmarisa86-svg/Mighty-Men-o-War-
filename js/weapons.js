@@ -149,7 +149,8 @@ export class Combat {
   updateCharge(dt, input, playing, id) {
     const g = this.game, held = input.mouse.right || input.tdown('place');
     this.throwT += dt;
-    if (id !== 'knife' || !playing || g.player.swimming || g.player.car || !g.has('knife')) { if (this.charge) this.cancelCharge(); return; }
+    // (in water too: you can throw while swimming)
+    if (id !== 'knife' || !playing || g.player.car || !g.has('knife')) { if (this.charge) this.cancelCharge(); return; }
     if (!this.charge) {
       if ((input.mouse.rightPressed || input.thit('place')) && !g.townKey && this.cool <= 0) this.charge = { t: 0 };
       return;
@@ -203,7 +204,9 @@ export class Combat {
     else if (hit.tank) hit.tank.hurt(damage, false);
     else if (hit.villager) {
       const v = hit.villager, killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
-      if (!(g.town.duels && g.town.duels.playerHit(v, killed))) g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v, dead: killed ? v : null });
+      if (g.town.duels && g.town.duels.playerHit(v, killed)) { /* a fair duel */ }
+      else if (v.extra) { if (v.onHurt) v.onHurt(v, killed); }        // a wanted outlaw or your own gang: no crime
+      else g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v, dead: killed ? v : null });
     }
     g.hud.hitMarker(hit.head);
     sfx.hitMark();
@@ -254,7 +257,9 @@ export class Combat {
     for (const k of L.slice()) {
       k.t += dt;
       if (k.flying) {
-        k.vel.y -= 14 * dt;
+        // through water it slows quickly and sinks gently (thrown while swimming, or into a lake)
+        if (g.world.get(Math.floor(k.pos.x), Math.floor(k.pos.y), Math.floor(k.pos.z)) === B.WATER) { k.vel.multiplyScalar(Math.max(0, 1 - 2.6 * dt)); k.vel.y -= 3 * dt; if (!k.wet) { k.wet = true; if (!g.player.headInWater) sfx.splash(); } }
+        else k.vel.y -= 14 * dt;
         const step = k.vel.length() * dt; d.copy(k.vel).normalize();
         const block = g.world.raycast(k.pos.x, k.pos.y, k.pos.z, d.x, d.y, d.z, step, false, 'bullet');
         const hit = k.bounces ? null : this.target(k.pos, d, block ? block.dist : step);

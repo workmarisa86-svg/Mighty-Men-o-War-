@@ -11,6 +11,8 @@ import { FORMATIONS } from './soldiers.js';
 
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract', 'disperse'];
 export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract', 'disperse'];
+// Town Life: an outlaw's gang takes the same wheel, with its own orders (trades.js)
+export const GANG_ORDERS = ['follow', 'hold', 'defend', 'spread', 'cover', 'distract'];
 const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
 
 export class OrderWheel {
@@ -20,10 +22,11 @@ export class OrderWheel {
     this.isOpen = false; this.sel = -1; this.vx = 0; this.vy = 0;
     this.eatKeys = false;
     this.el.innerHTML = '';
-    this.items = ORDERS.map((cmd, i) => {
+    this.list = game.townMode ? GANG_ORDERS : ORDERS;
+    this.items = this.list.map((cmd, i) => {
       const b = document.createElement('button');
       b.className = 'ow-item'; b.dataset.i = i;
-      const a = (i / ORDERS.length) * Math.PI * 2 - Math.PI / 2;
+      const a = (i / this.list.length) * Math.PI * 2 - Math.PI / 2;
       b.style.setProperty('--x', Math.cos(a).toFixed(3)); b.style.setProperty('--y', Math.sin(a).toFixed(3));
       b.addEventListener('click', (e) => { e.stopPropagation(); this.issue(i); });
       b.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); this.issue(i); });
@@ -37,13 +40,14 @@ export class OrderWheel {
     this.closeBtn.addEventListener('touchend', (e) => { e.preventDefault(); this.close(); });
     this.el.appendChild(this.closeBtn);
   }
-  get enabled() { const g = this.game; return g.cfg.sub === 'allies'; }
+  get enabled() { const g = this.game; return g.townMode ? !!(g.town && g.town.trades && g.town.trades.gang.length) : g.cfg.sub === 'allies'; }
 
   // What the player is aiming at: a soldier, a spot on the ground, a fort.
   aimInfo() {
     const g = this.game;
     const { eye, dir } = g.aim();
     const block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 250, false, 'bullet');
+    if (g.townMode) return { soldier: null, fort: null, point: block ? new THREE.Vector3(block.x + 0.5 + block.nx, block.y + block.ny, block.z + 0.5 + block.nz) : eye.clone().addScaledVector(dir, 30) };
     const hit = g.enemies.raycast(eye, dir, block ? Math.min(block.dist, 60) : 60, 'ally');
     let point;
     if (block) point = new THREE.Vector3(block.x + 0.5 + block.nx, block.y + block.ny, block.z + 0.5 + block.nz);
@@ -71,6 +75,7 @@ export class OrderWheel {
     const g = this.game, E = g.enemies;
     if (input.hit('KeyQ')) { if (this.isOpen) this.close(); else this.open(); this.eatKeys = true; }
     if (!this.isOpen) {
+      if (g.townMode) return;
       // G: add / remove the aimed soldier to the selected group (G at nothing clears it)
       if (input.hit('KeyG')) {
         const { soldier } = this.aimInfo();
@@ -88,11 +93,11 @@ export class OrderWheel {
     if (r > 110) { this.vx *= 110 / r; this.vy *= 110 / r; }
     if (r > 30) {
       const a = Math.atan2(this.vy, this.vx) + Math.PI / 2;
-      const i = Math.round(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * ORDERS.length) % ORDERS.length;
+      const N = this.list.length, i = Math.round(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2) * N) % N;
       if (i !== this.sel) { this.sel = i; this.render(); }
     }
     input.mouse.dx = input.mouse.dy = 0;
-    for (let i = 0; i < ORDERS.length; i++) if (input.hit('Digit' + (i + 1))) { this.issue(i); break; }
+    for (let i = 0; i < this.list.length; i++) if (input.hit('Digit' + (i + 1))) { this.issue(i); break; }
     if (input.hit('Digit0') && this.at && this.at.soldier) { this.close(); g.app.openPanel('orders', { soldier: this.at.soldier }); }
     if (input.mouse.leftPressed) { if (this.sel >= 0) this.issue(this.sel); else this.close(); }
     if (input.mouse.rightPressed || input.hit('Escape')) this.close();
@@ -103,8 +108,9 @@ export class OrderWheel {
   recipients(cmd) { return this.game.enemies.recipients(this.at && this.at.soldier, cmd, this.at && this.at.point); }
 
   issue(i) {
-    const g = this.game, E = g.enemies, cmd = ORDERS[i];
+    const g = this.game, E = g.enemies, cmd = this.list[i];
     if (!this.isOpen) return;
+    if (g.townMode) { g.town.trades.issue(cmd, this.at.point); this.close(); return; }
     if (cmd === 'formation') {
       const cur = FORMATIONS.indexOf(g.settings.formation || 'loose');
       g.settings.formation = FORMATIONS[(cur + 1) % FORMATIONS.length];
@@ -120,6 +126,11 @@ export class OrderWheel {
 
   render() {
     const g = this.game, E = g.enemies;
+    if (g.townMode) {
+      this.center.innerHTML = `<b>${t('order.title2')}</b><span>${t('gang.toGang', { n: g.town.trades.gang.length })}</span>`;
+      this.items.forEach((b, i) => { const cmd = this.list[i]; b.innerHTML = `<i>${ICONS[cmd]}</i><span>${t(cmd === 'defend' ? 'gang.defend' : 'ord.' + cmd)}</span><kbd>${i + 1}</kbd>`; b.classList.toggle('on', i === this.sel); b.hidden = false; });
+      return;
+    }
     const sel = E.selection();
     const one = this.at && this.at.soldier;
     const who = sel.length ? t('order.toSelected', { n: sel.length }) : one ? one.name : t('order.toSquad', { n: E.squadMembers().length });
@@ -127,7 +138,7 @@ export class OrderWheel {
     this.center.innerHTML = `<b>${t('order.title2')}</b><span>${who}</span>${tgt ? `<span class="muted">${tgt}</span>` : ''}` +
       (one && !sel.length && !this.game.app.input.touch ? `<span class="muted small"><kbd>0</kbd> ${t('order.talk')}</span>` : '');
     this.items.forEach((b, i) => {
-      const cmd = ORDERS[i];
+      const cmd = this.list[i];
       const label = cmd === 'formation' ? t('ord.formation', { f: t('form.' + (g.settings.formation || 'loose')) }) : t('ord.' + cmd);
       b.innerHTML = `<i>${ICONS[cmd]}</i><span>${label}</span><kbd>${i + 1}</kbd>`;
       b.classList.toggle('on', i === this.sel);

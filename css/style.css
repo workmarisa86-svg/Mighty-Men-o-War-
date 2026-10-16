@@ -739,3 +739,26 @@ body.driving #aimprompt { display: none; }
 #chargebar { position: absolute; left: 50%; top: calc(50% + 26px); width: 74px; height: 5px; margin-left: -37px; background: rgba(20, 18, 12, 0.6); border: 1px solid rgba(240, 228, 192, 0.5); border-radius: 3px; overflow: hidden; }
 #chargebar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #d8c48a, #f4e2a8); }
 #chargebar.full i { background: #ffd070; box-shadow: 0 0 6px #ffd070; }
+
+/* Town Life trades: the six cards, reputation bars, the bounty board */
+.trade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 10px 0; }
+.trade-cards.one { grid-template-columns: 1fr; }
+.trade-card { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 6px; cursor: pointer; font: inherit; color: inherit;
+  background: rgba(60, 48, 32, 0.55); border: 1px solid rgba(216, 196, 154, 0.35); }
+.trade-card:hover:not([disabled]), .trade-card:focus-visible { border-color: var(--amber); background: rgba(110, 86, 48, 0.55); }
+.trade-card.on { border-color: var(--amber); }
+.trade-card[disabled] { opacity: 0.5; cursor: default; }
+.trade-card b { font-family: var(--stencil); font-weight: normal; letter-spacing: 1px; font-size: 18px; color: #f0dca8; }
+.trade-card .tagline { font-style: italic; font-size: 13px; opacity: 0.9; text-transform: none; letter-spacing: normal; }
+.trade-card ul { margin: 2px 0 0; padding-left: 16px; font-size: 13px; }
+.trade-card small { font-size: 12px; }
+.rep-row { display: grid; grid-template-columns: 90px 1fr 40px; align-items: center; gap: 8px; margin: 4px 0; font-size: 14px; }
+.rep-bar { position: relative; height: 8px; background: rgba(0, 0, 0, 0.4); border-radius: 4px; }
+.rep-bar::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: rgba(240, 228, 192, 0.6); }
+.rep-bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.rep-bar i.pos { background: #8ab868; } .rep-bar i.neg { background: #c05a40; }
+.rep-row b { text-align: right; }
+.bounty-row .wanted { font-family: var(--stencil); font-size: 11px; letter-spacing: 1px; color: #e8c890; background: #6a2a20; padding: 2px 4px; border-radius: 3px; }
+.bounty-row span small { display: block; opacity: 0.8; }
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #c05a40; color: #fff; font-size: 12px; }
+@media (max-width: 520px) { .trade-cards { grid-template-columns: 1fr 1fr; gap: 6px; } .trade-card { padding: 8px; } .trade-card b { font-size: 15px; } .trade-card ul { font-size: 11px; padding-left: 12px; } }

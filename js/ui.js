@@ -324,6 +324,7 @@ export class UI {
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
       <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
+      ${this.app.game && this.app.game.town && this.app.game.town.trades.trade ? `<button class="btn" id="ptrade">${t('trade.title')}</button>` : ''}
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t(this.app.game && this.app.game.town ? 'town.quit' : 'menu.quit')}</button></div>
@@ -332,6 +333,7 @@ export class UI {
     $('#presume').onclick = () => this.app.resume();
     $('#psave').onclick = () => this.app.saveGame(false);
     $('#pmap').onclick = () => this.show('map', { from: 'pause' });
+    if ($('#ptrade')) $('#ptrade').onclick = () => this.show('trades', { mode: 'info' });
     $('#pset').onclick = () => this.show('settings', { from: 'pause' });
     $('#pman').onclick = () => this.show('manual', { from: 'pause' });
     $('#pquit').onclick = () => this.app.quitToMenu();
@@ -467,7 +469,8 @@ export class UI {
     const L = loadTown();
     if (!L) return `<p class="label">Town Life</p><p class="muted small">${t('stats.townNone')}</p>`;
     const T = L.state.town || {}, st = T.st || {}, S = L.state.stats || {};
-    const rows = [['tdays', Math.floor(L.state.time || 0) + 1], ['tearned', st.earned || 0], ['tjobs', (st.jobs ?? st.favors) || 0], ['animals', S.animals || 0], ['tharvest', st.harvested || 0], ['tjailed', st.jailed || 0], ['tmoney', T.money || 0], ['thonor', Math.round(T.honor ?? 50)]];
+    const rows = [['tdays', Math.floor(L.state.time || 0) + 1], ['tearned', st.earned || 0], ['tjobs', (st.jobs ?? st.favors) || 0], ['animals', S.animals || 0], ['tharvest', st.harvested || 0], ['tjailed', st.jailed || 0], ['tmoney', T.money || 0], ['thonor', Math.round(T.honor ?? 50)],
+      ['ttrade', T.trades && T.trades.trade ? t('trade.' + T.trades.trade) : '—'], ['tbounties', st.bounties || 0], ['talive', st.alive || 0], ['tduels', st.duels || 0]];
     return `<p class="label">Town Life</p><div class="stats-wrap"><table class="stats"><tbody>${rows.map(([k, v]) => `<tr><td>${t('stats.' + k)}</td><td>${v}</td></tr>`).join('')}</tbody></table></div>`;
   }
   r_stats({ from } = {}) {

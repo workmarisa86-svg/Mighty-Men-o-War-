@@ -104,14 +104,22 @@ export class Minimap {
         c.fillStyle = b.type === 'house' ? '#8a8270' : b.type === 'hall' ? '#7a8aa0' : '#d8b048'; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1;
         c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8);
       }
+      // traps (gold: a catch) and the wanted men's cabins
+      for (const m of g.town.trades.mapMarks()) {
+        const [x, y, d] = toRadar(m.x, m.z);
+        if (d > RADAR_RANGE) continue;
+        c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
+        if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8); }
+        else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(x, y, 3, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      }
       const marks = g.town.marks();
-      for (const v of g.town.folk.list) {
+      for (const v of g.town.folk.extra.length ? g.town.folk.list.concat(g.town.folk.extra) : g.town.folk.list) {
         if (!v.alive || v.away) continue;
         const [x, y, d] = toRadar(v.pos.x, v.pos.z);
         if (d > RADAR_RANGE) continue;
         const wit = marks.includes(v);
         if (wit && Math.floor(this.t * 4) % 2) continue;
-        c.fillStyle = v.posse ? OWNER_COLORS.enemy : wit ? '#ffd040' : '#7ac860'; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;
+        c.fillStyle = v.posse || (v.outlaw && !v.cuffed) ? OWNER_COLORS.enemy : wit ? '#ffd040' : v.gang ? '#d89a4a' : '#7ac860'; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;
         c.beginPath(); c.arc(x, y, wit ? 4 : 2.6, 0, Math.PI * 2); c.fill(); c.stroke();
       }
     }

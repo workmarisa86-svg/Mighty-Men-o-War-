@@ -76,6 +76,8 @@ export class Townsfolk {
       game.scene.add(l); this.tracers.push({ l, t: 0 });
     }
     this.trI = 0; this.lodT = 0; this.tmpV = new THREE.Vector3();
+    // people who are not townsfolk (outlaws, your gang: trades.js), only while near you
+    this.extra = [];
   }
 
   // the same people every time (from the world seed); a newcomer replaces
@@ -339,7 +341,7 @@ export class Townsfolk {
   raycast(origin, dir, maxDist) {
     let best = null, bd = maxDist;
     const box = new THREE.Box3(), ray = new THREE.Ray(origin, dir), hit = new THREE.Vector3();
-    for (const v of this.list) {
+    for (const v of this.extra.length ? this.list.concat(this.extra) : this.list) {
       if (!v.alive || v.away) continue;
       if (Math.abs(v.pos.x - origin.x) > maxDist + 2 || Math.abs(v.pos.z - origin.z) > maxDist + 2) continue;
       const h = v.crouch && !v.horse ? 1.4 : 1.85, y0 = v.horse ? v.horse.saddle().y : v.pos.y;   // a rider sits up on the horse
@@ -370,6 +372,24 @@ export class Townsfolk {
     tr.l.visible = true; tr.t = 0.07;
     if (Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
   }
+  // the posse firing at one of your gang (trades.js)
+  shootAtMan(v, dt, o) {
+    const g = this.game;
+    v.cool -= dt;
+    if (v.cool > 0 || !o.alive) return;
+    const d = Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z);
+    if (d > 45 || (v.armed === 'shotgun' && d > 28)) return;
+    const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z), b = new THREE.Vector3(o.pos.x, o.pos.y + (o.crouch ? 0.9 : 1.2), o.pos.z);
+    const dir = b.clone().sub(a), L = dir.length(); dir.divideScalar(L);
+    const block = g.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, L - 0.4, false, 'bullet');
+    v.cool = 1.6 + Math.random() * 1.2; v.fired = true;
+    sfx.shot(v.armed === 'revolver' ? 'revolver' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
+    const end = block ? a.clone().addScaledVector(dir, block.dist) : b;
+    const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
+    pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
+    tr.l.visible = true; tr.t = 0.07;
+    if (!block && Math.random() < Math.max(0.15, 0.75 - d / 55) * (o.crouch ? 0.6 : 1)) this.hurt(o, v.armed === 'shotgun' ? Math.max(10, 40 - d) : v.armed === 'lever' ? 26 : 18);
+  }
   // cover from the player: a nearby spot with a block between
   coverSpot(v) {
     const g = this.game, p = g.player.pos;
@@ -394,9 +414,10 @@ export class Townsfolk {
     for (const tr of this.tracers) if (tr.t > 0) { tr.t -= dt; tr.l.material.opacity = Math.max(0, tr.t / 0.07) * 0.8; if (tr.t <= 0) tr.l.visible = false; }
     this.lodT -= dt;
     const relod = this.lodT <= 0; if (relod) this.lodT = 0.5;
-    for (const v of this.list) {
+    const all = this.extra.length ? this.list.concat(this.extra) : this.list;
+    for (const v of all) {
       if (!v.alive) {
-        if (v.away) { if (!this.dead[v.i] || this.dead[v.i] <= g.time) this.replace(v); continue; }
+        if (v.away) { if (v.extra) continue; if (!this.dead[v.i] || this.dead[v.i] <= g.time) this.replace(v); continue; }
         v.deadT += dt;
         // a body always comes down to the ground (a rider shot from the saddle, someone on a ledge)
         if (!v.grounded) {
@@ -423,7 +444,8 @@ export class Townsfolk {
       v.far = d > ACTIVE_M;
       v.fired = false;
       v.greetT -= dt; v.faceT -= dt; v.scaredT -= dt;
-      if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
+      if (v.ai && v.ai(v, dt, d)) { /* an outlaw or one of your gang (trades.js) */ }
+      else if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
       else if (v.posse) T.posseBehaviour(v, dt, d);
       else if (v.fight) this.fightBehaviour(v, dt, d);
       else if (v.duel) this.duelBehaviour(v, dt);
@@ -431,7 +453,7 @@ export class Townsfolk {
       else this.dailyBehaviour(v, dt, d);
       if (v.horse) v.horse.carry(v);
       // greetings when the player comes close
-      if (!v.posse && !v.reportTo && !v.fight && !v.surrendered && !v.sleeping && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
+      if (!v.extra && !v.posse && !v.reportTo && !v.fight && !v.surrendered && !v.sleeping && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
         v.greetT = 70 + Math.random() * 40; v.faceT = 3;
         this.say(v, T.greetingKey(v));
       }
@@ -535,6 +557,7 @@ export class Townsfolk {
     v.fallDir = Math.random() < 0.5 ? 1 : -1;
     g.bubbles.clearFor(v);
     this.game.town.witnesses = this.game.town.witnesses.filter((w) => w !== v);
+    if (v.extra) { if (v.onKill) v.onKill(v); return; }      // an outlaw or one of your gang: no family, no body kept
     const h = this.houseAt(v.pos);
     if (h >= 0) {
       // killed inside a house: the body stays there
@@ -640,6 +663,7 @@ export class Townsfolk {
   toSave() { return { gens: this.gens, dead: this.dead, bodies: this.bodies }; }
   dispose() {
     for (const v of this.list) this.dropRig(v);
+    for (const v of this.extra) this.dropRig(v);
     for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); }
   }
 }

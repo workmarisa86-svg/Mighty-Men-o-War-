@@ -4,6 +4,7 @@ import { t } from './i18n.js';
 import { itemIcon } from './items.js';
 import { hasTown } from './storage.js';
 import { M } from './modes.js';      // (Town Life's code is loaded once a town game starts)
+import { TRADES, GROUPS, KIT, COINS } from './trades.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -89,19 +90,74 @@ export function installTownUI(UI) {
 
   // ---- the sheriff: pay a bounty or turn yourself in -----------------------
   P.r_sheriff = function ({ v }) {
-    const g = this.app.game, T = g.town;
+    const g = this.app.game, T = g.town, Tr = T.trades;
     const body = `<div class="who"><b>${esc(v.name)}</b><span class="muted small">${t('law.sheriff')}</span></div>
       <p class="say">“${esc(T.bounty ? t('law.sheriffWanted', { n: T.bounty }) : t('law.sheriffClean'))}”</p>
       <div class="menu">
         ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
         <button class="btn" id="sturn">${t('law.turnIn')}</button>` : ''}
         <button class="btn" id="sjob">${t('ctx.job')}</button>
+        <button class="btn" id="sboard">${t('bounty.board')}${Tr.claimable().length ? ` <b class="badge">${Tr.claimable().length}</b>` : ''}</button>
+        <button class="btn ghost" id="strade">${t('trade.change', { n: Tr.changeFee() })}</button>
       </div><p class="muted small">${t('law.clearWays')}</p>`;
     this.panel(t('law.sheriffTitle'), body, { onBack: () => this.app.closePanel() });
     const $ = (s) => this.root.querySelector(s);
+    $('#sboard').onclick = () => this.show('bounties', { v });
+    $('#strade').onclick = () => this.show('trades', { mode: 'change', v });
     if ($('#spay')) $('#spay').onclick = () => { T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
     if ($('#sturn')) $('#sturn').onclick = () => { this.app.closePanel(); T.jail(); };
     $('#sjob').onclick = () => { this.app.closePanel(); T.askJob(v); };
+  };
+
+
+  // ---- the bounty board at the sheriff's office --------------------------------------
+  P.r_bounties = function ({ v }) {
+    const g = this.app.game, T = g.town, Tr = T.trades, p = g.player.pos;
+    const dirTo = (c) => { const dx = c.x + 3 - p.x, dz = c.z + 3 - p.z, a = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360; return t('bounty.where', { m: Math.round(Math.hypot(dx, dz) / 10) * 10, dir: t('dir.' + ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'][Math.round(a / 45) % 8]) }); };
+    const k = Tr.rewardK();
+    const rows = Tr.trade === 'outlaw'
+      ? `<p class="say">“${esc(t('bounty.notForYou'))}”</p>`
+      : Tr.bounties.filter((b) => b.status === 'open' || b.status === 'dead').map((b) => {
+        const c = Tr.cabinOf(b);
+        return `<div class="shop-row bounty-row"><span class="wanted">${t('bounty.wanted')}</span><span><b>${esc(b.name)}</b><small>${t('bounty.crime.' + b.crime)} · ${c ? dirTo(c) : ''}</small></span>
+          <b>${Math.round(b.reward * k)}</b>${b.status === 'dead' ? `<button class="btn small primary" data-c="${b.id}">${t('bounty.collect')}</button>` : `<small class="muted">${t('bounty.alive', { n: Math.round(b.reward * k * 1.5) })}</small>`}</div>`;
+      }).join('') || `<p class="muted">${t('bounty.none')}</p>`;
+    const body = `<div class="who"><b>${esc(v.name)}</b><span class="muted small">${t('law.sheriff')}</span></div>${rows}
+      <p class="muted small">${t(Tr.trade === 'bounty' ? 'bounty.noteHunter' : 'bounty.note')}</p>`;
+    const panel = this.panel(t('bounty.board'), body, { wide: true, onBack: () => this.show('sheriff', { v }) });
+    panel.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => { Tr.collect(Tr.bounties.find((x) => x.id === +b.dataset.c)); this.show('bounties', { v }); });
+  };
+
+  // ---- trades: the choice at the start of a story, a change at the sheriff's, your standing ----
+  P.r_trades = function ({ mode = 'info', v = null } = {}) {
+    const g = this.app.game, T = g.town, Tr = T.trades;
+    const card = (id) => `<button class="trade-card ${Tr.trade === id ? 'on' : ''}" data-t="${id}" ${mode === 'change' && Tr.trade === id ? 'disabled' : ''}>
+        <b>${t('trade.' + id)}</b><span class="tagline">${t('trade.' + id + 'Tag')}</span>
+        <ul>${t('trade.' + id + 'Perks').split('|').map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+        ${mode === 'choose' ? `<small class="muted">${t('trade.kit')}: ${[COINS[id] + ' ' + t('trade.coins'), ...KIT[id].map(([it, n]) => (n > 1 ? n + ' × ' : '') + t('item.' + it)), ...(id === 'farmer' ? [t('trade.farmAnimals')] : []), ...(id === 'outlaw' ? [t('trade.gang')] : [])].join(', ')}</small>` : ''}
+      </button>`;
+    if (mode === 'info') {
+      const bar = (k) => { const r = Math.round(Tr.reps[k]); return `<div class="rep-row"><span>${t('rep.' + k)}</span><div class="rep-bar"><i style="left:${50 + Math.min(0, r) / 2}%;width:${Math.abs(r) / 2}%" class="${r < 0 ? 'neg' : 'pos'}"></i></div><b>${r > 0 ? '+' : ''}${r}</b></div>`; };
+      const st = T.st;
+      const body = `<p class="label">${t('trade.yours')}</p><div class="trade-cards one">${Tr.trade ? card(Tr.trade) : ''}</div>
+        <p class="label">${t('rep.title')}</p>${GROUPS.map(bar).join('')}<p class="muted small">${t('rep.note')}</p>
+        <div class="stats-wrap"><table class="stats"><tbody>
+          <tr><td>${t('stats.tbounties')}</td><td>${st.bounties || 0}</td></tr><tr><td>${t('stats.talive')}</td><td>${st.alive || 0}</td></tr>
+          <tr><td>${t('stats.tduels')}</td><td>${st.duels || 0}</td></tr><tr><td>${t('stats.ttraps')}</td><td>${Tr.traps.length}</td></tr>
+          ${Tr.gang.length ? `<tr><td>${t('stats.tgang')}</td><td>${Tr.gang.map((m) => esc(m.name)).join(', ')}</td></tr>` : ''}
+        </tbody></table></div>`;
+      this.panel(t('trade.title'), body, { wide: true, onBack: () => this.show('pause') });
+      return;
+    }
+    const body = `<p class="muted">${t(mode === 'choose' ? 'trade.chooseNote' : 'trade.changeNote', { n: Tr.changeFee() })}</p>
+      <div class="trade-cards">${TRADES.map(card).join('')}</div>`;
+    const panel = this.panel(t(mode === 'choose' ? 'trade.chooseTitle' : 'trade.changeTitle'), body, mode === 'choose' ? { wide: true, back: false } : { wide: true, onBack: () => this.show('sheriff', { v }) });
+    panel.classList.add('trade-panel');
+    panel.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => {
+      const id = b.dataset.t;
+      if (mode === 'choose') { Tr.choose(id); this.app.closePanel(); }
+      else this.confirm(t('trade.changeConfirm', { trade: t('trade.' + id), n: Tr.changeFee() }), () => { if (Tr.choose(id, true)) this.app.closePanel(); else this.show('trades', { mode, v }); }, () => this.show('trades', { mode, v }));
+    });
   };
 
   // ---- after jail ---------------------------------------------------------------
@@ -147,7 +203,7 @@ export function installTownUI(UI) {
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
-      <div class="legend">${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
+      <div class="legend">${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
     const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
@@ -189,6 +245,13 @@ export function installTownUI(UI) {
       if (!v.alive || v.away || (!v.posse && Math.hypot(v.pos.x - g.player.pos.x, v.pos.z - g.player.pos.z) > 120)) continue;
       c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
       c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    // your traps (gold: something is caught) and the wanted men's cabins
+    for (const m of T.trades.mapMarks()) {
+      const X = m.x * sc, Z = m.z * sc, r = (m.kind === 'wanted' ? 6 : 4) * dpr / zoom;
+      c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
+      if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2); label('✕ ' + m.name, X, Z - r - 4 * dpr / zoom, 10); }
+      else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(X, Z, r, 0, Math.PI * 2); c.fill(); c.stroke(); }
     }
     // whoever pays for your job: a gold ring
     const jt = T.jobTarget();
