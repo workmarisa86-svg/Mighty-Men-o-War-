@@ -37,6 +37,13 @@ export class AimUse {
   find() {
     const g = this.game, { eye, dir } = g.aim(), w = g.world;
     if (g.player.car) return null;                          // in a car: only Exit and Lights (the car's own bar)
+    // the fishing rod: Cast at water you aim at, Reel in while the line is out
+    if (g.selected() === 'rod' && g.fishing && !g.player.riding) {
+      const F = g.fishing;
+      if (F.state) return { a: F.state.phase === 'bite' ? 'reelBite' : 'reel', run: () => F.use(eye, dir) };
+      const wa = F.waterAt(eye, dir);
+      if (wa) return { a: 'cast', run: () => F.use(eye, dir) };
+    }
     const hit = w.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, BODY.reach);
     // army cars (War): drive one of your side's
     if (g.vehicles) { const vt = g.vehicles.aimTarget(eye, dir, hit ? hit.dist ?? 99 : 99); if (vt) return vt; }

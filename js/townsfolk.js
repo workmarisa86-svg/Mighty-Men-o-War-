@@ -87,7 +87,7 @@ export class Townsfolk {
     const r = mulberry32(g.cfg.seed * 31 + i * 977 + gen * 7919);
     const name = (female ? FIRST_F : FIRST_M)[Math.floor(r() * 14)] + ' ' + (gen ? LAST[Math.floor(r() * LAST.length)] : sp.last);
     const look = female
-      ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, style: ['long', 'bun', 'braid'][Math.floor(r() * 3)], hat: r() < 0.2 ? 'scarf' : 'none', hatColor: [0x8a3a3a, 0x3a5a7a, 0x6a6a3a][Math.floor(r() * 3)] }
+      ? { dress: DRESSES[Math.floor(r() * DRESSES.length)], shirt: 0xe0d8c8, hair: HAIR[Math.floor(r() * HAIR.length)], long: true, style: ['long', 'bun', 'braid', 'ponytail'][Math.floor(r() * 4)], hat: 'none' }
       : { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], trousers: DARK[Math.floor(r() * DARK.length)], hair: HAIR[Math.floor(r() * HAIR.length)], vest: r() < 0.45 ? DARK[Math.floor(r() * DARK.length)] : null, hat: r() < 0.5 ? 'cap' : r() < 0.6 ? 'felt' : 'none', moustache: r() < 0.35, rolled: r() < 0.4, braces: r() < 0.3 ? 0x3a2a1c : null };
     if (!female) look.gunbelt = true;              // 1940s frontier town: every man wears a revolver on his hip
     if (status === 'mansion' && !female) { look.vest = 0x2e2a26; look.hat = 'felt'; look.hatColor = 0x2a2420; }
@@ -398,6 +398,13 @@ export class Townsfolk {
       if (!v.alive) {
         if (v.away) { if (!this.dead[v.i] || this.dead[v.i] <= g.time) this.replace(v); continue; }
         v.deadT += dt;
+        // a body always comes down to the ground (a rider shot from the saddle, someone on a ledge)
+        if (!v.grounded) {
+          let fy = null; const w = g.world, bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z);
+          for (let yy = Math.floor(v.pos.y + 0.5); yy > 0; yy--) if (SOLID[w.get(bx, yy, bz)]) { fy = yy + 1; break; }
+          if (fy == null || v.pos.y <= fy + 0.02) { v.grounded = true; if (fy != null) v.pos.y = fy; }
+          else v.pos.y = Math.max(fy, v.pos.y - dt * 9);
+        }
         const near = Math.hypot(v.pos.x - P.x, v.pos.z - P.z) < Math.min(RIG_IN, (g.settings.renderDist + 1) * 16);
         if (near) { const rig = this.rigFor(v); rig.root.visible = true; rig.pose({ dead: v.deadT, fallDir: v.fallDir || 1 }, dt); rig.place(v.pos, v.yaw, v.pos.y); }
         else this.dropRig(v);

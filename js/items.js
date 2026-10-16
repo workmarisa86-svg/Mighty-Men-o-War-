@@ -39,9 +39,9 @@ export const ITEMS = {
   seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
   wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
-  hide: {}, bear_hide: {},
+  hide: {}, bear_hide: {}, wolf_hide: {},
   bucket: { tool: 'bucket' }, bucket_water: { tool: 'bucket' },
-  rod: { tool: 'rod' },                         // Town Life: cast into a river or lake, reel in on a bite
+  rod: { tool: 'rod' },                         // cast into a river, lake or the sea, reel in on a bite (both games)
   fish: { food: 10 }, big_fish: { food: 22 }, fish_cooked: { food: 40 },
   chicken: { livestock: 'chicken' }, piglet: { livestock: 'pig' }, calf: { livestock: 'cow' },
 };
@@ -76,8 +76,10 @@ export const RECIPES = [
   { id: 'meat_cooked', cat: 'food', needs: { meat_raw: 1 }, time: 4, cook: true },
   // Town Life: weapons are crafted as in War; materials are smelted on the fire
   { id: 'bread', cat: 'food', needs: { wheat: 3 }, time: 5, cook: true, town: true },
-  { id: 'fish_cooked', cat: 'food', needs: { fish: 1 }, time: 4, cook: true, town: true },
+  { id: 'fish_cooked', cat: 'food', needs: { fish: 1 }, time: 4, cook: true },
   { id: 'rod', cat: 'gear', needs: { wood: 3 }, time: 5, town: true },
+  // War: a rod from wood and a little iron (hooks and the reel)
+  { id: 'rod', cat: 'gear', needs: { wood: 2, iron: 1 }, time: 4, war: true },
   { id: 'charcoal', cat: 'materials', needs: { wood: 2 }, time: 6, town: true },
   { id: 'brick', cat: 'materials', needs: { clay: 1, charcoal: 1 }, time: 5, out: 2, town: true },
   { id: 'glass', cat: 'materials', needs: { sand: 2, charcoal: 1 }, time: 6, out: 2, town: true },
@@ -88,7 +90,7 @@ export const RECIPES = [
 ];
 // which recipes each game offers
 const WAR_ONLY = ['car', 'grenade', 'smoke', 'tnt', 'sandbag', 'wire', 'watchtower', 'helmet', 'vest', 'smg', 'spistol'];
-export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) : !r.town); }
+export function recipesFor(town) { return RECIPES.filter((r) => town ? !WAR_ONLY.includes(r.id) && !r.war : !r.town); }
 
 const ICON_DRAW = {
   shovel(c) {
@@ -257,6 +259,7 @@ const ICON_DRAW = {
   egg(c) { c.fillStyle = '#efe4cc'; c.beginPath(); c.ellipse(24, 26, 10, 13, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = '#fff8ec'; c.beginPath(); c.ellipse(20, 21, 3, 4, 0, 0, Math.PI * 2); c.fill(); },
   milk(c) { c.fillStyle = '#d8d8d0'; c.fillRect(15, 14, 18, 28); c.fillStyle = '#f4f4ee'; c.fillRect(17, 20, 14, 20); c.fillStyle = '#8a8a80'; c.fillRect(18, 8, 12, 6); },
   hide(c) { c.fillStyle = '#9a7650'; c.beginPath(); c.moveTo(8, 14); c.lineTo(20, 10); c.lineTo(28, 12); c.lineTo(40, 10); c.lineTo(38, 26); c.lineTo(42, 40); c.lineTo(26, 36); c.lineTo(8, 40); c.lineTo(12, 26); c.closePath(); c.fill(); c.fillStyle = '#7a5a3a'; c.beginPath(); c.arc(24, 24, 5, 0, Math.PI * 2); c.fill(); },
+  wolf_hide(c) { c.fillStyle = '#7a746a'; c.beginPath(); c.moveTo(8, 16); c.lineTo(20, 10); c.lineTo(28, 12); c.lineTo(40, 10); c.lineTo(36, 26); c.lineTo(40, 40); c.lineTo(26, 34); c.lineTo(10, 40); c.lineTo(12, 26); c.closePath(); c.fill(); c.fillStyle = '#b8b2a6'; c.beginPath(); c.arc(24, 24, 5, 0, Math.PI * 2); c.fill(); c.fillStyle = '#4a4640'; c.fillRect(22, 10, 4, 10); },
   bear_hide(c) { c.fillStyle = '#3e2c1e'; c.beginPath(); c.moveTo(6, 14); c.lineTo(20, 8); c.lineTo(28, 10); c.lineTo(42, 8); c.lineTo(40, 26); c.lineTo(44, 42); c.lineTo(26, 36); c.lineTo(6, 42); c.lineTo(10, 26); c.closePath(); c.fill(); c.fillStyle = '#5a422c'; c.beginPath(); c.arc(24, 22, 6, 0, Math.PI * 2); c.fill(); },
   rod(c) {
     c.strokeStyle = '#4a3422'; c.lineWidth = 3; c.beginPath(); c.moveTo(8, 42); c.lineTo(40, 6); c.stroke();

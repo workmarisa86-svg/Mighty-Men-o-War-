@@ -19,6 +19,9 @@ import { Raft } from './raft.js';
 import { Particles } from './particles.js';
 import { ITEMS, RECIPES, WEAPON_IDS, recipesFor } from './items.js';
 import { Animals } from './animals.js';
+import { Injury, DEATH_LEN } from './injury.js';
+import { ThirdPerson } from './thirdperson.js';
+import { Fishing } from './fishing.js';
 import { Pickups } from './pickups.js';
 import { Campfires } from './campfire.js';
 import { ViewModel } from './viewmodel.js';
@@ -160,6 +163,7 @@ export class Game {
     if (this.townMode) this.time = save.time ?? 6.5 / 24;   // the first morning of spring
     this.campfires = new Campfires(this);
     this.pickups = new Pickups(this, save.pickups || []);
+    this.landName = !this.townMode && this.cfg.country && COUNTRY[this.cfg.country] ? COUNTRY[this.cfg.country].land : null;   // which War landscape (for wildlife)
     this.animals = new Animals(this);
     this.vm = new ViewModel();
     if (!this.townMode) this.vm.setUniform(UNIFORMS[(this.cfg.side || 'allies') === 'axis' ? 'de' : 'us'].tunic);
@@ -181,6 +185,9 @@ export class Game {
     if (this.stats.aloneSince == null) this.stats.aloneSince = this.time;
     this.statsFlushed = { ...this.stats, time: this.time };
     this.hud = new HUD(this);
+    this.injury = new Injury(this);
+    this.thirdPerson = new ThirdPerson(this);
+    this.fishing = new Fishing(this);
     this.bubbles = new Bubbles(this);
     this.aimUse = new AimUse(this);
     this.mission = null;      // the old missions are gone (replaced by Battles)
@@ -285,7 +292,14 @@ export class Game {
   update(dt) {
     const input = this.app.input;
     const p = this.player;
-    const playing = !this.paused && !this.overlay;
+    // dying: the world runs in slow motion while you fall
+    this.realDt = dt;
+    if (this.dying) {
+      this.dying.t += dt;
+      if (this.dying.t >= DEATH_LEN) { const c = this.dying.cause; this.dying = null; this.injury.endDeath(); this.dieNow(c); }
+      else dt *= 0.3;
+    }
+    const playing = !this.paused && !this.overlay && !this.dying;
 
     this.time += dt / DAY_SECONDS;
     if (!this.paused) this.stats.played = (this.stats.played || 0) + dt;     // time played (seconds)
@@ -301,7 +315,7 @@ export class Game {
     if (playing) this.handleKeys(input);
 
     const inWire = [0.2, 1.0].some((dy) => this.world.get(Math.floor(p.pos.x), Math.floor(p.pos.y + dy), Math.floor(p.pos.z)) === B.WIRE);
-    const env = { rain: this.weather.rain, speedMul: inWire ? 0.4 : 1 };
+    const env = { rain: this.weather.rain, speedMul: (inWire ? 0.4 : 1) * this.injury.limp };
     const wasDiving = p.diving;
     // on horseback the horse moves (and carries you); otherwise you walk
     // in a car the car moves (and carries you)
@@ -326,7 +340,7 @@ export class Game {
     for (const r of this.rafts) r.update(dt);
     this.particles.update(dt);
     if (!this.paused) {
-      this.animals.update(dt); this.pickups.update(dt);
+      this.animals.update(dt); this.pickups.update(dt); this.fishing.update(dt);
       this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
       if (this.mission) this.mission.update(dt);
       if (this.campaign) this.campaign.update(dt);
@@ -340,6 +354,7 @@ export class Game {
       this.updateDefuse(dt);
     }
     this.campfires.update(dt);
+    if (!this.paused) this.injury.update(dt);
     if (this.town && this.paused) this.town.update(dt);
     this.bubbles.update(dt);
 
@@ -350,10 +365,18 @@ export class Game {
     if (this.shake > 0) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.3;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.3;
-      this.shake = Math.max(0, this.shake - dt * 2);
+      this.shake = Math.max(0, this.shake - this.realDt * 2.6);
     }
+    this.camera.position.y += this.injury.bob(p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5);
     this.scopeView.update(dt, input, playing);
     this.camera.rotation.set(p.pitch + this.scopeView.pitch, p.yaw + this.scopeView.yaw, 0);
+    if (this.dying) {
+      // the fall: the view sinks to the ground and tips over
+      const k = Math.min(1, this.dying.t / 1.9), e = k * k * (3 - 2 * k);
+      this.camera.position.y -= e * (p.eyeOffset - 0.25);
+      this.camera.rotation.set(p.pitch * (1 - e) - 0.25 * e, p.yaw, e * 1.15, 'YXZ');
+    } else this.camera.rotation.order = 'YXZ';
+    if (this.thirdPerson) this.thirdPerson.update(dt, this.dying);
     const scoped = this.scopeView.ease() > 0.5;
     const targetFov = this.scopeView.fov(p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75);
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
@@ -371,7 +394,7 @@ export class Game {
     this.flashlight.update(1 - this.sky.daylight, this.weather.rain);
 
     this.updateChunks(dt);
-    this.vm.set(scoped ? null : this.selected());
+    this.vm.set(scoped || this.dying ? null : this.selected());
     this.vm.update(dt, {
       moving: p.onGround && Math.hypot(p.vel.x, p.vel.z) > 0.5, sprint: p.running,
       light: Math.min(1, this.sky.daylight * (this.eyeSky ?? 1) + (this.lightOn ? 0.45 : 0) + (this.campfires.near(p.pos, 8) ? 0.3 : 0)), aim: false,
@@ -560,8 +583,11 @@ export class Game {
   }
 
   // ------------------------------------------------------------ dig & place
+  // War: the nation you fight for (your uniform in third person)
+  playerNation() { return this.enemies && this.enemies.nationFor ? this.enemies.nationFor('ally') : (this.cfg.side === 'axis' ? 'de' : 'us'); }
   aim() {
     const eye = this.player.eye(this.tmpV.clone());
+    if (this.thirdPerson) this.thirdPerson.aimOrigin(eye);
     const p = this.player, sv = this.scopeView;
     // the scope's breathing sway moves the point of aim too
     const yaw = p.yaw + sv.yaw, pitch = p.pitch + sv.pitch, cp = Math.cos(pitch);
@@ -722,7 +748,7 @@ export class Game {
     const { eye, dir } = this.aim();
     if (item === 'flint') { this.useFlint(eye, dir); return; }
     // the fishing rod reacts to a fresh press only (cast, then reel in)
-    if (item === 'rod') { if (this.town && (input.mouse.rightPressed || input.thit('place'))) this.town.fishing.use(eye, dir); return; }
+    if (item === 'rod') return;          // the rod is used through its Cast / Reel in prompt (aimuse.js)
     if (this.town && this.townUse(item, def, eye, dir)) return;
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (def.place === 'watchtower') { this.placeWatchtower(hit); return; }
@@ -855,7 +881,7 @@ export class Game {
         if (p.hunger > 20) this.hungerStage = 0;
         this.hud.toast(t(id === 'meat_raw' ? 'hud.ateRaw' : 'hud.ate'));
       } else {
-        p.health = Math.min(100, p.health + def.heal);
+        p.health = Math.min(100, p.health + def.heal); this.injury.stopBleeding();
         sfx.heal(); this.hud.toast(t('hud.healed'));
       }
       this.hud.dirtyHotbar = true;
@@ -995,24 +1021,34 @@ export class Game {
     }
   }
 
-  damage(n, cause = 'hurt', from = null) {
-    if (this.dead || n <= 0) return;
+  damage(n, cause = 'hurt', from = null, opts = {}) {
+    if (this.dead || this.dying || n <= 0) return;
     if (this.player.car && cause === 'combat') n = this.vehicles.absorb(n);     // the car takes most of it
-    this.player.health = Math.max(0, this.player.health - n * (1 - this.armor()));
+    n *= 1 - this.armor();
+    this.player.health = Math.max(0, this.player.health - n);
     this.hud.flash();
     if (from) {
       const ang = Math.atan2(-(from.x - this.player.pos.x), -(from.z - this.player.pos.z)) - this.player.yaw;
       this.hud.damageFrom(ang);
     }
-    sfx.hurt();
+    this.injury.hit(n, from, { heavy: opts.heavy || cause === 'fall' || n >= 20, bleed: opts.bleed || cause === 'combat' || cause === 'shot' });
     if (this.player.health <= 0) this.die(cause);
   }
 
   // Death rules. Starving alone ends the game; starving with allies costs one
   // weapon; any other death loses every carried weapon.
+  // Every death starts with the slow-motion fall (see injury.js); then dieNow.
   die(cause) {
-    if (this.dead) return;
+    if (this.dead || this.dying) return;
     if (this.player.car) this.vehicles.exit(true);
+    if (this.player.riding && this.horses) this.horses.dismount(true);
+    this.scopeView.close();
+    this.player.vel.set(0, 0, 0);
+    this.dying = { t: 0, cause };
+    this.injury.startDeath();
+  }
+  dieNow(cause) {
+    if (this.dead) return;
     this.stats.deaths = (this.stats.deaths || 0) + 1;
     const alone = this.cfg.sub === 'alone';
     if (this.town) { this.scopeView.close(); this.craft = null; this.breath = AIR; this.town.onDeath(cause); return; }
@@ -1094,7 +1130,7 @@ export class Game {
     };
   }
 
-  render(renderer) { renderer.render(this.scene, this.camera); this.vm.render(renderer); }
+  render(renderer) { renderer.render(this.scene, this.camera); if (!this.vm.hidden) this.vm.render(renderer); }
 
   resize() { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.vm.resize(); }
 
@@ -1110,7 +1146,7 @@ export class Game {
     document.body.classList.remove('townlife');
     for (const ch of this.chunks.values()) for (const k of ['solid', 'water']) if (ch[k]) ch[k].geometry.dispose();
     this.rafts.forEach((r) => r.dispose());
-    this.animals.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
+    this.animals.dispose(); this.injury.dispose(); this.fishing.dispose(); if (this.thirdPerson) this.thirdPerson.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
     this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose(); document.body.classList.remove('scoped');
     this.world.onSet = null;
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();

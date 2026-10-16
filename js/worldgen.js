@@ -240,7 +240,7 @@ export function generate(world) {
     if (here !== B.GRASS && here !== B.DIRT && here !== B.SAND) continue;
     if (L.rice && f > 1 - L.rice * 2.2 && x % 9 && z % 7) {
       world.data[world.idx(x, top, z)] = B.WATER; world.data[world.idx(x, top - 1, z)] = B.MUD;   // a flooded paddy
-    } else if (L.fields && f < -1 + L.fields * 2.2) {
+    } else if (L.fields && !world.cfg.country && f < -1 + L.fields * 2.2) {     // War has no farming: no fields or crops
       world.data[world.idx(x, top, z)] = B.FARMLAND;
       if (z % 2 === 0 && world.get(x, top + 1, z) === B.AIR) world.data[world.idx(x, top + 1, z)] = L.ground === 'snow' ? B.WILTED : crops[Math.floor(Math.abs(f) * 7) % 3];
     } else if (L.hedges && Math.abs(n6.noise(x / 30, z / 30)) < 0.025) {
@@ -250,9 +250,12 @@ export function generate(world) {
 
   // --- trees ---------------------------------------------------------------
   const tp = world.cfg.country ? L.trees : 0.0065;
+  world.trees = [];                    // where the trees stand (bears and wolves live in the woods)
   for (let z = 3; z < D - 3; z++) for (let x = 3; x < W - 3; x++) {
     const orchard = L.orchard && x % 6 === 0 && z % 6 === 0 && n5.noise(x / 50, z / 50) > 0.45;
-    if (!orchard && hash2(x, z, seed + 31) > tp * (L.tree === 'jungle' || L.tree === 'pine' ? (n5.noise(x / 60, z / 60) > 0 ? 1.8 : 0.3) : 1)) continue;
+    // War: woods grow thicker along rivers and lakes
+    const wet = world.cfg.country && distLand[x + z * W] < 18 ? 2.6 : 1;
+    if (!orchard && hash2(x, z, seed + 31) > tp * wet * (L.tree === 'jungle' || L.tree === 'pine' ? (n5.noise(x / 60, z / 60) > 0 ? 1.8 : 0.3) : 1)) continue;
     if (coast && z > D - COAST - 10) continue;
     const top = tops[x + z * W];
     if (top <= SEA) continue;
@@ -265,6 +268,7 @@ export function generate(world) {
     const tr = mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9));
     if (!world.cfg.country) plantTree(world, x, top + 1, z, tr);
     else plantKind(world, orchard ? 'olive' : L.tree, x, top + 1, z, tr);
+    if (!orchard) world.trees.push(x, z);
   }
 
   // --- spawn ---------------------------------------------------------------

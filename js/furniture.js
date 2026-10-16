@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { PartList, mat4 } from './merge.js';
 
 const WOOD = 0x6a4a2a, DARKWOOD = 0x4a3020, LINEN = 0xe8e0d0, WHITE = 0xf0ece4;
-const BLANKET = { mansion: 0x7a2a2e, house: 0x3a5a7a, cottage: 0x8a7a54 };
+const BLANKET = { mansion: 0x7a2a2e, house: 0x3a5a7a, cottage: 0x8a7a54, hospital: 0xe4e2dc };
 const SOFA = { mansion: 0x5e2434, house: 0x5a6a4a, cottage: 0x7a6a50 };
 const RUG = { mansion: 0x8a2a2a, house: 0x6a5a3a };
 const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
@@ -22,6 +22,7 @@ export class Furniture {
     for (const b of village.buildings) {
       if (b.furn) this.home(P, E, b.furn);
       if (b.cell) this.cot(P, b.cell);
+      if (b.beds) for (const bd of b.beds) this.bed(P, { pos: bd, head: bd.head, w: 1 }, bd.y, 'hospital');   // the hospital ward
     }
     this.mesh = new THREE.Mesh(P.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
     this.embers = new THREE.Mesh(E.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
@@ -44,16 +45,7 @@ export class Furniture {
   home(P, E, F) {
     const st = F.status;
     // beds: head toward the back wall
-    for (const bd of F.beds) {
-      const f = bd.head, at = { x: bd.pos.x, y: F.base, z: bd.pos.z }, W = bd.w * 0.95;
-      this.put(P, box(W, 0.3, 1.95), at, f, 0, 0.3, 0, DARKWOOD);
-      this.put(P, box(W - 0.06, 0.12, 1.85), at, f, 0, 0.51, 0, LINEN);
-      this.put(P, box(W - 0.03, 0.06, 1.2), at, f, 0, 0.6, -0.33, BLANKET[st]);
-      for (const x of bd.w === 2 ? [-0.45, 0.45] : [0]) this.put(P, box(0.62, 0.1, 0.32), at, f, x, 0.62, 0.7, WHITE);
-      this.put(P, box(W, st === 'mansion' ? 1.15 : 0.9, 0.08), at, f, 0, st === 'mansion' ? 0.72 : 0.6, 0.98, DARKWOOD);
-      this.put(P, box(W, 0.55, 0.06), at, f, 0, 0.42, -0.98, DARKWOOD);
-      this.solid(at, f, W, 1.95, 0.6);
-    }
+    for (const bd of F.beds) this.bed(P, bd, F.base, st);
     // the dining table and its chairs
     const T = F.table, tf = T.dirOut, tat = { x: T.center.x, y: F.base, z: T.center.z };
     const tw = T.wide * 0.9, tl = T.len * 0.95;
@@ -94,6 +86,18 @@ export class Furniture {
       for (const sx of [-0.2, 0.05, 0.25]) this.put(P, box(0.42, 0.1, 0.1), at, f, sx, 0.16, -0.36, 0x3a2a1a);
       for (const sx of [-0.22, 0, 0.2]) this.put(E, box(0.2, 0.08 + Math.abs(sx) * 0.2, 0.1), at, f, sx, 0.22, -0.4, sx ? 0xd06020 : 0xffa040);
     }
+  }
+  // a bed: head toward bd.head (hospital beds: white iron frames)
+  bed(P, bd, base, st) {
+    const f = bd.head, at = { x: bd.pos.x, y: base, z: bd.pos.z }, W = bd.w * 0.95, frame = st === 'hospital' ? 0xd8dcd8 : DARKWOOD;
+    this.put(P, box(W, 0.3, 1.95), at, f, 0, 0.3, 0, frame);
+    this.put(P, box(W - 0.06, 0.12, 1.85), at, f, 0, 0.51, 0, LINEN);
+    this.put(P, box(W - 0.03, 0.06, 1.2), at, f, 0, 0.6, -0.33, BLANKET[st]);
+    for (const x of bd.w === 2 ? [-0.45, 0.45] : [0]) this.put(P, box(0.62, 0.1, 0.32), at, f, x, 0.62, 0.7, WHITE);
+    this.put(P, box(W, st === 'mansion' ? 1.15 : 0.9, 0.08), at, f, 0, st === 'mansion' ? 0.72 : 0.6, 0.98, frame);
+    this.put(P, box(W, 0.55, 0.06), at, f, 0, 0.42, -0.98, frame);
+    if (st === 'hospital') { this.put(P, box(0.26, 0.08, 0.02), at, f, 0, 1.35, 0.99, 0xb02020); this.put(P, box(0.08, 0.26, 0.02), at, f, 0, 1.35, 0.99, 0xb02020); }   // a red cross on the wall
+    this.solid(at, f, W, 1.95, 0.6);
   }
   cot(P, cell) {
     const c = cell.cot, at = { x: c.x + 1, y: c.y, z: c.z + 0.5 }, f = { x: c.dir[0], z: c.dir[1] };

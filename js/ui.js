@@ -275,6 +275,11 @@ export class UI {
       <div class="field"><span>${t('set.sens')} <b id="sensv">${s.sensitivity.toFixed(2)}</b></span><input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-range="sensitivity"></div>
       <div class="field"><span>${t('set.invert')}</span>${seg('invertY', [[false, t('set.off')], [true, t('set.on')]])}</div>
       <div class="field"><span>${t('set.blood')}</span>${seg('blood', [[true, t('set.on')], [false, t('set.off')]])}</div>
+      <div class="field"><span>${t('set.shake')}</span>${seg('shake', [['full', t('set.shakeFull')], ['reduced', t('set.shakeReduced')], ['off', t('set.off')]])}</div>
+      <p class="muted small">${t('set.shakeNote')}</p>
+      <div class="field"><span>${t('set.camera')}</span>${seg('camera', [['first', t('set.camFirst')], ['third', t('set.camThird')]])}</div>
+      <div class="field"><span>${t('set.camDetail')}</span>${seg('camDetail', [['full', t('set.camFull')], ['low', t('set.camLow')]])}</div>
+      <p class="muted small">${t('set.cameraNote')}</p>
       <div class="field"><span>${t('set.minimap')}</span>${seg('minimap', [[true, t('set.on')], [false, t('set.off')]])}</div>
       <div class="field"><span>${t('set.minimapSize')}</span>${seg('minimapSize', [['s', t('set.small')], ['m', t('set.mid')], ['l', t('set.large')]])}</div>
       <div class="field"><span>${t('set.awareness')}</span>${seg('awareness', [[true, t('set.on')], [false, t('set.off')]])}</div>
@@ -403,7 +408,7 @@ export class UI {
     }
     const panel = this.panel(t(fire ? 'craft.titleFire' : 'craft.title'), body, { wide: true, onBack: () => this.app.closePanel() });
     panel.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => {
-      const r = RECIPES.find((x) => x.id === b.dataset.r);
+      const r = g.recipes().find((x) => x.id === b.dataset.r) || RECIPES.find((x) => x.id === b.dataset.r);   // (the rod differs between the games)
       if (g.startCraft(r)) this.app.closePanel();
     });
   }

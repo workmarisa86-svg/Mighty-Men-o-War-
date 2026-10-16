@@ -112,6 +112,23 @@ export function installTownUI(UI) {
     this.panel(t('law.jailTitle'), body, { onBack: () => this.app.closePanel() });
   };
 
+  // ---- the hospital: waking after a death ------------------------------------
+  P.r_hospital = function ({ mode, fee = 0, paid = 0, help = 0, owe = 0, debt = 0, starve = false }) {
+    const T = this.app.game.town;
+    if (mode === 'arrest') {
+      const body = `<p>${t('hosp.arrest')}</p><ul class="steps"><li>${t('hosp.arrestHow')}</li></ul>
+        <div class="menu"><button class="btn primary" id="hgo">${t('hosp.goJail')}</button></div>`;
+      this.panel(t('hosp.title'), body, { back: false });
+      this.root.querySelector('#hgo').onclick = () => { this.app.closePanel(); T.hospitalToJail(); };
+      return;
+    }
+    const lines = [t(starve ? 'hosp.starved' : 'hosp.treated'), t('hosp.fee', { n: fee })];
+    if (paid) lines.push(t('hosp.youPaid', { n: paid }));
+    if (help) lines.push(t('hosp.townPaid', { n: help }));
+    if (owe) lines.push(t('hosp.owe', { n: owe, debt }));
+    this.panel(t('hosp.title'), `<ul class="steps">${lines.map((l) => `<li>${l}</li>`).join('')}</ul>`, { onBack: () => this.app.closePanel() });
+  };
+
   // ---- sleep: until night or until morning ----------------------------------
   P.r_sleep = function () {
     const g = this.app.game, T = g.town, h = (g.time % 1) * 24;

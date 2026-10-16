@@ -1,5 +1,7 @@
-// Town Life fishing. With a fishing rod in hand, aim at a river or a lake
-// (up to 16 m away) and use it to cast: the bobber floats where it lands.
+// Fishing (War and Town Life). With a fishing rod in hand, aim at a river, a
+// lake or the sea (up to 16 m away): a "Cast" prompt appears; use it and the
+// bobber floats where it lands. Fish are not simulated until you cast.
+// (Fishing is quiet, but you stand still at the water, in the open.)
 // Wait (fish bite sooner at dawn and dusk), and when the bobber dips and
 // splashes ("A bite!") use the rod again within a second and a half to reel
 // it in: usually a fish, sometimes a big pike. Too early and you pull up an
@@ -25,19 +27,25 @@ export class Fishing {
     this.tip = new THREE.Vector3();
   }
   // the rod is used (right click / USE / tap the prompt): cast, or reel in
-  use(eye, dir) {
-    const g = this.game, S = this.state;
-    if (S && S.phase === 'bite') { this.catchFish(); return true; }
-    if (S) { this.reelIn(t('fish.tooEarly')); return true; }
-    const w = g.world;
-    let at = null;
+  // the water you aim at (null), or 'ice'
+  waterAt(eye, dir) {
+    const w = this.game.world;
     for (let d = 1.5; d <= RANGE; d += 0.2) {
       const x = eye.x + dir.x * d, y = eye.y + dir.y * d, z = eye.z + dir.z * d, b = w.get(Math.floor(x), Math.floor(y), Math.floor(z));
       // on the water, or skimming just over it (a forgiving aim)
-      if (b === B.WATER || (d > 3 && dir.y < 0 && !SOLID[b] && w.get(Math.floor(x), Math.floor(y) - 1, Math.floor(z)) === B.WATER)) { at = { x, y: b === B.WATER ? y : Math.floor(y) - 0.5, z }; break; }
-      if (b === B.ICE) { g.hud.toast(t('fish.frozen')); sfx.error(); return true; }
+      if (b === B.WATER || (d > 3 && dir.y < 0 && !SOLID[b] && w.get(Math.floor(x), Math.floor(y) - 1, Math.floor(z)) === B.WATER)) return { x, y: b === B.WATER ? y : Math.floor(y) - 0.5, z };
+      if (b === B.ICE) return 'ice';
       if (SOLID[b]) break;
     }
+    return null;
+  }
+  use(eye, dir) {
+    const g = this.game, S = this.state;
+    if (S && S.phase === 'bite') { this.catchFish(); return true; }
+    if (S) { this.reelIn(t('fish.tooEarly')); sfx.fishReel(); return true; }
+    const w = g.world;
+    const at = this.waterAt(eye, dir);
+    if (at === 'ice') { g.hud.toast(t('fish.frozen')); sfx.error(); return true; }
     if (!at) { g.hud.toast(t('fish.where')); sfx.error(); return true; }
     const fx = Math.floor(at.x), fz = Math.floor(at.z);
     let top = Math.floor(at.y);
@@ -47,7 +55,7 @@ export class Fishing {
     const wait = (3 + Math.random() * 9) * (golden ? 0.6 : 1) * (g.town && g.town.season === 'winter' ? 1.4 : 1);
     this.state = { phase: 'wait', pos: new THREE.Vector3(at.x, top + 0.97, at.z), t: 0, wait, biteT: 0, misses: 0 };
     this.bob.position.copy(this.state.pos); this.bob.visible = true; this.line.visible = true;
-    sfx.swish(); setTimeout(() => sfx.swim(), 350);
+    sfx.fishCast(); setTimeout(() => sfx.fishPlop(), 420);
     g.vm.doSwing();
     g.hud.toast(t('fish.cast'));
     return true;
@@ -62,7 +70,7 @@ export class Fishing {
     g.give(id, 1, true); g.hud.dirtyHotbar = true;
     if (g.town) g.town.st.fish = (g.town.st.fish || 0) + 1;
     g.particles.burst(this.state.pos.x, this.state.pos.y, this.state.pos.z, [0.6, 0.72, 0.8], 12, 2.5, 0.6);
-    sfx.splash(); sfx.done(); g.vm.doSwing();
+    sfx.fishReel(); sfx.done(); g.vm.doSwing();
     this.reelIn(); g.hud.toast(t(big ? 'fish.caughtBig' : 'fish.caught'), 'pick');
   }
   update(dt) {
@@ -75,7 +83,7 @@ export class Fishing {
     const dip = S.phase === 'bite' ? -0.12 + Math.sin(S.t * 30) * 0.05 : Math.sin(S.t * 2.4) * 0.02;
     this.bob.position.set(S.pos.x, S.pos.y + dip, S.pos.z);
     if (S.phase === 'wait' && S.t >= S.wait) {
-      S.phase = 'bite'; S.biteT = BITE; sfx.splash();
+      S.phase = 'bite'; S.biteT = BITE; sfx.fishBite();
       g.particles.burst(S.pos.x, S.pos.y, S.pos.z, [0.6, 0.72, 0.8], 6, 1.5, 0.4);
       g.hud.toast(t(g.app.input.touch ? 'fish.biteTouch' : 'fish.bite'), 'warn');
     } else if (S.phase === 'bite' && (S.biteT -= dt) <= 0) {

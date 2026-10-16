@@ -81,12 +81,15 @@ const VARIANTS = {};
 // 'felt' | 'scarf' | 'none', hair }
 const LOOKS = {};
 export function civLook(key, look) { LOOKS[key] = look; }
+// (never a blank figure: anyone without a look of their own gets ordinary clothes)
+const DEFAULT_LOOK = { shirt: 0x8a7a62, trousers: 0x3a342c, vest: 0x4a3a2a, hair: 0x3a2a1c, hat: 'cap', hatColor: 0x5a5448 };
 // faction 'ally' / 'enemy' for the old look; or a nation code (us, de, ...)
 // whose side and uniform decide the colours and helmet
 function variant(faction, type, skin) {
-  const key = `${faction}|${type}|${skin}|${SEG}`;
+  // (a person's look is part of the key: a newcomer reusing a slot gets their own clothes)
+  const key = `${faction}|${type}|${skin}|${SEG}` + (faction === 'civ' ? JSON.stringify(LOOKS[type] || null) : '');
   if (VARIANTS[key]) return VARIANTS[key];
-  if (faction === 'civ') return (VARIANTS[key] = civVariant(LOOKS[type] || {}, skin));
+  if (faction === 'civ') return (VARIANTS[key] = civVariant(LOOKS[type] || DEFAULT_LOOK, skin));
   const nat = UNIFORM_OF[faction];
   const F = nat ? UNIFORMS[nat] : FACTIONS[faction];
   if (nat) faction = SIDE_NATIONS.axis.includes(nat) ? 'enemy' : 'ally';     // helmet shape: Axis deep, Allies bowl
@@ -204,6 +207,7 @@ function variant(faction, type, skin) {
 // Peacetime clothes for townspeople: shirt and trousers or a dress, an
 // optional waistcoat or apron, a cap, felt hat or headscarf.
 function civVariant(L, skin) {
+  if (L.long && L.hat === 'scarf') L = Object.assign({}, L, { hat: 'none' });   // (older saves) women show their hair, no coloured caps
   const sk = SKINS[skin % SKINS.length];
   const shirt = L.shirt ?? 0xc8bca0, trousers = L.trousers ?? 0x4a4038, hair = L.hair ?? 0x3a2a1c;
   const v = {}, SK = L.long ? SKIN_CLEAN : SKIN;
@@ -244,10 +248,19 @@ function civVariant(L, skin) {
     // the hairline sits high on the forehead and low at the nape (the cap is tipped back)
     if (L.hat !== 'scarf') p.add(sph(0.128, 0, Math.PI * 0.6), mat4([0, 0.165, 0.02], [-0.55, 0, 0], [1.05, 0.95, 1.05]), hair, FAB);
     for (const s of [-1, 1]) p.add(sph(0.05), mat4([s * 0.1, 0.13, 0.03], 0, [0.6, 1.3, 1]), hair, FAB);     // over the ears
-    if (L.style === 'bun') { p.add(sph(0.08), mat4([0, 0.2, 0.11], 0, [1.1, 1, 0.9]), hair, FAB); p.add(sph(0.045), mat4([0, 0.27, 0.06]), hair, FAB); }
+    // (every shape overlaps the next, so the hair reads as one smooth mass)
+    if (L.style === 'bun') { p.add(sph(0.075), mat4([0, 0.19, 0.115], 0, [1.15, 1, 0.95]), hair, FAB); p.add(sph(0.06), mat4([0, 0.14, 0.1], 0, [1.1, 0.9, 0.8]), hair, FAB); }
     else if (L.style === 'braid') {
-      p.add(sph(0.06), mat4([0, 0.12, 0.11], 0, [1, 1, 0.8]), hair, FAB);
-      for (let k = 0; k < 4; k++) p.add(sph(0.035), mat4([0, 0.06 - k * 0.07, 0.125 + k * 0.004], 0, [1, 1.25, 1]), hair, FAB);
+      // one braid down the back: a tapered rope with soft twists along it, tied at the end
+      p.add(sph(0.065), mat4([0, 0.11, 0.105], 0, [1.05, 1.1, 0.85]), hair, FAB);
+      p.add(caps(0.034, 0.24), mat4([0, -0.06, 0.13], [0.12, 0, 0], [1, 1, 0.9]), hair, FAB);
+      for (let k = 0; k < 5; k++) p.add(sph(0.036 - k * 0.002), mat4([(k % 2 ? 0.006 : -0.006), 0.05 - k * 0.05, 0.128 + k * 0.006], [0, 0, k % 2 ? 0.5 : -0.5], [1.05, 1.35, 0.95]), hair, FAB);
+      p.add(cyl(0.024, 0.024, 0.02), mat4([0, -0.2, 0.15]), 0x5a3a2a, FAB);                          // the ribbon
+      p.add(caps(0.022, 0.03), mat4([0, -0.24, 0.152]), hair, FAB);                                   // the tuft
+    } else if (L.style === 'ponytail') {
+      p.add(sph(0.062), mat4([0, 0.16, 0.11], 0, [1, 1, 0.85]), hair, FAB);
+      p.add(cyl(0.028, 0.028, 0.025), mat4([0, 0.15, 0.155], [1.2, 0, 0]), 0x3a2a1c, FAB);           // tied
+      p.add(caps(0.042, 0.16), mat4([0, 0.05, 0.17], [0.28, 0, 0], [1.1, 1, 0.85]), hair, FAB);       // falls down the back
     } else {
       p.add(caps(0.1, 0.12), mat4([0, 0.06, 0.07], [0.1, 0, 0], [1.08, 1, 0.5]), hair, FAB);                    // falls softly to the shoulders
       for (const s of [-1, 1]) p.add(caps(0.035, 0.12), mat4([s * 0.095, 0.07, 0.02], [0, 0, -s * 0.08], [1, 1, 1.2]), hair, FAB);
@@ -378,7 +391,7 @@ export class Character {
   setLod(l) {
     if (l === this.lod) return;
     this.lod = l;
-    this.kit.visible = l === 0; this.face.visible = l === 0;
+    this.kit.visible = l === 0; this.face.visible = l < 2;     // faces stay (a blank face read as a mannequin); only the farthest drop them
     if (this.patch) this.patch.visible = l === 0;
   }
 

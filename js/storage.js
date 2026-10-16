@@ -56,6 +56,9 @@ export const DEFAULT_SETTINGS = {
   touchSize: 'm',
   perf: 'normal',
   res: 'auto',         // sharpness: auto (as sharp as the frame rate allows) | sharp | balanced | fast
+  shake: 'full',       // screen shake and phone vibration when you are hit: full | reduced | off
+  camera: 'first',     // camera view: first | third (over the shoulder)
+  camDetail: 'full',   // third person: your own character in full or lower detail (weaker phones)
   awareness: true,     // War: the eye over enemies who are noticing you      // 'smooth': shorter view and lighter effects for a steadier frame rate
 };
 export function loadSettings() { return Object.assign({}, DEFAULT_SETTINGS, load('settings', {})); }
