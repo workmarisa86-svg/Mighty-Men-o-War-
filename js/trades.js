@@ -36,6 +36,7 @@ import { B, SOLID } from './blocks.js';
 import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { civLook } from './characters.js';
+import { findPath } from './path.js';
 
 export const TRADES = ['farmer', 'hunter', 'bounty', 'merchant', 'drifter', 'outlaw'];
 export const GROUPS = ['farmers', 'merchants', 'law', 'outlaws'];
@@ -482,7 +483,8 @@ export class Trades {
   issue(cmd, point) {
     const g = this.game;
     this.order = { cmd, point: point ? point.clone() : g.player.pos.clone() };
-    for (const v of this.gang) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; }
+    for (const v of this.gang) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; }
+    if (cmd === 'spread' || cmd === 'defend') this.ringSpots(this.order.point, cmd === 'spread' ? 6 : 3);
     if (cmd === 'distract') {
       const p = this.order.point;
       const v = this.gang.filter((m) => m.alive).sort((a, b) => a.pos.distanceTo(p) - b.pos.distanceTo(p))[0];
@@ -490,6 +492,24 @@ export class Trades {
     }
     g.hud.toast(t('gang.order', { o: t('ord.' + cmd) }));
     sfx.toggle();
+  }
+  // a place to stand for each man round a point: on dry, open ground about level
+  // with it (a spot in a lake, a wall or up a cliff would leave him stuck)
+  ringSpots(c, R) {
+    const F = this.town.folk, alive = this.gang.filter((m) => m.alive), n = alive.length;
+    const cy = F.ground(c.x, c.z, c.y + 2) ?? c.y, taken = [];
+    alive.forEach((v, i) => {
+      let best = null;
+      for (const dr of [0, -1, 1, -2, 2, -3]) for (const da of [0, 0.35, -0.35, 0.7, -0.7]) {
+        if (best) break;
+        const a = i / n * Math.PI * 2 + da, r = Math.max(1.2, R + dr), x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
+        const gy = F.ground(x, z, cy + 2);
+        if (gy == null || Math.abs(gy - cy) > 2 || !F.free(x, gy, z) || taken.some((q) => Math.hypot(q.x - x, q.z - z) < 1.2)) continue;
+        best = { x: Math.floor(x) + 0.5, y: gy, z: Math.floor(z) + 0.5 };
+      }
+      v.spot = best || { x: c.x, y: cy, z: c.z };
+      taken.push(v.spot);
+    });
   }
   // who the gang shoots at: anyone fighting you (the posse when it turns hostile, an outlaw who drew)
   gangTarget(v) {
@@ -533,9 +553,25 @@ export class Trades {
       run = d > 8;
     } else if (O.cmd === 'hold') goal = v.holdAt;
     else if (O.cmd === 'defend' || O.cmd === 'spread') {
-      const R = O.cmd === 'spread' ? 6 : 3, a = i / n * 6.28;
-      goal = { x: O.point.x + Math.cos(a) * R, y: O.point.y, z: O.point.z + Math.sin(a) * R };
-      run = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 8;
+      if (!v.spot) this.ringSpots(O.point, O.cmd === 'spread' ? 6 : 3);
+      // no headway for a while (something in the way): take a place on his own side of the ring instead
+      const gs = Math.hypot(v.spot.x - v.pos.x, v.spot.z - v.pos.z);
+      v.chkT = (v.chkT || 0) - dt;
+      if (v.chkT <= 0) {                                    // once a second: closer by half a metre or more?
+        v.chkT = 1;
+        if (gs > 1.5 && v.spotBest != null && v.spotBest - gs < 0.5) v.spotT = (v.spotT || 0) + 1; else v.spotT = 0;
+        v.spotBest = gs;
+      }
+      if (v.spotT >= 3) {
+        v.spotT = 0; v.spotBest = null; v.route = [];
+        const R = O.cmd === 'spread' ? 6 : 3, a = Math.atan2(v.pos.z - O.point.z, v.pos.x - O.point.x);
+        for (const r of [R, R + 2, R - 2, R + 4]) {
+          const x = O.point.x + Math.cos(a) * r, z = O.point.z + Math.sin(a) * r, gy = F.ground(x, z, v.pos.y + 2);
+          if (gy != null && F.free(x, gy, z)) { v.spot = { x, y: gy, z }; break; }
+        }
+      }
+      goal = v.spot;
+      run = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 3;
     } else if (O.cmd === 'cover') {
       if (!v.coverAt) v.coverAt = this.coverFor(v, tg) || v.pos.clone();
       goal = v.coverAt;
@@ -548,7 +584,11 @@ export class Trades {
     if (goal && gd > (O.cmd === 'follow' ? 26 : 14) && v.stuckT > 0.8 && !F.visible(v) || (O.cmd === 'follow' && goal && gd > 26 && !F.visible(v))) { const gy = F.ground(goal.x, goal.z, P.y + 2); if (gy != null && F.free(goal.x, gy, goal.z)) { v.pos.set(goal.x, gy, goal.z); v.route = []; } }
     v.detourT = Math.max(0, (v.detourT || 0) - dt);
     if (goal && gd > 0.9) {
-      if (gd < 9 && v.detourT <= 0) { v.route = []; F.step(v, goal.x, goal.z, sp, dt, goal.y); if (v.stuckT > 1.2) { v.stuckT = 0; v.detourT = 3; } }   // blocked: find a way round for a moment
+      if (gd < 9 && v.detourT <= 0) {
+        v.route = []; F.step(v, goal.x, goal.z, sp, dt, goal.y);
+        // blocked (a fence, a wall): plan a real way round and follow it for a while
+        if (v.stuckT > 1) { v.stuckT = 0; v.route = findPath(this.game.world, v.pos, goal, 1500, true) || []; v.detourT = v.route.length ? 4 : 0; }
+      } else if (v.detourT > 0 && v.route.length) { if (F.walk(v, dt, sp)) v.detourT = 0; }
       else F.goDirect(v, goal, sp, dt, 0.8);
     } else v.speed = 0;
     v.crouch = O.cmd === 'cover' && v.speed === 0 && !(tg && v.cool < 0.3);
