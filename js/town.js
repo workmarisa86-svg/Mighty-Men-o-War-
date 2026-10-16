@@ -365,8 +365,17 @@ export class TownLife {
         if (!v.cover || v.coverT <= 0) { v.cover = F.coverSpot(v); v.coverT = 7; v.route = []; }
         if (v.cover && Math.hypot(v.cover.x - v.pos.x, v.cover.z - v.pos.z) > 0.7) { F.goDirect(v, v.cover, (v.horse ? 1.9 : 1) * (4.6), dt, 0.5); v.crouch = false; }
         else { v.speed = 0; v.peekT = (v.peekT || 0) - dt; if (v.peekT <= 0) { v.peeking = !v.peeking; v.peekT = v.peeking ? 1.8 : 1.2; } v.crouch = !!v.cover && !v.peeking; }
-        v.yaw = Math.atan2(-(pl.x - v.pos.x), -(pl.z - v.pos.z));
-        if (!v.crouch) F.shootAt(v, dt);
+        // your gang is fair game too: now and then a posseman turns his gun on the nearest of them
+        v.foeT = (v.foeT || 0) - dt;
+        if (v.foeT <= 0) {
+          v.foeT = 3 + Math.random() * 2;
+          const gang = this.trades.gang.filter((m) => m.alive && m.pos.distanceTo(v.pos) < 35);
+          v.foe = gang.length && Math.random() < 0.55 ? gang.sort((a, b) => a.pos.distanceTo(v.pos) - b.pos.distanceTo(v.pos))[0] : null;
+        }
+        const foe = v.foe && v.foe.alive ? v.foe : null;
+        const at = foe ? foe.pos : pl;
+        v.yaw = Math.atan2(-(at.x - v.pos.x), -(at.z - v.pos.z));
+        if (!v.crouch) { if (foe) F.shootAtMan(v, dt, foe); else F.shootAt(v, dt); }
       } else { F.goDirect(v, { x: P.lastSeen.x + spread.x, y: P.lastSeen.y, z: P.lastSeen.z + spread.z }, (v.horse ? 1.9 : 1) * (4.8), dt, 1.5); v.crouch = false; }
       return;
     }

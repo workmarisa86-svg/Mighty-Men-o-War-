@@ -372,6 +372,24 @@ export class Townsfolk {
     tr.l.visible = true; tr.t = 0.07;
     if (Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
   }
+  // the posse firing at one of your gang (trades.js)
+  shootAtMan(v, dt, o) {
+    const g = this.game;
+    v.cool -= dt;
+    if (v.cool > 0 || !o.alive) return;
+    const d = Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z);
+    if (d > 45 || (v.armed === 'shotgun' && d > 28)) return;
+    const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z), b = new THREE.Vector3(o.pos.x, o.pos.y + (o.crouch ? 0.9 : 1.2), o.pos.z);
+    const dir = b.clone().sub(a), L = dir.length(); dir.divideScalar(L);
+    const block = g.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, L - 0.4, false, 'bullet');
+    v.cool = 1.6 + Math.random() * 1.2; v.fired = true;
+    sfx.shot(v.armed === 'revolver' ? 'revolver' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
+    const end = block ? a.clone().addScaledVector(dir, block.dist) : b;
+    const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
+    pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
+    tr.l.visible = true; tr.t = 0.07;
+    if (!block && Math.random() < Math.max(0.15, 0.75 - d / 55) * (o.crouch ? 0.6 : 1)) this.hurt(o, v.armed === 'shotgun' ? Math.max(10, 40 - d) : v.armed === 'lever' ? 26 : 18);
+  }
   // cover from the player: a nearby spot with a block between
   coverSpot(v) {
     const g = this.game, p = g.player.pos;

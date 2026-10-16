@@ -367,7 +367,11 @@ export class Trades {
       v.surrendered = 999; v.fight = null;
       const dd = Math.hypot(P.x - v.pos.x, P.z - v.pos.z);
       if (dd > 30) { const b = Math.atan2(v.pos.x - P.x, v.pos.z - P.z); v.pos.set(P.x + Math.sin(b) * 2, P.y, P.z + Math.cos(b) * 2); v.route = []; }   // (left far behind: he is brought along)
-      if (dd > 2.4) F.goDirect(v, { x: P.x, y: P.y, z: P.z }, dd > 6 ? 4.2 : 2.2, dt, 1.8); else v.speed = 0;
+      const sp = dd > 8 ? 6.4 : dd > 4 ? 4.6 : 2.2;
+      v.detourT = Math.max(0, (v.detourT || 0) - dt);
+      if (dd > 2.4) { if (dd < 9 && v.detourT <= 0) { v.route = []; F.step(v, P.x, P.z, sp, dt, P.y); if (v.stuckT > 1.2) { v.stuckT = 0; v.detourT = 3; } } else F.goDirect(v, { x: P.x, y: P.y, z: P.z }, sp, dt, 1.8); }
+      else v.speed = 0;
+      if (dd > 18 && !F.visible(v)) { const b2 = Math.atan2(v.pos.x - P.x, v.pos.z - P.z), gx = P.x + Math.sin(b2) * 2.5, gz = P.z + Math.cos(b2) * 2.5, gy = F.ground(gx, gz, P.y + 2); if (gy != null) { v.pos.set(gx, gy, gz); v.route = []; } }
       if (v.speed === 0) v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
       return true;
     }
@@ -536,8 +540,17 @@ export class Trades {
       if (!v.coverAt) v.coverAt = this.coverFor(v, tg) || v.pos.clone();
       goal = v.coverAt;
     }
-    if (goal && Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 1.2) F.goDirect(v, goal, run ? 5 : 2.4, dt, 1);
-    else v.speed = 0;
+    // keeping up: close by, they head straight for their (moving) place every frame; farther,
+    // they find a way round; the farther behind, the faster (a run, then a sprint)
+    const gd = goal ? Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) : 0;
+    const sp = gd > 12 ? 7.6 : gd > 6 ? 6.6 : gd > 2.5 || run ? 4.8 : 2.4;
+    // left far behind and out of sight (a long gallop, a steep climb): he catches up off-screen
+    if (goal && gd > (O.cmd === 'follow' ? 26 : 14) && v.stuckT > 0.8 && !F.visible(v) || (O.cmd === 'follow' && goal && gd > 26 && !F.visible(v))) { const gy = F.ground(goal.x, goal.z, P.y + 2); if (gy != null && F.free(goal.x, gy, goal.z)) { v.pos.set(goal.x, gy, goal.z); v.route = []; } }
+    v.detourT = Math.max(0, (v.detourT || 0) - dt);
+    if (goal && gd > 0.9) {
+      if (gd < 9 && v.detourT <= 0) { v.route = []; F.step(v, goal.x, goal.z, sp, dt, goal.y); if (v.stuckT > 1.2) { v.stuckT = 0; v.detourT = 3; } }   // blocked: find a way round for a moment
+      else F.goDirect(v, goal, sp, dt, 0.8);
+    } else v.speed = 0;
     v.crouch = O.cmd === 'cover' && v.speed === 0 && !(tg && v.cool < 0.3);
     // shoot at whoever is fighting you
     if (tg) {

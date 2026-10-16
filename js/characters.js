@@ -384,7 +384,7 @@ export class Character {
     const merged = mergeGroup('gun:' + id, src);
     for (const part of merged.parts) this.gun.add(new THREE.Mesh(part.geometry, part.material));
     this.gunLen = src.userData.length || 0.6;
-    this.oneHand = id === 'pistol' || id === 'knife';
+    this.oneHand = id === 'pistol' || id === 'knife' || id === 'revolver' || id === 'spistol';
   }
 
   // 0 = full detail, 1 = no kit or face, 2 = far (no kit, face or gun details)
@@ -540,10 +540,11 @@ export class Character {
     if (st.throwT != null && st.throwT >= 0) throwK = st.throwT;
     // ready (low, across the body) <-> aimed (stock on the right shoulder)
     const aim = s.aim * (1 - reloadK * 0.7);
-    const carryX = 0.07, carryY = shY - 0.27, carryZ = -0.22;
+    const long = !this.oneHand;
+    const carryX = long ? 0.05 : 0.07, carryY = shY - (long ? 0.3 : 0.27), carryZ = long ? -0.4 : -0.22;
     const aimX = this.oneHand ? 0.14 : 0.09, aimY = shY + 0.02, aimZ = this.oneHand ? -0.42 : -0.12;
     g.position.set(lerp(carryX, aimX, aim), lerp(carryY, aimY, aim) - reloadK * 0.08, lerp(carryZ, aimZ, aim) + s.kick * 0.05 * aim);
-    g.rotation.set(lerp(-0.55, 0, aim) + lean * aim + pitch + s.kick * 0.18 * aim + reloadK * 0.5, lerp(0.4, -0.02, aim), reloadK * 0.4);
+    g.rotation.set(lerp(long ? -0.32 : -0.55, 0, aim) + lean * aim + pitch + s.kick * 0.18 * aim + reloadK * 0.5, lerp(long ? 0.22 : 0.4, -0.02, aim), reloadK * 0.4);
     if (st.swim) g.visible = false;
     g.updateMatrix();
     // hand targets on the weapon
@@ -553,11 +554,11 @@ export class Character {
     if (moving && aim < 0.3 && !this.weapon) {
       // unarmed walk: free arm swing
       this.armL.rotation.set(sw * amp * 0.9, 0, -0.08); this.armR.rotation.set(-sw * amp * 0.9, 0, 0.08);
-      this.elbowL.rotation.x = -0.3 - s.run * 0.9; this.elbowR.rotation.x = -0.3 - s.run * 0.9;
+      this.elbowL.rotation.x = 0.3 + s.run * 1.1; this.elbowR.rotation.x = 0.3 + s.run * 1.1;      // (positive: forearms forward, as in a real run)
     } else {
       this.reach(this.armR, this.elbowR, grip, poleR);
       if (this.oneHand && aim < 0.5) {
-        this.armL.rotation.set(sw * amp * 0.8, 0, -0.1); this.elbowL.rotation.x = -0.3 - s.run * 0.8;
+        this.armL.rotation.set(sw * amp * 0.8, 0, -0.1); this.elbowL.rotation.x = 0.3 + s.run * 1.1;
       } else if (reloadK > 0) {
         // the support hand goes to the magazine / bolt and back
         this.reach(this.armL, this.elbowL, V2.copy(fore).lerp(grip, reloadK).add(V3.set(0.02, -0.06 * reloadK, 0)).clone(), poleL);
