@@ -25,7 +25,7 @@ export class ThirdPerson {
   wanted() {
     const g = this.game;
     if (g.dying) return !!this.deathThird;          // a death seen in third person stays in third person
-    this.deathThird = false; this.flyRoom = null;
+    this.deathThird = false;
     return g.settings.camera === 'third' && g.scopeView.ease() < 0.02 && !g.scopeView.kind;
   }
   build() {
@@ -99,69 +99,60 @@ export class ThirdPerson {
     // hide the character when the camera is pressed right up against it
     R.root.visible = this.dist > 0.7;
   }
-  // your death in third person: thrown backward in a dramatic back somersault
-  // (in the slow motion of the death): a jolt, the body flung up and over
-  // backward with arms and legs flailing (joints only bend the way they
-  // can), a heavy landing flat on the back with a bounce, then a sprawl.
-  // The camera stays and rises to look down on the body.
+  // your death in third person, as in the films: shot from in front you are
+  // thrown back, from behind you pitch forward (a jolt, then the body topples,
+  // faster and faster, and hits the ground with a small bounce); killed by an
+  // animal you sink to your knees first, then go down on your back or chest.
+  // Knees and elbows only bend the way they can. The camera stays and rises.
   deathView(dt) {
     const g = this.game, p = g.player, R = this.rig, D = g.dying, t = D.t;
     R.pose({ dead: 0 }, dt);                       // (hides the gun and the shadow, resets the body)
-    const ease = (k) => k * k * (3 - 2 * k), cl = (x) => Math.max(0, Math.min(1, x));
-    const JOLT = 0.3, AIR = 1.7, LAND = JOLT + AIR;
-    const jolt = cl(t / JOLT), air = cl((t - JOLT) / AIR), after = Math.max(0, t - LAND);
-    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    // how far back there is room to go (a wall stops the flight short)
-    if (this.flyRoom == null) {
-      const h = g.world.raycast(p.pos.x, p.pos.y + 0.9, p.pos.z, -fx, 0, -fz, 3.2, false, 'bullet');
-      this.flyRoom = h ? Math.max(0, h.dist - 0.6) : 2.6;
-    }
-    const back = Math.min(this.flyRoom, 2.6) * ease(air) + (after > 0 ? Math.min(0.25, after * 0.6) : 0);
-    const bounce = after > 0 ? Math.abs(Math.sin(Math.min(after, 0.6) / 0.6 * Math.PI)) * 0.18 * Math.max(0, 1 - after / 0.6) : 0;
-    const lift = Math.sin(Math.PI * air) * 1.25 + bounce;
-    // the turn: a full circle backward and a quarter more, landing face up
-    const spin = ease(air) * (Math.PI * 2 + Math.PI / 2);
-    const b = R.body, C = 0.95;                       // spinning about the waist, not the feet
-    b.rotation.set(spin - 0.25 * jolt * (1 - air), 0, Math.sin(air * Math.PI) * 0.25);
-    // turning about the waist (C up), and coming down to lie on the ground at the end of the flight
-    const down = (C - 0.13) * ease(cl((air - 0.72) / 0.28));
-    b.position.set(0, C - C * Math.cos(b.rotation.x) + lift - down, -C * Math.sin(b.rotation.x));
-    if (air >= 1) { b.rotation.x = Math.PI / 2; b.position.set(0, C - 0.82 + bounce, -C); }
-    // limbs: flailing in the air, flung out on landing, slowly settling
-    const fl = air > 0 && air < 1 ? 1 : 0, w = t * 13, k = after > 0 ? Math.max(0, 1 - after / 1.2) : 1;
-    const settle = (a, rest) => rest + (a - rest) * k;
-    const elbow = (x) => Math.max(0.1, Math.min(1.7, x));   // elbows bend forward only
-    const knee = (x) => Math.min(-0.05, Math.max(-1.9, x)); // knees bend back only
-    if (t < JOLT) {
-      // the hit: arms thrown up and out, knees buckle
-      R.armL.rotation.set(-2.2 * jolt, 0, -0.5 * jolt); R.armR.rotation.set(-2.4 * jolt, 0, 0.6 * jolt);
-      R.elbowL.rotation.x = 0.3; R.elbowR.rotation.x = 0.4;
-      R.legL.rotation.set(-0.5 * jolt, 0, -0.05); R.legR.rotation.set(-0.3 * jolt, 0, 0.05);
-      R.kneeL.rotation.x = knee(-0.9 * jolt); R.kneeR.rotation.x = knee(-0.7 * jolt);
-      R.head.rotation.set(-0.5 * jolt, 0, 0);
+    const cl = (x) => Math.max(0, Math.min(1, x)), ease = (k) => k * k * (3 - 2 * k);
+    const dir = D.back ? 1 : -1;                   // +: over backward (face up), -: forward (onto the chest)
+    const KNEE = D.knees ? 0.75 : 0, START = D.knees ? 0.85 : 0.14, FALL = 0.8;
+    const kneel = D.knees ? ease(cl(t / KNEE)) : 0;
+    const jolt = D.knees ? 0 : Math.sin(cl(t / START) * Math.PI);           // the hit
+    const f = cl((t - START) / FALL), fall = f * f;                          // gravity: slow, then fast
+    const after = Math.max(0, t - START - FALL);
+    const bounce = after > 0 ? Math.sin(cl(after / 0.3) * Math.PI) * 0.09 * (1 - cl(after / 0.3)) : 0;
+    // the turn about the feet (standing) or the knees (kneeling)
+    const a = dir * (Math.PI / 2 - 0.06) * fall - dir * 0.18 * jolt;
+    const h = 0.47 * kneel;                        // kneeling: the body is a shin's length lower
+    const py = 0.05 * kneel, H = py + h;
+    const b = R.body;
+    b.rotation.set(a, 0, 0.05 * dir * fall);
+    b.position.set(0, py - H * Math.cos(a) + bounce * (1 - kneel * 0.5), -H * Math.sin(a));
+    // legs: kneeling folds them under; standing, they give way as he goes
+    const kneeL = Math.min(-0.05, -(1.65 * kneel + (1 - kneel) * (0.25 + 0.35 * fall + 0.2 * jolt)));
+    const kneeR = Math.min(-0.05, -(1.55 * kneel + (1 - kneel) * (0.15 + 0.2 * fall)));
+    R.legL.rotation.set(dir > 0 ? -0.35 * fall * (1 - kneel) : 0.15 * fall, 0, -0.08 - 0.08 * fall);
+    R.legR.rotation.set(dir > 0 ? -0.1 * fall * (1 - kneel) : 0.25 * fall, 0, 0.08 + 0.1 * fall);
+    R.kneeL.rotation.x = kneeL; R.kneeR.rotation.x = kneeR;
+    // arms: flung out by the hit and the fall (forward: they come up to break it)
+    const fling = Math.max(jolt, Math.sin(cl(f) * Math.PI) * 0.8, kneel * (1 - f) * 0.4);
+    if (dir > 0) {
+      R.armL.rotation.set(-0.6 - 1.4 * fling - 0.9 * fall, 0, -0.35 - 0.5 * fall);
+      R.armR.rotation.set(-0.4 - 1.6 * fling - 0.7 * fall, 0, 0.4 + 0.6 * fall);
     } else {
-      R.armL.rotation.set(settle(-2.0 + Math.sin(w) * 1.1 * fl, -2.6), 0, settle(-0.6 - Math.cos(w * 0.8) * 0.6 * fl, -1.1));
-      R.armR.rotation.set(settle(-2.2 + Math.sin(w + 2.1) * 1.1 * fl, -2.4), 0, settle(0.6 + Math.cos(w * 0.9 + 1) * 0.6 * fl, 1.2));
-      R.elbowL.rotation.x = elbow(settle(0.6 + Math.sin(w * 1.3) * 0.6 * fl, 0.35)); R.elbowR.rotation.x = elbow(settle(0.6 + Math.sin(w * 1.1 + 1) * 0.6 * fl, 0.5));
-      R.legL.rotation.set(settle(-0.9 + Math.sin(w * 0.9 + 0.5) * 0.7 * fl, -0.25), 0, settle(-0.15 - Math.abs(Math.sin(w * 0.7)) * 0.25 * fl, -0.25));
-      R.legR.rotation.set(settle(-0.7 + Math.sin(w * 1.1 + 2.5) * 0.7 * fl, 0.05), 0, settle(0.15 + Math.abs(Math.cos(w * 0.6)) * 0.25 * fl, 0.3));
-      R.kneeL.rotation.x = knee(settle(-1.1 + Math.sin(w * 1.2) * 0.6 * fl, -0.6)); R.kneeR.rotation.x = knee(settle(-0.9 + Math.sin(w * 1.4 + 1) * 0.6 * fl, -0.2));
-      R.head.rotation.set(settle(-0.4 + Math.sin(w * 0.7) * 0.3 * fl, -0.2), settle(0, 0.5), 0);
-      R.spine.rotation.set(settle(0.25 * fl, 0.05), 0, 0);
+      R.armL.rotation.set(-0.4 - 1.1 * fall, 0, -0.25 - 0.25 * fling);
+      R.armR.rotation.set(-0.5 - 0.9 * fall, 0, 0.3 + 0.2 * fling);
     }
-    const P = this.v.set(p.pos.x - fx * back, p.pos.y, p.pos.z - fz * back);
-    R.place(P, p.yaw, p.pos.y);
+    R.elbowL.rotation.x = Math.max(0.1, 0.3 + 0.5 * fling * (dir > 0 ? 0.5 : 1));
+    R.elbowR.rotation.x = Math.max(0.1, 0.4 + 0.4 * fling);
+    R.spine.rotation.set(-0.25 * dir * jolt + 0.1 * kneel * (1 - f), 0, 0);
+    R.head.rotation.set((dir > 0 ? -0.5 : 0.35) * fall + 0.3 * kneel * (1 - f) - 0.3 * dir * jolt, 0.35 * fall, 0);
+    R.place(p.pos, p.yaw, p.pos.y);
     R.root.visible = true;
     // the camera: behind and to the side, rising to look down on the body
     const k2 = Math.min(1, t / 3.2), e = k2 * k2 * (3 - 2 * k2);
-    const rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
-    const d = 4.2 + e * 1.0, h = 1.9 + e * 2.4, sd = 2.4 + e * 0.6;
-    // off to the side of the flight, so the flip is seen in profile
-    this.cam.set(P.x + rx * sd + fx * (d * 0.35), P.y + h, P.z + rz * sd + fz * (d * 0.35));
-    const hit = g.world.raycast(P.x, P.y + 1.2, P.z, this.cam.x - P.x, this.cam.y - P.y - 1.2, this.cam.z - P.z, 1, false);
-    if (hit && hit.dist < 0.95) this.cam.lerp(this.back.set(P.x, P.y + 1.2, P.z), 1 - hit.dist * 0.9);
+    const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), rx = Math.cos(p.yaw), rz = -Math.sin(p.yaw);
+    const d = 3.4 + e * 1.0, hh = 1.7 + e * 2.2, sd = 1.6 + e * 0.8;
+    this.cam.set(p.pos.x - fx * d * 0.6 + rx * sd, p.pos.y + hh, p.pos.z - fz * d * 0.6 + rz * sd);
+    const hit = g.world.raycast(p.pos.x, p.pos.y + 1.2, p.pos.z, this.cam.x - p.pos.x, this.cam.y - p.pos.y - 1.2, this.cam.z - p.pos.z, 1, false);
+    if (hit && hit.dist < 0.95) this.cam.lerp(this.back.set(p.pos.x, p.pos.y + 1.2, p.pos.z), 1 - hit.dist * 0.9);
     g.camera.position.copy(this.cam);
-    g.camera.lookAt(P.x, P.y + 0.6 + lift * 0.6, P.z);
+    // look at the body where it lands (forward or back of the feet)
+    g.camera.lookAt(p.pos.x + fx * -dir * 0.8 * fall, p.pos.y + 0.6 - 0.3 * fall, p.pos.z + fz * -dir * 0.8 * fall);
   }
   // where aiming starts: on the camera's line of sight, level with you
   aimOrigin(out) {

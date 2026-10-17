@@ -182,7 +182,7 @@ class App {
   // the boat or plane scene (travel.js), with the squad's nations, the
   // destination's weather and time of day, and its WWII name and date
   async travelScene({ by, to, side, n, tod, dateText, weather, nations = [], normandy = false }) {
-    stopMusic();
+    stopMusic(); stopFolk();
     await loadWar();
     const C = COUNTRY[to], pac = ['cn', 'au', 'in', 'us'].includes(to);
     // who rides along: the soldiers following you, else the side's nations that fought there
@@ -211,6 +211,7 @@ class App {
     // only this game's own code is loaded (War or Town Life), the first time it is played
     try { await loadMode(save.cfg.mode); } catch (e) { console.error(e); this.ui.show('main'); return; }
     this.game = new Game(this, save);
+    if (save.cfg.mode !== 'town') startFolk('war');          // War: marches while you play (Town Life starts its own tunes)
     if (save.cfg.gameType === 'battle') this.lastBattleSide = { side: save.cfg.side, difficulty: save.cfg.difficulty };
     document.body.classList.add('ingame');
     this.game.resize();
@@ -274,7 +275,7 @@ class App {
     this.input.enabled = false;
     this.input.exitLock();
     this.ui.show('gameover', { days });
-    startMusic();
+    stopFolk(); startMusic();
   }
   quitToMenu(silent) {
     if (!this.game) return;

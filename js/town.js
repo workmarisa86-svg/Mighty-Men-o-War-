@@ -293,6 +293,7 @@ export class TownLife {
   }
   reported(v, c) {
     const g = this.game;
+    if (c.gang && c.gang.alive && !c.gang.jailed) this.trades.arrest(c.gang);     // one of your gang was seen: the sheriff rounds him up
     this.witnesses = this.witnesses.filter((x) => x !== v);
     this.addBounty(c.amount, c.kind);
     g.hud.alert(t('law.reported', { name: v.name, n: this.bounty }));
@@ -821,9 +822,30 @@ export class TownLife {
     this.charges.push({ b, t: 3, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
     g.hud.alert(t('door.lit')); sfx.alert();
   }
+  // dynamite at the jail cell's bars (one of your gang is locked up)
+  lightCell(hit) {
+    const g = this.game;
+    if (!g.has('dynamite')) return;
+    g.take('dynamite', 1); g.hud.dirtyHotbar = true;
+    this.charges.push({ cell: true, t: 3, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
+    g.hud.alert(t('door.lit')); sfx.alert();
+  }
   // the blast takes only the door (and its frame): never the walls or the ground
   blowDoor(c) {
     const g = this.game, F = this.folk, b = c.b, w = g.world;
+    if (c.cell) {
+      // a jailbreak: the bars blown out, your men walk free; a crime if anyone sees it
+      this.cellDoor(false);
+      g.particles.burst(c.x, c.y, c.z, [0.35, 0.3, 0.24], 24, 4, 1.2);
+      sfx.explosion(Math.max(0.3, 1 - g.player.pos.distanceTo(new THREE.Vector3(c.x, c.y, c.z)) / 60), false);
+      g.shake = Math.max(g.shake, 0.5);
+      const pd = Math.hypot(g.player.pos.x - c.x, g.player.pos.z - c.z);
+      if (pd < 3) g.damage(Math.round(30 * (1 - pd / 3)), 'blast');
+      this.hearShot(new THREE.Vector3(c.x, c.y, c.z));
+      this.trades.breakOut();
+      this.crime('escape', { pos: g.player.pos.clone() });
+      return;
+    }
     for (const [x, y, z] of b.doorCells) if (w.get(x, y, z) === B.HDOOR) w.set(x, y, z, B.AIR);
     b.broken = g.time + 1;                                      // mended in a day
     g.particles.burst(c.x, c.y, c.z, [0.35, 0.3, 0.24], 24, 4, 1.2);

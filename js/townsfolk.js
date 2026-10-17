@@ -318,7 +318,7 @@ export class Townsfolk {
   // ---- senses -------------------------------------------------------------
   // can this person see the player? (range shrinks at night, crouching helps)
   sees(v, range = 30) {
-    if (!v.alive) return false;
+    if (!v.alive || v.watching) return false;            // watching a brawl: eyes on the fight, nothing else
     const g = this.game, p = g.player.pos;
     const dx = p.x - v.pos.x, dz = p.z - v.pos.z, d = Math.hypot(dx, dz);
     let R = range * (0.45 + 0.55 * g.sky.daylight) * (g.player.crouch ? 0.6 : 1);
@@ -450,6 +450,7 @@ export class Townsfolk {
       else if (v.fight) this.fightBehaviour(v, dt, d);
       else if (v.duel) this.duelBehaviour(v, dt);
       else if (v.reportTo) this.reportBehaviour(v, dt);
+      else if (v.watching) this.watchBehaviour(v, dt);
       else this.dailyBehaviour(v, dt, d);
       if (v.horse) v.horse.carry(v);
       // greetings when the player comes close
@@ -467,6 +468,7 @@ export class Townsfolk {
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
         const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed) || v.duelAim;
         rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
+        if (v.brawl) this.brawlPose(v, rig);
         if (v.flinchT > 0) { v.flinchT -= dt; rig.body.rotation.x -= Math.sin(Math.max(0, v.flinchT) / 0.35 * Math.PI) * 0.4; }   // hit: they jerk back
       }
       if (v.posse || v.fight || v.surrendered > 0 || v.reportTo || v.route.length) { v.sleeping = false; v.sitting = false; }
@@ -642,6 +644,25 @@ export class Townsfolk {
     const P = this.game.player.pos;
     v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 4);
     if (v.surrendered <= 0) { v.surrendered = 0; v.scaredT = 20; }
+  }
+  // a brawl (your gang's chaos): watch it from a ring round the fighters, cheering
+  watchBehaviour(v, dt) {
+    const B = v.watching;
+    if (!B || B.over) { v.watching = null; return; }
+    const R = v.role === 'sheriff' ? 1.8 : 4 + (v.i % 3) * 0.8;
+    const spot = { x: B.at.x + Math.cos(v.watchA) * R, y: B.at.y, z: B.at.z + Math.sin(v.watchA) * R };
+    if (Math.hypot(spot.x - v.pos.x, spot.z - v.pos.z) > 0.8) this.goDirect(v, spot, v.role === 'sheriff' ? 4.4 : 3.6, dt, 0.6);
+    else { v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(B.at.x - v.pos.x), -(B.at.z - v.pos.z)), dt * 5); }
+    v.cheerT = (v.cheerT ?? 2 + Math.random() * 6) - dt;
+    if (v.cheerT <= 0) { v.cheerT = 5 + Math.random() * 8; this.say(v, v.role === 'sheriff' ? 'say.sheriffBreakUp' : 'say.cheer' + (1 + Math.floor(Math.random() * 3))); }
+  }
+  // fists up: a guard, and a quick jab now and then
+  brawlPose(v, rig) {
+    const p = Math.min(1, (v.punch || 0) / 0.35), jab = Math.sin(p * Math.PI), right = (Math.floor((v.punchT || 0) * 10) % 2) === 0;
+    rig.armL.rotation.set(-1.2 - (right ? 0 : 0.5 * jab), 0, -0.25); rig.elbowL.rotation.x = 1.7 - (right ? 0 : 1.4 * jab);
+    rig.armR.rotation.set(-1.25 - (right ? 0.5 * jab : 0), 0, 0.25); rig.elbowR.rotation.x = 1.7 - (right ? 1.4 * jab : 0);
+    rig.body.rotation.y = Math.sin(this.game.time * 900 + v.i) * 0.15 + (right ? -0.25 : 0.25) * jab;
+    rig.body.rotation.x = 0.12;
   }
   // fighting back (a hold-up gone wrong, a robbed household, a break-in)
   fightBehaviour(v, dt, d) {
