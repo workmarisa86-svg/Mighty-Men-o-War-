@@ -152,6 +152,10 @@ export class Trades {
     if (sel === 'trap' && hit && hit.ny === 1 && hit.dist < 4.2 && !SOLID[g.world.get(hit.x, hit.y + 1, hit.z)] && g.world.get(hit.x, hit.y + 1, hit.z) !== B.WATER) {
       return { a: 'trapSet', label: t(this.traps.length >= MAX_TRAPS ? 'use.trapMax' : 'use.trapSet'), run: () => this.setTrap(hit) };
     }
+    // one of your men in the cell: dynamite at the bars blows the door
+    if (sel === 'dynamite' && hit && this.jailedMen().length && T.jailB && T.jailB.cell && T.jailB.cell.door.some(([x, y, z]) => x === hit.x && y === hit.y && z === hit.z)) {
+      return { a: 'blowCell', label: t('use.blowCell'), run: () => T.lightCell(hit) };
+    }
     // a prisoner in cuffs at the sheriff's: hand him over
     const pr = this.prisoner();
     if (pr) {
@@ -468,7 +472,8 @@ export class Trades {
     const gy = F.ground(at.x, at.z, at.y + 2); if (gy != null) at.y = gy;
     const look = { shirt: [0x6a4a3a, 0x4a4a52, 0x5a5040][Math.floor(r() * 3)], trousers: 0x32302c, vest: r() < 0.6 ? 0x2a2420 : null, hat: 'felt', hatColor: [0x3a2a1c, 0x1a1612, 0x5a4a3a][Math.floor(r() * 3)], hair: 0x3a2a1c, moustache: r() < 0.5, gunbelt: true };
     const v = this.makeMan(m.name, m.seed, look, at);
-    Object.assign(v, { gang: true, slot: this.gang.length, guns: r() < 0.5 ? ['revolver', 'lever'] : ['revolver', 'shotgun'] });
+    Object.assign(v, { gang: true, seed: m.seed, slot: this.gang.length, guns: r() < 0.5 ? ['revolver', 'lever'] : ['revolver', 'shotgun'] });
+    if (m.jailed && this.town.jailB && this.town.jailB.cell) { const C = this.town.jailB.cell; v.jailed = true; v.jailUntil = m.until || 0; v.pos.set(C.inside.x, C.inside.y, C.inside.z); if (!this.town.jailed) this.town.cellDoor(true, true); }
     v.ai = (o, dt, d) => this.memberAi(o, dt, d);
     v.onKill = (o) => { this.gang = this.gang.filter((x) => x !== o); this.gangSave = this.gangSave.filter((x) => x.seed !== m.seed); this.game.hud.toast(t('gang.lost', { name: o.name })); this.lostDay = Math.floor(this.game.time); };
     F.extra.push(v); this.gang.push(v);
@@ -480,23 +485,218 @@ export class Trades {
     F.extra = F.extra.filter((x) => !x.gang); this.gang = []; this.gangSave = [];
   }
   // an order from the wheel (orders.js)
-  issue(cmd, point) {
+  issue(cmd, point, at = {}) {
     const g = this.game;
-    this.order = { cmd, point: point ? point.clone() : g.player.pos.clone() };
-    for (const v of this.gang) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; }
+    point = point ? point.clone() : g.player.pos.clone();
+    if (cmd === 'loot') return this.orderLoot(at.house || this.houseNear(point), point);
+    if (cmd === 'chaos') return this.orderBrawl(point);
+    this.order = { cmd, point };
+    for (const v of this.free()) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; }
     if (cmd === 'spread' || cmd === 'defend') this.ringSpots(this.order.point, cmd === 'spread' ? 6 : 3);
     if (cmd === 'distract') {
       const p = this.order.point;
       const v = this.gang.filter((m) => m.alive).sort((a, b) => a.pos.distanceTo(p) - b.pos.distanceTo(p))[0];
       if (v) { v.distractT = 25; v.distracted = false; v.distractAt = null; }
     }
-    g.hud.toast(t('gang.order', { o: t('ord.' + cmd) }));
+    g.hud.toast(t('gang.order', { o: t('gord.' + cmd) }));
     sfx.toggle();
+  }
+  // men free for an order (not in jail, not off looting or brawling)
+  free() { return this.gang.filter((m) => m.alive && !m.jailed && !m.task); }
+  houseNear(p) {
+    const V = this.town.village;
+    let best = null, bd = 12;
+    for (const b of V.buildings) {
+      if (b.type !== 'house') continue;
+      const inside = p.x >= b.x0 - 0.5 && p.x <= b.x1 + 1.5 && p.z >= b.z0 - 0.5 && p.z <= b.z1 + 1.5;
+      const d = inside ? 0 : Math.hypot(b.door.x - p.x, b.door.z - p.z);
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+  houseName(b) {
+    const o = this.town.folk.list.find((v) => v.home === b);
+    return o ? t('gang.houseOf', { name: o.name.split(' ').slice(-1)[0] }) : t('tmap.h.' + (b.status || 'house'));
+  }
+
+  // ---- Loot this house: two men pick the lock, go in, come back with the takings ----
+  orderLoot(b, point) {
+    const g = this.game;
+    if (!b) { g.hud.toast(t('gang.noHouse')); sfx.error(); return; }
+    const men = this.free().sort((a, c) => a.pos.distanceTo(point) - c.pos.distanceTo(point)).slice(0, 2);
+    if (!men.length) { g.hud.toast(t('gang.nobody')); return; }
+    for (const v of men) { v.task = { kind: 'loot', b, phase: 'go', t: 0, coins: 0, goods: [] }; v.route = []; }
+    g.hud.toast(t('gang.lootGo', { names: men.map((m) => m.name.split(' ')[0]).join(' & '), house: this.houseName(b) }));
+    sfx.toggle();
+  }
+  lootAi(v, dt) {
+    const g = this.game, F = this.town.folk, T = this.town, k = v.task, b = k.b, P = g.player.pos;
+    k.t += dt; v.crouch = false;
+    if (k.phase === 'go') {
+      const door = { x: b.door.x, y: b.door.y, z: b.door.z }, d = Math.hypot(door.x - v.pos.x, door.z - v.pos.z);
+      if (d > 1.4 && k.t < 60) { F.goDirect(v, door, 4.6, dt, 1.2); return true; }
+      k.phase = 'pick'; k.t = 0; v.speed = 0;
+    }
+    if (k.phase === 'pick' || k.phase === 'in') {
+      v.speed = 0; v.crouch = k.phase === 'pick';
+      if (k.phase === 'pick') v.yaw = Math.atan2(-(b.inside.x - v.pos.x), -(b.inside.z - v.pos.z));
+      // is anyone looking? (people watching a brawl see nothing else)
+      k.seeT = (k.seeT || 0) - dt;
+      if (k.seeT <= 0) { k.seeT = 0.8; if (this.spotted(v)) return true; }
+      if (k.phase === 'pick' && k.t > 4) { k.phase = 'in'; k.t = 0; v.outside = v.pos.clone(); v.pos.set(b.inside.x, b.inside.y, b.inside.z); v.route = []; sfx.click(); }
+      else if (k.phase === 'in' && k.t > 6) {
+        // the takings: some of the household's money, food and (in a mansion) gold
+        const fam = F.list.filter((o) => o.home === b && o.alive);
+        const rich = b.status === 'mansion' ? 3 : b.status === 'house' ? 1.6 : 0.8;
+        k.coins = Math.round((6 + Math.random() * 12) * rich);
+        for (const o of fam) { const cut = Math.floor(o.money * 0.3); o.money -= cut; k.coins += Math.floor(cut / 2); }
+        k.goods = ['bread', Math.random() < 0.5 ? 'egg' : 'bread'].concat(b.status === 'mansion' && Math.random() < 0.5 ? ['gold'] : []);
+        k.phase = 'back'; k.t = 0;
+        v.pos.copy(v.outside || new THREE.Vector3(b.door.x, b.door.y, b.door.z)); v.route = [];
+        b.robbedT = g.time;
+      }
+      return true;
+    }
+    // back to you with the takings (or empty-handed, running, if he was seen)
+    const d = Math.hypot(P.x - v.pos.x, P.z - v.pos.z);
+    if (d > 3.5 && k.t < 90) { F.goDirect(v, P, k.seen ? 5.4 : 4.4, dt, 3); return true; }
+    if (k.coins || k.goods.length) {
+      T.money += k.coins; T.st.earned += k.coins;
+      for (const it of k.goods) g.give(it, 1);
+      g.hud.dirtyHotbar = true;
+      g.hud.toast(t('gang.lootIn', { name: v.name.split(' ')[0], n: k.coins, goods: k.goods.map((x) => t('item.' + x)).join(', ') }), 'pick');
+      sfx.coins();
+    }
+    v.task = null;
+    return true;
+  }
+  // a looter seen: the sheriff takes him on the spot; anyone else runs to tell the sheriff
+  spotted(v) {
+    const F = this.town.folk, T = this.town, g = this.game;
+    const eye = new THREE.Vector3(), pos = new THREE.Vector3(v.pos.x, v.pos.y + 1.2, v.pos.z);
+    for (const o of F.list) {
+      if (!o.alive || o.away || o.watching || o.sleeping || o.posse || o.reportTo) continue;
+      const dx = v.pos.x - o.pos.x, dz = v.pos.z - o.pos.z, d = Math.hypot(dx, dz);
+      if (d > 24 || Math.abs(v.pos.y - o.pos.y) > 6) continue;
+      const facing = (-Math.sin(o.yaw) * dx - Math.cos(o.yaw) * dz) / (d || 1);
+      if (facing < -0.2 && d > 5) continue;
+      eye.set(o.pos.x, o.pos.y + 1.65, o.pos.z);
+      const dir = pos.clone().sub(eye), L = dir.length(); dir.divideScalar(L);
+      if (g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, L - 0.4, false, 'sight')) continue;
+      v.task.seen = true; v.task.phase = 'back'; v.task.coins = 0; v.task.goods = []; v.task.t = 0;
+      if (v.outside) v.pos.copy(v.outside);
+      if (o.role === 'sheriff') { F.say(o, 'say.sheriffCaught', null, 'warn'); this.arrest(v); return true; }
+      F.say(o, 'say.thief', null, 'warn');
+      o.reportTo = { kind: 'breakin', amount: 35, pos: g.player.pos.clone(), gang: v };
+      o.route = []; o.scaredT = 0;
+      T.witnesses = T.witnesses.filter((x) => x !== o).concat(o);
+      g.hud.alert(t('gang.seen', { who: o.name, name: v.name })); sfx.alert();
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Start a brawl: two of your men fight with their fists; the town comes to watch ----
+  orderBrawl(point) {
+    const g = this.game, F = this.town.folk;
+    const men = this.free().sort((a, c) => a.pos.distanceTo(point) - c.pos.distanceTo(point)).slice(0, 2);
+    if (men.length < 2) { g.hud.toast(t('gang.needTwo')); sfx.error(); return; }
+    const gy = F.ground(point.x, point.z, point.y + 2);
+    const B = { at: { x: point.x, y: gy ?? point.y, z: point.z }, t: 0, dur: 50, men, started: false };
+    men.forEach((v, i) => { v.task = { kind: 'brawl', B, side: i }; v.route = []; });
+    this.brawl = B;
+    g.hud.toast(t('gang.brawlGo', { a: men[0].name.split(' ')[0], b: men[1].name.split(' ')[0] }));
+    sfx.toggle();
+  }
+  brawlAi(v, dt) {
+    const F = this.town.folk, B = v.task.B, other = B.men[1 - v.task.side];
+    if (B.over || !other.alive) { v.task = null; v.brawl = false; return true; }
+    const spot = { x: B.at.x + (v.task.side ? 0.55 : -0.55), y: B.at.y, z: B.at.z };
+    const d = Math.hypot(spot.x - v.pos.x, spot.z - v.pos.z);
+    if (!B.started) {
+      if (d > 0.5) { F.goDirect(v, spot, 4.8, dt, 0.4); return true; }
+      v.speed = 0;
+      if (B.men.every((m) => Math.hypot(m.pos.x - B.at.x, m.pos.z - B.at.z) < 1.2)) { B.started = true; F.say(v, 'say.brawlStart', null, 'warn'); }
+      return true;
+    }
+    // fists up, circling a little, punches and staggers
+    v.brawl = true; v.speed = 0; v.armed && F.armed(v, null);
+    v.yaw = Math.atan2(-(other.pos.x - v.pos.x), -(other.pos.z - v.pos.z));
+    v.punchT = (v.punchT ?? Math.random() * 0.8) - dt;
+    if (v.punchT <= 0) {
+      v.punchT = 0.5 + Math.random() * 0.9; v.punch = 0.35;
+      if (Math.random() < 0.55) { other.flinchT = 0.35; sfx.thump(); if (Math.random() < 0.12) F.say(other, 'say.brawlOof'); }
+    }
+    v.punch = Math.max(0, (v.punch || 0) - dt);
+    return true;
+  }
+  // the crowd: everyone near comes to watch (and sees nothing else); the sheriff breaks it up
+  updateBrawl(dt) {
+    const B = this.brawl, F = this.town.folk, g = this.game;
+    if (!B) return;
+    if (B.started) B.t += dt;
+    let sheriffThere = false;
+    for (const o of F.list) {
+      if (!o.alive || o.away || o.posse || o.fight || o.reportTo || o.surrendered || o.sleeping) { if (o.watching === B) o.watching = null; continue; }
+      const d = Math.hypot(o.pos.x - B.at.x, o.pos.z - B.at.z);
+      // (the sheriff hears of it from farther off)
+      if (B.started && (d < 45 || (o.role === 'sheriff' && d < 120))) { if (o.watching !== B) { o.watching = B; o.watchA = Math.atan2(o.pos.z - B.at.z, o.pos.x - B.at.x); o.route = []; } }
+      if (o.role === 'sheriff' && o.watching === B && d < 4.5) sheriffThere = true;
+    }
+    if (sheriffThere) B.sheriffT = (B.sheriffT || 0) + dt;
+    // the sheriff lets it run a while, then breaks it up (and may lock one of them up)
+    if (B.t > B.dur || B.sheriffT > 22 || B.men.some((m) => !m.alive)) {
+      B.over = true; this.brawl = null;
+      for (const o of F.list) if (o.watching === B) o.watching = null;
+      for (const m of B.men) { m.brawl = false; m.task = null; }
+      if (B.sheriffT > 22) {
+        const sh = F.list.find((o) => o.role === 'sheriff' && o.alive);
+        if (sh) F.say(sh, 'say.sheriffBreakUp', null, 'warn');
+        if (Math.random() < 0.5) this.arrest(B.men[Math.floor(Math.random() * 2)]);
+      }
+      g.hud.toast(t('gang.brawlOver'));
+    }
+  }
+
+  // ---- the town jail: a man of yours caught by the sheriff ----
+  arrest(v) {
+    const g = this.game, T = this.town, C = T.jailB && T.jailB.cell;
+    if (!v || !v.alive || v.jailed || !C) return;
+    v.jailed = true; v.task = null; v.brawl = false; v.target = null; v.route = []; v.crouch = false;
+    this.town.folk.armed(v, null);
+    v.pos.set(C.inside.x - 0.4 + Math.random() * 0.8, C.inside.y, C.inside.z);
+    v.jailUntil = g.time + 2;
+    const m = this.gangSave.find((x) => x.seed === v.seed); if (m) { m.jailed = true; m.until = v.jailUntil; }
+    if (!T.jailed) T.cellDoor(true);
+    g.hud.alert(t('gang.caught', { name: v.name }));
+    g.hud.bigMessage(t('gang.caughtTitle'), t('gang.caughtSub', { name: v.name }));
+    sfx.warn ? sfx.warn() : sfx.alert();
+  }
+  jailedMen() { return this.gang.filter((m) => m.alive && m.jailed); }
+  // the cell door blown open (town.js): your men walk out and rejoin you
+  breakOut() {
+    const T = this.town, C = T.jailB.cell, g = this.game;
+    for (const v of this.jailedMen()) {
+      v.jailed = false; v.task = null; v.pos.set(C.out.x, C.out.y, C.out.z); v.route = [];
+      const m = this.gangSave.find((x) => x.seed === v.seed); if (m) { m.jailed = false; m.until = 0; }
+      T.folk.say(v, 'say.gangFreed');
+    }
+    g.hud.toast(t('gang.freed'), 'pick');
+  }
+  updateJail() {
+    const g = this.game, T = this.town;
+    for (const v of this.jailedMen()) if (g.time > v.jailUntil) {
+      // served his time: the sheriff lets him go
+      v.jailed = false; const C = T.jailB.cell; v.pos.set(C.out.x, C.out.y, C.out.z); v.route = [];
+      const m = this.gangSave.find((x) => x.seed === v.seed); if (m) { m.jailed = false; m.until = 0; }
+      g.hud.toast(t('gang.released', { name: v.name }));
+      if (!this.jailedMen().length && !T.jailed) T.cellDoor(false);
+    }
   }
   // a place to stand for each man round a point: on dry, open ground about level
   // with it (a spot in a lake, a wall or up a cliff would leave him stuck)
   ringSpots(c, R) {
-    const F = this.town.folk, alive = this.gang.filter((m) => m.alive), n = alive.length;
+    const F = this.town.folk, alive = this.free(), n = alive.length;
     const cy = F.ground(c.x, c.z, c.y + 2) ?? c.y, taken = [];
     alive.forEach((v, i) => {
       let best = null;
@@ -527,12 +727,20 @@ export class Trades {
   memberAi(v, dt, d) {
     const g = this.game, F = this.town.folk, P = g.player.pos, O = this.order;
     if (!v.alive) return true;
+    if (v.jailed) {            // behind bars: he paces the cell
+      const C = this.town.jailB.cell; v.speed = 0; v.crouch = false;
+      if (Math.hypot(v.pos.x - C.inside.x, v.pos.z - C.inside.z) > 1.6) v.pos.set(C.inside.x, C.inside.y, C.inside.z);
+      v.yaw += Math.sin(g.time * 600) * dt * 0.5; v.duelAim = false;
+      return true;
+    }
+    if (v.task && v.task.kind === 'loot') return this.lootAi(v, dt);
+    if (v.task && v.task.kind === 'brawl') return this.brawlAi(v, dt);
     v.cool -= dt;
     v.tgtT = (v.tgtT || 0) - dt;
     if (v.tgtT <= 0) { v.tgtT = 0.5; v.target = this.gangTarget(v); }
     const tg = v.target && v.target.alive ? v.target : null;
     // where to be
-    const alive = this.gang.filter((m) => m.alive), i = Math.max(0, alive.indexOf(v)), n = alive.length;
+    const alive = this.gang.filter((m) => m.alive && !m.jailed && !m.task), i = Math.max(0, alive.indexOf(v)), n = Math.max(1, alive.length);
     let goal = null, run = false;
     if (d > 70 && O.cmd === 'follow') { const a = i / n * 6.28; v.pos.set(P.x + Math.cos(a) * 4, P.y, P.z + Math.sin(a) * 4); v.route = []; }     // they catch up (a long ride, a night's sleep)
     if (v.distractT > 0) {
@@ -656,7 +864,7 @@ export class Trades {
   update(dt) {
     this.tick -= dt;
     this.updateTraps(dt);
-    if (this.tick <= 0) { this.tick = 0.5; this.updateOutlaws(0.5); this.updateGang(0.5); }
+    if (this.tick <= 0) { this.tick = 0.5; this.updateOutlaws(0.5); this.updateGang(0.5); this.updateBrawl(0.5); this.updateJail(); }
   }
   // the map: traps (gold with a catch), the wanted men's cabins
   mapMarks() {

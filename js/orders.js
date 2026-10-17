@@ -12,8 +12,8 @@ import { FORMATIONS } from './soldiers.js';
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract', 'disperse'];
 export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract', 'disperse'];
 // Town Life: an outlaw's gang takes the same wheel, with its own orders (trades.js)
-export const GANG_ORDERS = ['follow', 'hold', 'defend', 'spread', 'cover', 'distract'];
-const ICONS = { follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
+export const GANG_ORDERS = ['follow', 'hold', 'defend', 'spread', 'cover', 'loot', 'chaos'];
+const ICONS = { loot: '&#9733;', chaos: '&#9889;', follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
 
 export class OrderWheel {
   constructor(game) {
@@ -47,7 +47,10 @@ export class OrderWheel {
     const g = this.game;
     const { eye, dir } = g.aim();
     const block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 250, false, 'bullet');
-    if (g.townMode) return { soldier: null, fort: null, point: block ? new THREE.Vector3(block.x + 0.5 + block.nx, block.y + block.ny, block.z + 0.5 + block.nz) : eye.clone().addScaledVector(dir, 30) };
+    if (g.townMode) {
+      const point = block ? new THREE.Vector3(block.x + 0.5 + block.nx, block.y + block.ny, block.z + 0.5 + block.nz) : eye.clone().addScaledVector(dir, 30);
+      return { soldier: null, fort: null, point, house: g.town ? g.town.trades.houseNear(point) : null };
+    }
     const hit = g.enemies.raycast(eye, dir, block ? Math.min(block.dist, 60) : 60, 'ally');
     let point;
     if (block) point = new THREE.Vector3(block.x + 0.5 + block.nx, block.y + block.ny, block.z + 0.5 + block.nz);
@@ -110,7 +113,7 @@ export class OrderWheel {
   issue(i) {
     const g = this.game, E = g.enemies, cmd = this.list[i];
     if (!this.isOpen) return;
-    if (g.townMode) { g.town.trades.issue(cmd, this.at.point); this.close(); return; }
+    if (g.townMode) { g.town.trades.issue(cmd, this.at.point, this.at); this.close(); return; }
     if (cmd === 'formation') {
       const cur = FORMATIONS.indexOf(g.settings.formation || 'loose');
       g.settings.formation = FORMATIONS[(cur + 1) % FORMATIONS.length];
@@ -127,8 +130,10 @@ export class OrderWheel {
   render() {
     const g = this.game, E = g.enemies;
     if (g.townMode) {
-      this.center.innerHTML = `<b>${t('order.title2')}</b><span>${t('gang.toGang', { n: g.town.trades.gang.length })}</span>`;
-      this.items.forEach((b, i) => { const cmd = this.list[i]; b.innerHTML = `<i>${ICONS[cmd]}</i><span>${t(cmd === 'defend' ? 'gang.defend' : 'ord.' + cmd)}</span><kbd>${i + 1}</kbd>`; b.classList.toggle('on', i === this.sel); b.hidden = false; });
+      // what the orders are aimed at: the spot you look at, or a house to loot
+      const Tr = g.town.trades, h = this.at && this.at.house;
+      this.center.innerHTML = `<b>${t('order.title2')}</b><span>${t('gang.toGang', { n: Tr.free().length })}</span><span class="muted">${h ? t('gang.aimHouse', { house: Tr.houseName(h) }) : t('gang.aimSpot')}</span>`;
+      this.items.forEach((b, i) => { const cmd = this.list[i]; b.innerHTML = `<i>${ICONS[cmd]}</i><span>${t('gord.' + cmd)}</span><kbd>${i + 1}</kbd>`; b.classList.toggle('on', i === this.sel); b.hidden = false; b.disabled = cmd === 'loot' && !h; });
       return;
     }
     const sel = E.selection();

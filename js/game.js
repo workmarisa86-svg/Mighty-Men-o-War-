@@ -372,10 +372,14 @@ export class Game {
     this.scopeView.update(dt, input, playing);
     this.camera.rotation.set(p.pitch + this.scopeView.pitch, p.yaw + this.scopeView.yaw, 0);
     if (this.dying && !(this.thirdPerson && this.thirdPerson.deathThird)) {
-      // the fall: the view sinks to the ground and tips over
-      const k = Math.min(1, this.dying.t / 1.9), e = k * k * (3 - 2 * k);
-      this.camera.position.y -= e * (p.eyeOffset - 0.25);
-      this.camera.rotation.set(p.pitch * (1 - e) - 0.25 * e, p.yaw, e * 1.15, 'YXZ');
+      // the fall: down onto the knees first (an animal's kill), then over
+      // backward (the view swings up to the sky) or forward (down at the ground)
+      const D = this.dying, kn = D.knees ? Math.min(1, D.t / 0.7) : 0, kne = kn * kn * (3 - 2 * kn);
+      const k = Math.max(0, Math.min(1, (D.t - (D.knees ? 0.8 : 0.12)) / 0.85)), e = k * k;     // (falling speeds up)
+      const settle = D.t > (D.knees ? 1.65 : 0.97) ? Math.sin(Math.min(1, (D.t - (D.knees ? 1.65 : 0.97)) / 0.35) * Math.PI) * 0.06 : 0;
+      this.camera.position.y -= kne * 0.62 + e * (p.eyeOffset - 0.25 - kne * 0.62) - settle;
+      const pitch = D.back ? 1.05 : -1.2;
+      this.camera.rotation.set(p.pitch * (1 - Math.max(e, kne * 0.5)) - 0.2 * kne * (1 - e) + pitch * e, p.yaw, (D.back ? 0.18 : -0.12) * e, 'YXZ');
     } else this.camera.rotation.order = 'YXZ';
     // knocked down (a wolf's pounce): the view drops to the ground and tips, then you get back up
     if (this.knockT > 0) {
@@ -1040,6 +1044,7 @@ export class Game {
       const ang = Math.atan2(-(from.x - this.player.pos.x), -(from.z - this.player.pos.z)) - this.player.yaw;
       this.hud.damageFrom(ang);
     }
+    this.lastHit = { cause, x: from ? from.x : null, z: from ? from.z : null };     // (how the death fall goes: see die())
     this.injury.hit(n, from, { heavy: opts.heavy || cause === 'fall' || n >= 20, bleed: opts.bleed || cause === 'combat' || cause === 'shot' });
     if (this.player.health <= 0) this.die(cause);
   }
@@ -1060,7 +1065,14 @@ export class Game {
     if (this.player.riding && this.horses) this.horses.dismount(true);
     this.scopeView.close();
     this.player.vel.set(0, 0, 0);
-    this.dying = { t: 0, cause };
+    // the fall, as in the films: shot from in front you are thrown back, from
+    // behind you pitch forward; killed by an animal you sink to your knees first,
+    // then go down on your back or your chest
+    const H = this.lastHit || {}, p = this.player.pos;
+    let back = true;
+    if (H.x != null) back = (-Math.sin(this.player.yaw) * (H.x - p.x) - Math.cos(this.player.yaw) * (H.z - p.z)) >= 0;   // the blow came from in front
+    const animal = cause === 'wolf' || cause === 'bear';
+    this.dying = { t: 0, cause, back, knees: animal || cause === 'starve' || cause === 'hunger' };
     if (this.thirdPerson) this.thirdPerson.deathThird = !!this.thirdPerson.on;    // die in third person: see your body fall
     this.injury.startDeath();
   }
