@@ -173,9 +173,8 @@ export class Hidden {
       v.ai = (o) => { if (!o.alive) return true; if (o.surrendered > 0 || o.fight) return false; o.speed = 0; o.yaw = Math.atan2(-(P.x - o.pos.x), -(P.z - o.pos.z)); return true; };
       v.onKill = () => {};
       F.extra.push(v); this.stranger = v;
-    } else if (this.stranger && (!night || !near || !this.stranger.alive)) {
+    } else if (this.stranger && (!night || !near)) {
       const v = this.stranger;
-      if (!v.alive && v.looted === false && near) return;
       F.dropRig(v); F.extra = F.extra.filter((x) => x !== v); this.stranger = null;
     }
   }
@@ -203,8 +202,13 @@ export class Hidden {
         const geo = new THREE.BoxGeometry(0.3, 0.4, 0.3), mat = new THREE.MeshBasicMaterial({ color: 0xffc860 });
         this.lamps = new THREE.Group();
         for (const b of gh.buildings.slice(0, 4)) { const m = new THREE.Mesh(geo, mat); m.position.set((b.x0 + b.x1) / 2 + 0.5, gh.y + 1.4, (b.z0 + b.z1) / 2 + 0.5); this.lamps.add(m); }
-        const glow = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffb040, transparent: true, opacity: 0.55, depthWrite: false }));
-        glow.scale.set(3, 3, 1); glow.position.set(gh.x + 0.5, gh.y + 2, gh.z + 0.5); this.lamps.add(glow);
+        // a soft glow over each lit ruin: seen from far off across the hills
+        const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+        const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 2, 32, 32, 32);
+        gr.addColorStop(0, 'rgba(255,220,140,1)'); gr.addColorStop(0.35, 'rgba(255,170,60,0.55)'); gr.addColorStop(1, 'rgba(255,140,40,0)');
+        cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+        const gm = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, fog: false });
+        for (const b of gh.buildings.slice(0, 4)) { const sp = new THREE.Sprite(gm); sp.scale.set(3.2, 3.2, 1); sp.position.set((b.x0 + b.x1) / 2 + 0.5, gh.y + 5.5, (b.z0 + b.z1) / 2 + 0.5); this.lamps.add(sp); }
         g.scene.add(this.lamps);
       }
       this.lamps.visible = true;

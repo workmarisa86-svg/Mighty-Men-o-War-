@@ -150,7 +150,7 @@ export class Horses {
     if (v) for (const b of v.buildings) if (b.type === 'house' && b.status !== 'cottage' && b.field) {
       const f = b.field; this.add(f.gate.x, f.gate.y, f.gate.z, 'farm', { x: f.gate.x, y: f.gate.y, z: f.gate.z, home: b }, b.x0 % 6);
     }
-    for (const h of saved.mine || []) this.add(h.x, h.y, h.z, 'player', null, h.coat);
+    for (const h of saved.mine || []) { const o = this.add(h.x, h.y, h.z, 'player', null, h.coat); if (h.name) o.name = h.name; }
     this.bar = document.createElement('div'); this.bar.id = 'stamina'; this.bar.hidden = true; this.bar.innerHTML = '<i></i>';
     document.getElementById('hud').appendChild(this.bar);
   }
@@ -179,7 +179,7 @@ export class Horses {
       h.owner = 'player';
     }
     h.rider = 'player'; h.settled = false; p.riding = h; p.vel.set(0, 0, 0); p.crouch = false;
-    g.hud.toast(t('horse.mounted'));
+    g.hud.toast(h.name ? t('horse.mountedName', { name: h.name }) : t('horse.mounted'));
     sfx.thump();
   }
   dismount(quiet = false) {
@@ -392,7 +392,7 @@ export class Horses {
       if (k < MAX_MODELS && d < MODEL_M) { if (!h.mesh) h.build(); h.animate(d < 50 ? dt : dt); } else h.drop();
     });
   }
-  toSave() { return { mine: this.list.filter((h) => h.alive && h.owner === 'player').map((h) => ({ x: +h.pos.x.toFixed(1), y: +h.pos.y.toFixed(1), z: +h.pos.z.toFixed(1), coat: h.coat })) }; }
+  toSave() { return { mine: this.list.filter((h) => h.alive && h.owner === 'player').map((h) => ({ x: +h.pos.x.toFixed(1), y: +h.pos.y.toFixed(1), z: +h.pos.z.toFixed(1), coat: h.coat, name: h.name || undefined })) }; }
   dispose() { for (const h of this.list) h.drop(); this.bar.remove(); }
 }
 

@@ -762,3 +762,24 @@ body.driving #aimprompt { display: none; }
 .bounty-row span small { display: block; opacity: 0.8; }
 .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #c05a40; color: #fff; font-size: 12px; }
 @media (max-width: 520px) { .trade-cards { grid-template-columns: 1fr 1fr; gap: 6px; } .trade-card { padding: 8px; } .trade-card b { font-size: 15px; } .trade-card ul { font-size: 11px; padding-left: 12px; } }
+
+/* ---- Town Life 2.0: notes, goals, trophies, clothes ---- */
+.note-paper { display: flex; gap: 10px; align-items: flex-start; background: #e8dcc0; color: #2a1c10; border-radius: 4px; padding: 10px 12px; margin: 10px 0; font-family: Georgia, serif; }
+.note-paper img { width: 32px; height: 32px; flex: none; }
+.note-paper p { margin: 0; font-style: italic; line-height: 1.4; }
+.goals { display: grid; gap: 6px; }
+.goal { display: grid; grid-template-columns: 1fr; gap: 3px; padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); }
+.goal.top { border: 1px solid rgba(232, 200, 100, 0.55); }
+.goal.done { opacity: 0.7; }
+.goal i { display: block; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.goal i b { display: block; height: 100%; background: #d8b048; }
+.goal small { opacity: 0.75; }
+.trophies { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.trophy { text-align: center; padding: 8px 4px; border-radius: 6px; background: rgba(120, 90, 50, 0.25); }
+.trophy b { display: block; font-size: 1.4em; color: #f0d890; }
+.trophy span { font-size: 0.8em; opacity: 0.85; }
+.trophy.none { opacity: 0.4; }
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.swatches .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; color: #ccc; padding: 0; }
+.swatches .sw.on { border-color: #f0d890; box-shadow: 0 0 0 2px rgba(240, 216, 144, 0.4); }
+input.text { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.3); color: inherit; font-size: 1em; margin: 6px 0 10px; }

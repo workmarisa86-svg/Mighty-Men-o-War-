@@ -353,6 +353,7 @@ export class Trades {
     const look = { shirt: [0x3a3430, 0x4a3e34, 0x2e2c2a][Math.floor(r() * 3)], trousers: 0x2a2622, vest: 0x1e1c1a, hat: 'felt', hatColor: 0x1a1612, hair: 0x2a1c12, moustache: r() < 0.7, gunbelt: true, braces: null };
     const v = this.makeMan(b.name, b.seed, look, at);
     Object.assign(v, { outlaw: true, bounty: b, brave: b.brave, guns: r() < 0.5 ? ['revolver', 'lever'] : ['revolver'] });
+    if (r() < 0.3) v.goods = ['bread', 'tmap'];          // now and then a treasure map in his pocket
     v.ai = (o, dt, d) => this.outlawAi(o, dt, d);
     v.onHurt = (o) => { if (o.alive && !o.fight && !o.cuffed && !(o.surrendered > 0)) this.draw(o); };
     v.onKill = (o) => this.outlawDown(o);

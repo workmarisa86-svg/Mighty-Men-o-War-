@@ -206,6 +206,10 @@ export function generateTown(world) {
     world.data[i] = id; world.locked[i] = lock && id !== B.AIR ? 1 : 0;
   };
   const village = buildVillage(world, put, cx, cz, hv, rnd, homes, RX, RZ);
+  // 2.0: the bank and the saloon at the east end of Main Street (added after
+  // everything else, so the homes and their people keep their places)
+  village.buildings.push(building(world, put, { x0: cx + 55, z0: cz + 6, x1: cx + 65, z1: cz + 14, side: 'n' }, hv, B.BRICK, 'bank'));
+  village.buildings.push(building(world, put, { x0: cx + 60, z0: cz - 16, x1: cx + 70, z1: cz - 6, side: 's' }, hv, B.WOOD, 'saloon'));
   const cottage = buildCottage(world, put, cot.x, hc, cot.z, cx, cz);
   // dirt paths from the ends of the center's roads out to every home and the cottage
   for (const b of village.buildings) if (b.type === 'house') b.trail = pave(world, b.arm, b.door);

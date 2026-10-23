@@ -20,6 +20,8 @@ import { Duels } from './duel.js';
 import { Pens } from './pens.js';
 import { Trades } from './trades.js';
 import { Houses } from './houses.js';
+import { Hidden } from './hidden.js';
+import { Frontier } from './frontier.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
@@ -98,6 +100,8 @@ export class TownLife {
     this.pens = new Pens(this);
     this.trades = new Trades(this, saved.trades || {});
     this.houses = new Houses(this, saved.houses || {});
+    this.hidden = new Hidden(this, saved.hidden || {});
+    this.frontier = new Frontier(this, saved.frontier || {});
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
@@ -161,7 +165,7 @@ export class TownLife {
   price(item, buy, base) {
     // a household that likes you gives a better price (up to 15%)
     const fam = this.shopKeeper ? Math.min(3, this.rapport[this.shopKeeper.homeIdx] || 0) * 0.05 : 0;
-    const k = (buy ? 1.25 - this.honor / 200 - fam : 0.75 + this.honor / 400 + fam) * this.trades.priceK(item, buy);   // your trade and the merchants' opinion
+    const k = (buy ? 1.25 - this.honor / 200 - fam : 0.75 + this.honor / 400 + fam) * this.trades.priceK(item, buy) * (this.frontier ? this.frontier.priceK(item, buy) : 1);   // your trade and the merchants' opinion; market day, a gold rush
     return buy ? Math.max(1, Math.ceil(base * k)) : Math.max(1, Math.floor(base * k));
   }
   addHonor(n) { this.honor = Math.max(0, Math.min(100, this.honor + n)); }
@@ -718,6 +722,9 @@ export class TownLife {
   aimTarget(hit, eye, dir) {
     const ho = this.houses.aimTarget(hit);                   // doors, setting down a blueprint (houses.js)
     if (ho) return ho;
+    const hd = this.hidden.aimTarget(hit);                   // strongboxes, buried treasure, blasting rock (hidden.js)
+    if (hd) return hd;
+    { const sel0 = this.game.selected(), W0 = WEAPONS[sel0]; const fa = this.frontier.aimTarget(hit, eye, dir, W0 && !W0.melee && !W0.throw); if (fa) return fa; }   // the stagecoach
     const tr = this.trades.aimTarget(hit, eye, dir);       // traps, handcuffs (trades.js)
     if (tr) return tr;
     const g = this.game, F = this.folk, p = g.player, sel = g.selected();
@@ -755,6 +762,7 @@ export class TownLife {
   // are armed, their nerve and station, and who is around to help.
   holdUp(v) {
     const g = this.game, F = this.folk;
+    if (v.teller) { this.frontier.heist(v); return; }          // the bank: a heist
     const gun = F.bestGun(v);
     const friends = F.list.filter((o) => o !== v && o.alive && !o.female && F.bestGun(o) && o.pos.distanceTo(v.pos) < 12).length;
     const nerve = v.brave + (v.status === 'mansion' ? 0.12 : 0) + Math.min(3, friends) * 0.06 - (g.player.riding ? 0.08 : 0);
@@ -781,6 +789,7 @@ export class TownLife {
   takeLoot(v, item) {
     const g = this.game;
     if (item.id === 'coins') { this.money += v.money; v.money = 0; }
+    else if (item.id === 'tmap') { v.goods = (v.goods || []).filter((x) => x !== 'tmap'); this.hidden.newMap('loot'); }
     else if (item.id === 'horse') { item.horse.owner = 'player'; item.horse.rider = null; v.lastHorse = null; g.hud.toast(t('horse.claimed'), 'pick'); }
     else {
       g.give(item.id, item.n);
@@ -915,6 +924,7 @@ export class TownLife {
   // the blast takes only the door (and its frame): never the walls or the ground
   blowDoor(c) {
     const g = this.game, F = this.folk, b = c.b, w = g.world;
+    if (c.rock) { this.hidden.blast(c); return; }
     if (c.plain) {
       for (let dy = -1; dy <= 1; dy++) { const id = w.get(c.hx, c.hy + dy, c.hz); if (id === B.DOOR || id === B.DOOR_OPEN) w.set(c.hx, c.hy + dy, c.hz, B.AIR); }
       g.particles.burst(c.x, c.y, c.z, [0.35, 0.3, 0.24], 24, 4, 1.2);
@@ -1013,6 +1023,7 @@ export class TownLife {
       const [x, , z] = this.jailB.cell.door[1] || this.jailB.cell.door[0];
       if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 2.4) out.push({ a: 'pickgang', label: t('ctx.pickGang') });
     }
+    out.push(...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
@@ -1034,7 +1045,8 @@ export class TownLife {
     else if (a === 'picklock') this.startPick();
     else if (a === 'pickgang') this.startPickGang();
     else if (a === 'callgang') this.callGang();
-    else if (a === 'craft') g.app.openPanel('craft');      // (this case was missing: the Craft button did nothing)
+    else if (a === 'craft') g.app.openPanel('craft');
+    else if (o.run) o.run();      // (this case was missing: the Craft button did nothing)
     this.ctxT = 0;
   }
   updateContext(dt, input) {
@@ -1066,6 +1078,8 @@ export class TownLife {
     this.pens.update(dt);
     this.trades.update(dt);
     this.houses.update(dt);
+    this.hidden.update(dt);
+    this.frontier.update(dt);
     if (this.chooseLater && !g.overlay && !g.dying && (this.chooseT -= dt) <= 0) { this.chooseLater = false; g.app.openPanel('trades', { mode: 'choose' }); }
     this.signs.update(dt);
     if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
@@ -1174,7 +1188,8 @@ export class TownLife {
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
       (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '') +
-      (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '');
+      (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '') +
+      (this.frontier.hudText() ? `<span class="job">${this.frontier.hudText()}</span>` : '');
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
@@ -1193,7 +1208,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(),
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(),
       },
     };
   }
@@ -1209,7 +1224,7 @@ export class TownLife {
     stopFolk(); setWind(0);
     this.folk.dispose();
     this.bar.remove(); this.ctxEl.remove(); this.arrowEl.remove();
-    this.furniture.dispose(); if (this.signs) this.signs.dispose(); if (this.pens) this.pens.dispose(); if (this.trades) this.trades.dispose(); if (this.houses) this.houses.dispose(); if (this.doctor) this.doctor.dispose();
+    this.furniture.dispose(); if (this.signs) this.signs.dispose(); if (this.pens) this.pens.dispose(); if (this.trades) this.trades.dispose(); if (this.houses) this.houses.dispose(); if (this.hidden) this.hidden.dispose(); if (this.frontier) this.frontier.dispose(); if (this.doctor) this.doctor.dispose();
     if (paintSeason(null) && this.game.tex) this.game.tex.needsUpdate = true;
   }
 }

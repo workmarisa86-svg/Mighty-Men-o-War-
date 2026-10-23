@@ -11,6 +11,7 @@ import { SIDE_NATIONS, flagURL } from './nations.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
 import { installTownUI } from './townui.js';
+import { installFrontierUI } from './frontierui.js';
 import { installWarUI } from './warui.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -325,6 +326,7 @@ export class UI {
       <button class="btn" id="psave">${t('menu.save')}</button>
       <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
       ${this.app.game && this.app.game.town && this.app.game.town.trades.trade ? `<button class="btn" id="ptrade">${t('trade.title')}</button>` : ''}
+      ${this.app.game && this.app.game.town ? `<button class="btn" id="pgoals">${t('goal.title')}</button>` : ''}
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t(this.app.game && this.app.game.town ? 'town.quit' : 'menu.quit')}</button></div>
@@ -334,6 +336,7 @@ export class UI {
     $('#psave').onclick = () => this.app.saveGame(false);
     $('#pmap').onclick = () => this.show('map', { from: 'pause' });
     if ($('#ptrade')) $('#ptrade').onclick = () => this.show('trades', { mode: 'info' });
+    if ($('#pgoals')) $('#pgoals').onclick = () => this.show('goals', { from: 'pause' });
     $('#pset').onclick = () => this.show('settings', { from: 'pause' });
     $('#pman').onclick = () => this.show('manual', { from: 'pause' });
     $('#pquit').onclick = () => this.app.quitToMenu();
@@ -586,4 +589,5 @@ export class UI {
 export { esc };
 
 installTownUI(UI);
+installFrontierUI(UI);
 installWarUI(UI);

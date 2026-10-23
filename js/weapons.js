@@ -356,7 +356,7 @@ export class Combat {
     sfx.shot(W.sound);
     g.animals.noise(p.pos, W.loud);
     g.enemies.hear(p.pos, W.loud * 1.5);
-    if (g.town) g.town.hearShot(p.pos);
+    if (g.town) { g.town.hearShot(p.pos); if (g.town.frontier) g.town.frontier.onShot(eye, dir); }     // (the fair's shooting contest)
   }
 
   dispose() { this.game.scene.remove(this.arc); this.arc.geometry.dispose(); this.chargeEl.remove(); for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); } for (const k of this.knives || []) this.game.scene.remove(k.mesh); this.knives = []; }
