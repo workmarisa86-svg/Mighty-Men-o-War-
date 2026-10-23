@@ -133,7 +133,7 @@ export function loadTown() {
 export function deleteTown() { for (const k of [TS, TE, TS + '-bak', TE + '-bak']) remove(k); }
 // A new Town Life story (version 2): the old Town Life world, full of test
 // play, is deleted once; War saves are never touched. True if it just happened.
-const STORY = 2;
+const STORY = 3;                 // 3: the bigger world with a main street
 export function townNewStory() {
   if (+(raw('town-story') || 0) >= STORY) return false;
   const had = hasTown();

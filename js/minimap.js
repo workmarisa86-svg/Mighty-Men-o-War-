@@ -105,6 +105,13 @@ export class Minimap {
         c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8);
       }
       // traps (gold: a catch) and the wanted men's cabins
+      for (const m of g.town.houses.mapMarks()) {
+        const [x, y, d] = toRadar(m.x, m.z);
+        if (d > RADAR_RANGE) continue;
+        c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
+        c.fillStyle = m.kind === 'home' ? '#f0e090' : m.kind === 'lot' ? 'rgba(160,220,120,0.8)' : m.kind === 'blueprint' ? '#8ad0ff' : '#c8b080';
+        c.fillRect(x - 3.5, y - 3.5, 7, 7); c.strokeRect(x - 3.5, y - 3.5, 7, 7);
+      }
       for (const m of g.town.trades.mapMarks()) {
         const [x, y, d] = toRadar(m.x, m.z);
         if (d > RADAR_RANGE) continue;

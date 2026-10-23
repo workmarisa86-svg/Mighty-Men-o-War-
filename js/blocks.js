@@ -15,6 +15,8 @@ export const B = {
   HDOOR: 43,
   // Town Life: a pen gate (closed: a fence you can open; open: you and your animals walk through)
   GATE: 44, GATE_OPEN: 45,
+  // Town Life: a plank door you buy and place (2 high); it opens and closes with use
+  DOOR: 46, DOOR_OPEN: 47,
 };
 
 export const BLOCKS = [];
@@ -64,6 +66,8 @@ def(B.PATH, { name: 'path', tiles: { top: 'path', side: 'dirt', bottom: 'dirt' }
 def(B.FENCE, { name: 'fence', opaque: false, render: 'glass', tiles: { top: 'fence', side: 'fence', bottom: 'fence' }, hard: 0.6, drop: 'wood', color: [0.42, 0.32, 0.2] });
 def(B.GATE, { name: 'gate', opaque: false, render: 'glass', tiles: { top: 'fence', side: 'gate', bottom: 'fence' }, hard: 0.6, drop: 'gate', color: [0.46, 0.34, 0.2] });
 def(B.GATE_OPEN, { name: 'gate_open', solid: false, opaque: false, render: 'glass', tiles: { top: 'gate_open', side: 'gate_open', bottom: 'gate_open' }, hard: 0.4, drop: 'gate', color: [0.46, 0.34, 0.2] });
+def(B.DOOR, { name: 'door', opaque: false, render: 'glass', tiles: { top: 'planks', side: 'pdoor', bottom: 'planks' }, hard: 0.7, drop: 'door', color: [0.5, 0.36, 0.22] });
+def(B.DOOR_OPEN, { name: 'door_open', solid: false, opaque: false, render: 'glass', tiles: { top: 'pdoor_open', side: 'pdoor_open', bottom: 'pdoor_open' }, hard: 0.5, drop: 'door', color: [0.5, 0.36, 0.22] });
 // crops: drawn as crossed sprites; growth is kept by the farm (from timestamps)
 for (const [id, name] of [[B.SPROUT, 'sprout'], [B.WHEAT_G, 'wheat_g'], [B.WHEAT_R, 'wheat_r'], [B.CARROT_G, 'carrot_g'], [B.CARROT_R, 'carrot_r'], [B.CABBAGE_G, 'cabbage_g'], [B.CABBAGE_R, 'cabbage_r'], [B.WILTED, 'wilted']]) {
   def(id, { name, crop: true, solid: false, opaque: false, render: 'cross', tiles: { top: name, side: name, bottom: name }, hard: 0.05, drop: null, color: [0.4, 0.5, 0.2] });

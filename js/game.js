@@ -789,6 +789,8 @@ export class Game {
     if (this.blockOverlapsBodies(x, y, z)) return;
     if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     this.world.set(x, y, z, def.block);
+    // a door is two blocks high
+    if (def.block === B.DOOR && this.world.get(x, y + 1, z) === B.AIR) this.world.set(x, y + 1, z, B.DOOR);
     if (this.campaign) this.campaign.noteBuilt(def.block);
     this.take(item);
     sfx.place();

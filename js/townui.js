@@ -5,6 +5,7 @@ import { itemIcon } from './items.js';
 import { hasTown } from './storage.js';
 import { M } from './modes.js';      // (Town Life's code is loaded once a town game starts)
 import { TRADES, GROUPS, KIT, COINS } from './trades.js';
+import { DESIGNS, DESIGN_IDS } from './houses.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -110,6 +111,53 @@ export function installTownUI(UI) {
   };
 
 
+
+  // ---- the land office: houses and lots ------------------------------------------
+  P.r_land = function ({ v, design = null }) {
+    const g = this.app.game, T = g.town, Hs = T.houses, p = g.player.pos;
+    const where = (q) => {
+      if (q.town) return t(q.side === 's' ? 'land.lotNorth' : 'land.lotSouth');
+      const dx = (q.x0 + q.x1) / 2 - p.x, dz = (q.z0 + q.z1) / 2 - p.z, a = (Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360;
+      return t('land.lotCountry', { m: Math.round(Math.hypot(dx, dz) / 10) * 10, dir: t('dir.' + ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'][Math.round(a / 45) % 8]) });
+    };
+    if (design) {
+      // choose a lot for a house bought built
+      const lots = Hs.freeLots(design);
+      const rows = lots.map((q) => `<div class="shop-row"><span><b>${where(q)}</b></span><b></b><button class="btn small primary" data-lot="${q.id}">${t('land.buyHere', { n: Hs.price(design) })}</button></div>`).join('') || `<p class="muted">${t('land.noLots')}</p>`;
+      const panel = this.panel(t('house.' + design), `<p class="muted">${t('land.pickLot')}</p><div class="shop">${rows}</div>`, { wide: true, onBack: () => this.show('land', { v }) });
+      panel.querySelectorAll('[data-lot]').forEach((b) => b.onclick = () => { if (Hs.buyBuilt(design, b.dataset.lot)) this.app.closePanel(); else this.show('land', { v, design }); });
+      return;
+    }
+    const mine = [];
+    const cur = Hs.home();
+    mine.push(`<div class="shop-row"><span><b>${t('land.yourHome')}</b> ${cur ? t('house.' + cur.design) : t('land.cottage')}</span><b></b><span></span></div>`);
+    if (cur && !Hs.cottageSold) mine.push(`<div class="shop-row"><span>${t('land.cottage')}${Hs.cottageTaken ? ' · <span class="muted">' + t('land.taken') + '</span>' : ''}</span><b>${Math.round(60 * T.trades.priceK('house', false))}</b><button class="btn small" data-sellc="1" ${Hs.cottageTaken ? 'disabled' : ''}>${t('shop.sell')}</button></div>`);
+    for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b>${Math.round(DESIGNS[h.design].value * T.trades.priceK('house', false))}</b><button class="btn small" data-sell="${h.id}">${t('shop.sell')}</button></div>`);
+    for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b></b><button class="btn small" data-move="${h.id}">${t('land.moveIn')}</button></div>`);
+    if (Hs.bp) mine.push(`<div class="shop-row"><span>${t('land.bpOn', { house: t('house.' + Hs.bp.design), n: (Hs.total || 0) - (Hs.left || 0), total: Hs.total || 0 })}</span><b></b><button class="btn small ghost" data-cancel="1">${t('land.cancelBp')}</button></div>`);
+    const cards = DESIGN_IDS.map((id) => {
+      const D = DESIGNS[id], why = Hs.allowed(id), pb = Hs.price(id), ps = Hs.price(id, true), P = D.plan();
+      const lots = Hs.freeLots(id).length;
+      return `<div class="trade-card house-card"><b>${t('house.' + id)}</b><span class="tagline">${t('house.' + id + 'Tag')}</span>
+        <small class="muted">${t('land.size', { w: P.w - 2, d: P.d - 2, n: P.blocks.length })}${D.honor ? ' · ' + t('land.honor', { n: D.honor }) : ''}</small>
+        ${why ? `<small class="warn">${why}</small>` : ''}
+        <div class="row"><button class="btn small primary" data-built="${id}" ${why || T.money < pb || !lots ? 'disabled' : ''}>${t('land.buyBuilt', { n: pb })}</button>
+        <button class="btn small" data-supplies="${id}" ${why || T.money < ps || Hs.bp ? 'disabled' : ''}>${t('land.buySupplies', { n: ps })}</button></div></div>`;
+    }).join('');
+    const body = `<div class="who"><b>${esc(v.name)}</b><span class="muted small">${t('shop.land')}</span></div>
+      <p class="coins-line">${t('shop.youHave', { n: T.money })}</p>
+      <div class="shop">${mine.join('')}</div>
+      <p class="muted small">${t('land.note')}</p>
+      <div class="trade-cards">${cards}</div>`;
+    const panel = this.panel(t('shop.land'), body, { wide: true, onBack: () => this.app.closePanel() });
+    panel.querySelectorAll('[data-built]').forEach((b) => b.onclick = () => this.show('land', { v, design: b.dataset.built }));
+    panel.querySelectorAll('[data-supplies]').forEach((b) => b.onclick = () => { if (Hs.buySupplies(b.dataset.supplies)) this.app.closePanel(); });
+    panel.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => { Hs.sellHome(Hs.homes.find((h) => h.id === b.dataset.sell)); this.show('land', { v }); });
+    panel.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { Hs.moveInto(Hs.homes.find((h) => h.id === b.dataset.move)); this.show('land', { v }); });
+    const sc = panel.querySelector('[data-sellc]'); if (sc) sc.onclick = () => { Hs.sellCottage(); this.show('land', { v }); };
+    const cb = panel.querySelector('[data-cancel]'); if (cb) cb.onclick = () => { Hs.cancelBlueprint(); this.show('land', { v }); };
+  };
+
   // ---- the bounty board at the sheriff's office --------------------------------------
   P.r_bounties = function ({ v }) {
     const g = this.app.game, T = g.town, Tr = T.trades, p = g.player.pos;
@@ -203,7 +251,7 @@ export function installTownUI(UI) {
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
-      <div class="legend">${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
+      <div class="legend">${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
     const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
@@ -232,7 +280,7 @@ export function installTownUI(UI) {
     box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
     // labels: in the whole view the town center is one label and homes show
     // their kind; the closer view names every building with its icon
-    const ICON = { general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
+    const ICON = { land: '📜', general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
     const label = (txt, x, y, size = 11) => { c.font = `${size * dpr / zoom}px Oswald, Arial`; c.textAlign = 'center'; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.strokeText(txt, x, y); c.fillStyle = '#f0e8cc'; c.fillText(txt, x, y); };
     if (zoom > 1) {
       for (const b of V.buildings) if (b.type !== 'house') label((ICON[b.type] || '') + ' ' + t('tmap.b.' + b.type), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 0.8) * sc, 10);
@@ -245,6 +293,14 @@ export function installTownUI(UI) {
       if (!v.alive || v.away || (!v.posse && Math.hypot(v.pos.x - g.player.pos.x, v.pos.z - g.player.pos.z) > 120)) continue;
       c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
       c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    // lots for sale, your houses, a blueprint
+    for (const m of T.houses.mapMarks()) {
+      const X = m.x * sc, Z = m.z * sc, r = 4.5 * dpr / zoom;
+      c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
+      c.fillStyle = m.kind === 'home' ? '#f0e090' : m.kind === 'lot' ? '#a0dc78' : m.kind === 'blueprint' ? '#8ad0ff' : '#c8b080';
+      c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2);
+      if (m.kind !== 'lot') label(t('tmap.' + m.kind), X, Z - r - 4 * dpr / zoom, 10);
     }
     // your traps (gold: something is caught) and the wanted men's cabins
     for (const m of T.trades.mapMarks()) {

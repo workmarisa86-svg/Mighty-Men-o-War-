@@ -490,9 +490,11 @@ export class Trades {
     point = point ? point.clone() : g.player.pos.clone();
     if (cmd === 'loot') return this.orderLoot(at.house || this.houseNear(point), point);
     if (cmd === 'chaos') return this.orderBrawl(point);
+    if (cmd !== 'follow') cmd = 'hold';            // (Hold here: spread out round the spot, guard it, defend themselves)
     this.order = { cmd, point };
     for (const v of this.free()) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; }
-    if (cmd === 'spread' || cmd === 'defend') this.ringSpots(this.order.point, cmd === 'spread' ? 6 : 3);
+    if (cmd === 'hold') this.ringSpots(point, 5);
+    this.quiet = cmd === 'follow' && this.alarm > 0;     // called back in a fight: they come with you (shooting as they go)
     if (cmd === 'distract') {
       const p = this.order.point;
       const v = this.gang.filter((m) => m.alive).sort((a, b) => a.pos.distanceTo(p) - b.pos.distanceTo(p))[0];
@@ -610,24 +612,54 @@ export class Trades {
   }
   brawlAi(v, dt) {
     const F = this.town.folk, B = v.task.B, other = B.men[1 - v.task.side];
-    if (B.over || !other.alive) { v.task = null; v.brawl = false; return true; }
-    const spot = { x: B.at.x + (v.task.side ? 0.55 : -0.55), y: B.at.y, z: B.at.z };
-    const d = Math.hypot(spot.x - v.pos.x, spot.z - v.pos.z);
+    if (B.over || !other.alive) { v.task = null; v.brawl = false; v.down = 0; return true; }
     if (!B.started) {
-      if (d > 0.5) { F.goDirect(v, spot, 4.8, dt, 0.4); return true; }
+      const spot = { x: B.at.x + (v.task.side ? 0.6 : -0.6), y: B.at.y, z: B.at.z };
+      if (Math.hypot(spot.x - v.pos.x, spot.z - v.pos.z) > 0.5) { F.goDirect(v, spot, 4.8, dt, 0.4); return true; }
       v.speed = 0;
-      if (B.men.every((m) => Math.hypot(m.pos.x - B.at.x, m.pos.z - B.at.z) < 1.2)) { B.started = true; F.say(v, 'say.brawlStart', null, 'warn'); }
+      if (B.men.every((m) => Math.hypot(m.pos.x - B.at.x, m.pos.z - B.at.z) < 1.4)) { B.started = true; F.say(v, 'say.brawlStart', null, 'warn'); }
       return true;
     }
-    // fists up, circling a little, punches and staggers
-    v.brawl = true; v.speed = 0; v.armed && F.armed(v, null);
-    v.yaw = Math.atan2(-(other.pos.x - v.pos.x), -(other.pos.z - v.pos.z));
-    v.punchT = (v.punchT ?? Math.random() * 0.8) - dt;
-    if (v.punchT <= 0) {
-      v.punchT = 0.5 + Math.random() * 0.9; v.punch = 0.35;
-      if (Math.random() < 0.55) { other.flinchT = 0.35; sfx.thump(); if (Math.random() < 0.12) F.say(other, 'say.brawlOof'); }
+    v.brawl = true; v.armed && F.armed(v, null); v.route = [];
+    const dx = other.pos.x - v.pos.x, dz = other.pos.z - v.pos.z, dd = Math.hypot(dx, dz) || 1, ux = dx / dd, uz = dz / dd;
+    // (they stay in a ring round the spot: the crowd keeps them in)
+    const move = (mx, mz) => {
+      let nx = v.pos.x + mx, nz = v.pos.z + mz;
+      const cx = nx - B.at.x, cz = nz - B.at.z, r = Math.hypot(cx, cz);
+      if (r > 2) { nx = B.at.x + cx / r * 2; nz = B.at.z + cz / r * 2; }
+      const gy = F.ground(nx, nz, v.pos.y + 1);
+      if (gy != null && Math.abs(gy - v.pos.y) < 1.1 && F.free(nx, gy, nz)) { v.pos.x = nx; v.pos.z = nz; v.pos.y += (gy - v.pos.y) * 0.5; }
+    };
+    v.speed = 0;
+    // knocked down: flat on his back for a moment, then up again
+    if (v.down > 0) { v.down -= dt; if (v.down <= 0) F.say(v, 'say.brawlUp'); return true; }
+    // knocked back by a blow: stagger away
+    if (v.knock > 0) { const k = v.knock / 0.45; move(-ux * 2.6 * k * dt, -uz * 2.6 * k * dt); v.knock -= dt; v.speed = 1.2; }
+    v.yaw = Math.atan2(-ux, -uz);
+    // circling: they shuffle round each other, closing in or backing off
+    const side = v.task.side ? 1 : -1;
+    if (other.down > 0) { if (dd > 1.6) { move(ux * 1.5 * dt, uz * 1.5 * dt); v.speed = 1.5; } }
+    else {
+      if (dd > 1.25) { move(ux * 1.8 * dt, uz * 1.8 * dt); v.speed = 1.8; } else if (dd < 0.85) { move(-ux * 1.2 * dt, -uz * 1.2 * dt); v.speed = 1.2; }
+      move(-uz * side * 0.7 * dt, ux * side * 0.7 * dt); if (!v.speed) v.speed = 0.7;
     }
-    v.punch = Math.max(0, (v.punch || 0) - dt);
+    // swinging: he steps in with a jab or a haymaker; a blow that lands sends the other man reeling
+    v.punchT = (v.punchT ?? Math.random() * 0.8) - dt;
+    if (v.punchT <= 0 && !(v.knock > 0) && !(other.down > 0) && dd < 1.7) {
+      v.punchT = 0.55 + Math.random() * 0.9; v.punch = 0.4; v.hook = Math.random() < 0.35; v.landed = false; v.right = !v.right;
+    }
+    if (v.punch > 0) {
+      v.punch -= dt;
+      move(ux * 1.6 * dt, uz * 1.6 * dt);                     // the lunge
+      if (!v.landed && v.punch < 0.22) {
+        v.landed = true;
+        if (Math.random() < 0.62 && !(other.down > 0)) {
+          other.knock = 0.45; other.flinchT = 0.35; sfx.thump();
+          if (Math.random() < (v.hook ? 0.35 : 0.12)) { other.down = 1.9; other.knock = 0; F.say(other, 'say.brawlOof'); sfx.thump(); }
+          else if (Math.random() < 0.15) F.say(other, 'say.brawlOof');
+        }
+      }
+    }
     return true;
   }
   // the crowd: everyone near comes to watch (and sees nothing else); the sheriff breaks it up
@@ -648,7 +680,7 @@ export class Trades {
     if (B.t > B.dur || B.sheriffT > 22 || B.men.some((m) => !m.alive)) {
       B.over = true; this.brawl = null;
       for (const o of F.list) if (o.watching === B) o.watching = null;
-      for (const m of B.men) { m.brawl = false; m.task = null; }
+      for (const m of B.men) { m.brawl = false; m.task = null; m.down = 0; m.knock = 0; m.punch = 0; }
       if (B.sheriffT > 22) {
         const sh = F.list.find((o) => o.role === 'sheriff' && o.alive);
         if (sh) F.say(sh, 'say.sheriffBreakUp', null, 'warn');
@@ -712,17 +744,31 @@ export class Trades {
     });
   }
   // who the gang shoots at: anyone fighting you (the posse when it turns hostile, an outlaw who drew)
+  // who the gang shoots at: anyone fighting you or them (a hostile posse, a man
+  // who drew, whoever fired on one of them) and wild animals coming at you or them
   gangTarget(v) {
-    const F = this.town.folk, T = this.town;
-    let best = null, bd = 32;
+    const g = this.game, F = this.town.folk, T = this.town, P = g.player.pos;
+    let best = null, bd = 40;
     for (const o of F.list.concat(F.extra)) {
-      if (!o.alive || o.gang || o.away || o.cuffed) continue;
-      const foe = (o.posse && T.posse && T.posse.hostile) || o.fight;
+      if (!o.alive || o.gang || o.away || o.cuffed || o.jailed) continue;
+      const foe = (o.posse && T.posse && T.posse.hostile) || o.fight || (o.firedOnGang || 0) > performance.now() / 1000;
       if (!foe) continue;
       const d = Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z);
-      if (d < bd) { bd = d; best = o; }
+      if (d < bd) { bd = d; best = { ref: o, animal: false }; }
+    }
+    if (!best) for (const a of g.animals.danger()) {
+      const d = Math.min(Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z), Math.hypot(a.pos.x - P.x, a.pos.z - P.z) + 6);
+      if (d < 34 && d < bd) { bd = d; best = { ref: a, animal: true }; }
     }
     return best;
+  }
+  tgAlive(tg) { return !!tg && (tg.animal ? tg.ref.state !== 'dead' && this.game.animals.list.includes(tg.ref) : tg.ref.alive && !tg.ref.away); }
+  // the gang is attacked (or a posse is out for blood): they scatter to cover and fight back
+  raiseAlarm(sec = 15) {
+    const g = this.game;
+    if (!this.gang.some((m) => m.alive && !m.jailed)) return;
+    if (!(this.alarm > 0) && !this.quiet) { g.hud.alert(t('gang.underFire')); sfx.warn ? sfx.warn() : sfx.alert(); }
+    this.alarm = Math.max(this.alarm || 0, sec);
   }
   memberAi(v, dt, d) {
     const g = this.game, F = this.town.folk, P = g.player.pos, O = this.order;
@@ -737,33 +783,28 @@ export class Trades {
     if (v.task && v.task.kind === 'brawl') return this.brawlAi(v, dt);
     v.cool -= dt;
     v.tgtT = (v.tgtT || 0) - dt;
-    if (v.tgtT <= 0) { v.tgtT = 0.5; v.target = this.gangTarget(v); }
-    const tg = v.target && v.target.alive ? v.target : null;
-    // where to be
+    if (v.tgtT <= 0) { v.tgtT = 0.4; v.target = this.gangTarget(v); if (v.target && !v.target.animal) this.raiseAlarm(12); }
+    const tg = this.tgAlive(v.target) ? v.target : null, tp = tg && tg.ref.pos;
     const alive = this.gang.filter((m) => m.alive && !m.jailed && !m.task), i = Math.max(0, alive.indexOf(v)), n = Math.max(1, alive.length);
     let goal = null, run = false;
-    if (d > 70 && O.cmd === 'follow') { const a = i / n * 6.28; v.pos.set(P.x + Math.cos(a) * 4, P.y, P.z + Math.sin(a) * 4); v.route = []; }     // they catch up (a long ride, a night's sleep)
-    if (v.distractT > 0) {
-      v.distractT -= dt;
-      if (!v.distractAt) { const q = O.point, gy = F.ground(q.x, q.z, q.y + 2); v.distractAt = gy != null ? { x: q.x, y: gy, z: q.z } : q; }
-      const p = v.distractAt, dp = Math.hypot(p.x - v.pos.x, p.z - v.pos.z);
-      if (dp > 2.5 && !(dp < 5 && v.stuckT > 0.5) && !v.distracted) { goal = p; run = true; }       // (close enough to be heard is close enough)
-      else if (!v.distracted) {
-        v.distracted = true; F.say(v, 'say.gangDistract');
-        sfx.whistle ? sfx.whistle(0.8) : sfx.alert();
-        for (const o of F.list) if (o.alive && !o.away && o.pos.distanceTo(p) < 25) { o.faceT = 6; o.yaw = Math.atan2(-(p.x - o.pos.x), -(p.z - o.pos.z)); }
-        if (this.town.posse) { this.town.posse.lastSeen = p.clone(); this.town.posse.seenT = 0; }
+    // under fire (and you haven't called them back to you): to cover, and fight from there
+    const fighting = this.alarm > 0 && !this.quiet;
+    if (d > 70 && O.cmd === 'follow' && !fighting) { const a = i / n * 6.28; v.pos.set(P.x + Math.cos(a) * 4, P.y, P.z + Math.sin(a) * 4); v.route = []; }     // they catch up (a long ride, a night's sleep)
+    if (fighting) {
+      const home = O.cmd === 'hold' && v.spot ? v.spot : v.pos;
+      if (!v.coverAt || (v.coverT = (v.coverT || 0) - dt) <= 0 || (tp && Math.hypot(v.coverAt.x - home.x, v.coverAt.z - home.z) > 9)) {
+        v.coverAt = this.coverFor(v, tg ? tg.ref : null) || new THREE.Vector3(home.x, home.y, home.z); v.coverT = 8;
       }
-      if (v.distractT <= 0) v.distracted = false;
+      goal = v.coverAt; run = true;
     } else if (O.cmd === 'follow') {
+      v.coverAt = null;
       const fx = -Math.sin(g.player.yaw), fz = -Math.cos(g.player.yaw), rx = Math.cos(g.player.yaw), rz = -Math.sin(g.player.yaw);
       const side = (i - (n - 1) / 2) * 1.7;
       goal = { x: P.x - fx * 3 + rx * side, y: P.y, z: P.z - fz * 3 + rz * side };
       run = d > 8;
-    } else if (O.cmd === 'hold') goal = v.holdAt;
-    else if (O.cmd === 'defend' || O.cmd === 'spread') {
-      if (!v.spot) this.ringSpots(O.point, O.cmd === 'spread' ? 6 : 3);
-      // no headway for a while (something in the way): take a place on his own side of the ring instead
+    } else {
+      // Hold here: spread round the spot, guard it, defend themselves
+      if (!v.spot) this.ringSpots(O.point, 5);
       const gs = Math.hypot(v.spot.x - v.pos.x, v.spot.z - v.pos.z);
       v.chkT = (v.chkT || 0) - dt;
       if (v.chkT <= 0) {                                    // once a second: closer by half a metre or more?
@@ -772,12 +813,11 @@ export class Trades {
         v.spotBest = gs;
       }
       if (v.spotT >= 3) {
+        // no headway (something in the way): the nearest place on his side of the ring he can really get to
         v.spotT = 0; v.spotBest = null; v.route = [];
-        const R = O.cmd === 'spread' ? 6 : 3, a = Math.atan2(v.pos.z - O.point.z, v.pos.x - O.point.x);
-        const far = Math.hypot(v.pos.x - O.point.x, v.pos.z - O.point.z);
+        const a = Math.atan2(v.pos.z - O.point.z, v.pos.x - O.point.x), far = Math.hypot(v.pos.x - O.point.x, v.pos.z - O.point.z);
         let got = null;
-        // the nearest place on his side of the ring that he can really get to (else he holds where he is)
-        for (let r = R; r < far - 1 && !got; r += 2) {
+        for (let r = 5; r < far - 1 && !got; r += 2) {
           const x = O.point.x + Math.cos(a) * r, z = O.point.z + Math.sin(a) * r, gy = F.ground(x, z, v.pos.y + 2);
           if (gy == null || !F.free(x, gy, z)) continue;
           const path = findPath(this.game.world, v.pos, { x, y: gy, z }, 700, true);
@@ -786,17 +826,14 @@ export class Trades {
         v.spot = got || { x: v.pos.x, y: v.pos.y, z: v.pos.z };
       }
       goal = v.spot;
-      run = Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) > 3;
-    } else if (O.cmd === 'cover') {
-      if (!v.coverAt) v.coverAt = this.coverFor(v, tg) || v.pos.clone();
-      goal = v.coverAt;
+      run = gs > 3;
     }
     // keeping up: close by, they head straight for their (moving) place every frame; farther,
     // they find a way round; the farther behind, the faster (a run, then a sprint)
     const gd = goal ? Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) : 0;
     const sp = gd > 12 ? 7.6 : gd > 6 ? 6.6 : gd > 2.5 || run ? 4.8 : 2.4;
     // left far behind and out of sight (a long gallop, a steep climb): he catches up off-screen
-    if (goal && gd > (O.cmd === 'follow' ? 26 : 14) && v.stuckT > 0.8 && !F.visible(v) || (O.cmd === 'follow' && goal && gd > 26 && !F.visible(v))) { const gy = F.ground(goal.x, goal.z, P.y + 2); if (gy != null && F.free(goal.x, gy, goal.z)) { v.pos.set(goal.x, gy, goal.z); v.route = []; } }
+    if (!fighting && (goal && gd > (O.cmd === 'follow' ? 26 : 14) && v.stuckT > 0.8 && !F.visible(v) || (O.cmd === 'follow' && goal && gd > 26 && !F.visible(v)))) { const gy = F.ground(goal.x, goal.z, P.y + 2); if (gy != null && F.free(goal.x, gy, goal.z)) { v.pos.set(goal.x, gy, goal.z); v.route = []; } }
     v.detourT = Math.max(0, (v.detourT || 0) - dt);
     if (goal && gd > 0.9) {
       if (gd < 9 && v.detourT <= 0) {
@@ -806,23 +843,23 @@ export class Trades {
       } else if (v.detourT > 0 && v.route.length) { if (F.walk(v, dt, sp)) v.detourT = 0; }
       else F.goDirect(v, goal, sp, dt, 0.8);
     } else v.speed = 0;
-    v.crouch = O.cmd === 'cover' && v.speed === 0 && !(tg && v.cool < 0.3);
-    // shoot at whoever is fighting you
+    // in cover: down behind it, up to fire
+    v.crouch = fighting && v.speed === 0 && !(tg && v.cool < 0.35);
+    // shoot (at men or animals coming at you or them)
     if (tg) {
-      const dd = Math.hypot(tg.pos.x - v.pos.x, tg.pos.z - v.pos.z);
-      if (v.speed === 0 || dd < 15) v.yaw = Math.atan2(-(tg.pos.x - v.pos.x), -(tg.pos.z - v.pos.z));
+      const dd = Math.hypot(tp.x - v.pos.x, tp.z - v.pos.z);
+      if (v.speed === 0 || dd < 18) v.yaw = Math.atan2(-(tp.x - v.pos.x), -(tp.z - v.pos.z));
       if (v.armed !== F.bestGun(v)) F.armed(v, F.bestGun(v));
-      if (v.cool <= 0 && dd < 35) this.gangShoot(v, tg, dd);
-      v.fightPose = true;
-    } else { if (v.armed && v.cool < -6) F.armed(v, null); v.fightPose = false; }
-    if (!tg && v.speed === 0 && !goal) v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
+      if (v.cool <= 0 && dd < 40) this.gangShoot(v, tg, dd);
+    } else if (v.armed && v.cool < -6) F.armed(v, null);
+    if (!tg && v.speed === 0 && O.cmd === 'follow' && !fighting) v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
     v.duelAim = !!tg;               // (the aim pose of a drawn gun)
     return true;
   }
-  coverFor(v, tg) {
-    const g = this.game, w = g.world, F = this.town.folk, from = tg ? tg.pos : g.player.pos;
-    for (let k = 0; k < 14; k++) {
-      const a = Math.random() * 6.28, r = 1.5 + Math.random() * 5;
+  coverFor(v, threat) {
+    const g = this.game, w = g.world, F = this.town.folk, from = threat ? threat.pos : g.player.pos;
+    for (let k = 0; k < 18; k++) {
+      const a = Math.random() * 6.28, r = 1.5 + Math.random() * 6;
       const x = v.pos.x + Math.cos(a) * r, z = v.pos.z + Math.sin(a) * r, y = F.ground(x, z, v.pos.y + 1);
       if (y == null || Math.abs(y - v.pos.y) > 2 || !F.free(x, y, z)) continue;
       const dx = from.x - x, dz = from.z - z, L = Math.hypot(dx, dz) || 1;
@@ -831,23 +868,37 @@ export class Trades {
     return null;
   }
   gangShoot(v, tg, dd) {
-    const g = this.game, F = this.town.folk;
-    v.cool = 1.3 + Math.random() * 1.1; v.fired = true;
+    const g = this.game, F = this.town.folk, o = tg.ref, tp = o.pos;
+    v.cool = 1.0 + Math.random() * 0.8; v.fired = true;
     const gun = v.armed || 'revolver';
-    if (gun === 'shotgun' && dd > 26) return;
+    if (gun === 'shotgun' && dd > 26) { v.cool = 0.3; return; }
     sfx.shot(gun === 'lever' ? 'rifle' : gun, Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
-    const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z), b = new THREE.Vector3(tg.pos.x, tg.pos.y + 1.2, tg.pos.z);
+    const a = new THREE.Vector3(v.pos.x, v.pos.y + (v.crouch ? 1.0 : 1.45), v.pos.z);
+    const b = new THREE.Vector3(tp.x, tp.y + (tg.animal ? o.T.height * 0.6 : 1.2), tp.z);
     const dir = b.clone().sub(a), L = dir.length(); dir.divideScalar(L);
     const blocked = g.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, L - 0.4, false, 'bullet');
     const tr = F.tracers[F.trI++ % F.tracers.length], pos = tr.l.geometry.attributes.position;
     const end = blocked ? a.clone().addScaledVector(dir, blocked.dist) : b;
     pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
-    if (blocked || Math.random() > Math.max(0.2, 0.65 - dd / 70)) return;
-    const killed = F.hurt(tg, gun === 'lever' ? 30 : gun === 'shotgun' ? Math.max(10, 40 - dd) : 22);
-    if (!tg.fight && tg.alive && !tg.posse) { tg.fight = { armed: F.bestGun(tg) }; }
+    if (blocked || Math.random() > Math.max(0.25, (tg.animal ? 0.8 : 0.7) - dd / 70)) return;
+    const dmg = gun === 'lever' ? 30 : gun === 'shotgun' ? Math.max(10, 40 - dd) : 22;
+    if (tg.animal) { g.animals.hurt(o, dmg * 1.4); return; }
+    const killed = F.hurt(o, dmg);
+    if (!o.fight && o.alive && !o.posse) { o.fight = { armed: F.bestGun(o) }; }
     // what your gang does is on your head (an outlaw's death is no crime)
-    if (!tg.extra) this.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : tg, dead: killed ? tg : null });
+    if (!o.extra && !o.posse) this.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : o, dead: killed ? o : null });
+    else if (o.posse && killed) this.town.crime('murder', { dead: o });
+  }
+  // the alarm fades when no one is shooting; a posse riding out after you is impossible to miss
+  updateAlarm(dt) {
+    const g = this.game, T = this.town;
+    if (this.alarm > 0) { this.alarm -= dt; if (this.alarm <= 0) { this.alarm = 0; this.quiet = false; } }
+    const men = this.gang.some((m) => m.alive && !m.jailed);
+    if (T.posse && men) {
+      if (!this.posseWarned) { this.posseWarned = true; g.hud.bigMessage(t('gang.posseTitle'), t('gang.posseSub', { n: T.posse.members.filter((m) => m.alive).length })); sfx.warn ? sfx.warn() : sfx.alert(); }
+      if (T.posse.hostile) this.raiseAlarm(10);
+    } else this.posseWarned = false;
   }
   updateGang(dt) {
     const g = this.game, day = Math.floor(g.time);
@@ -864,7 +915,7 @@ export class Trades {
   update(dt) {
     this.tick -= dt;
     this.updateTraps(dt);
-    if (this.tick <= 0) { this.tick = 0.5; this.updateOutlaws(0.5); this.updateGang(0.5); this.updateBrawl(0.5); this.updateJail(); }
+    if (this.tick <= 0) { this.tick = 0.5; this.updateOutlaws(0.5); this.updateGang(0.5); this.updateBrawl(0.5); this.updateJail(); this.updateAlarm(0.5); }
   }
   // the map: traps (gold with a catch), the wanted men's cabins
   mapMarks() {

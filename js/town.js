@@ -19,6 +19,7 @@ import { Signs } from './signs.js';
 import { Duels } from './duel.js';
 import { Pens } from './pens.js';
 import { Trades } from './trades.js';
+import { Houses } from './houses.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
@@ -27,7 +28,9 @@ export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
 // what each shop sells and buys (base prices in coins)
 export const SHOPS = {
-  general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, glass: 3, fence: 2, handcuffs: 14 },
+  general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
+    // building materials, ready made (crafting them yourself is cheaper)
+    wood: 2, stone: 2, brick: 3, glass: 3, thatch: 2, charcoal: 2, fence: 2, gate: 6, door: 9, ladder: 3 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
   butcher: { sells: { meat_cooked: 6, meat_raw: 4, fish_cooked: 6 }, buys: { meat_raw: 3, meat_cooked: 4, fish: 3, big_fish: 12, fish_cooked: 5 } },
   hunting: { sells: { rod: 6, knife: 10, trap: 9, revolver: 45, shotgun: 55, lever: 80, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, wolf_hide: 18, meat_raw: 2 } },
@@ -93,6 +96,7 @@ export class TownLife {
     this.duels = new Duels(this);
     this.pens = new Pens(this);
     this.trades = new Trades(this, saved.trades || {});
+    this.houses = new Houses(this, saved.houses || {});
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
@@ -559,8 +563,9 @@ export class TownLife {
     }
   }
   wakeAtHome() {
-    const g = this.game, c = this.cottage, p = g.player;
-    p.pos.set(c.x + 0.5, c.y, c.z + 0.5); p.vel.set(0, 0, 0);
+    const g = this.game, c = this.cottage, p = g.player, h = this.houses && this.houses.wakeSpot();
+    if (h) p.pos.set(h.x, h.y, h.z); else p.pos.set(c.x + 0.5, c.y, c.z + 0.5);
+    p.vel.set(0, 0, 0);
     p.health = 100; g.breath = 20;
   }
   // death or starvation: you wake up in the cottage (no game over)
@@ -644,6 +649,8 @@ export class TownLife {
   // surrendered person: Loot; a horse: Ride; a house door: Knock (or, with
   // dynamite in hand, Blow it open)
   aimTarget(hit, eye, dir) {
+    const ho = this.houses.aimTarget(hit);                   // doors, setting down a blueprint (houses.js)
+    if (ho) return ho;
     const tr = this.trades.aimTarget(hit, eye, dir);       // traps, handcuffs (trades.js)
     if (tr) return tr;
     const g = this.game, F = this.folk, p = g.player, sel = g.selected();
@@ -822,6 +829,14 @@ export class TownLife {
     this.charges.push({ b, t: 3, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
     g.hud.alert(t('door.lit')); sfx.alert();
   }
+  // dynamite at a plank door (yours, or anyone's you placed)
+  lightPlainDoor(hit) {
+    const g = this.game;
+    if (!g.has('dynamite')) return;
+    g.take('dynamite', 1); g.hud.dirtyHotbar = true;
+    this.charges.push({ plain: true, t: 3, hx: hit.x, hy: hit.y, hz: hit.z, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
+    g.hud.alert(t('door.lit')); sfx.alert();
+  }
   // dynamite at the jail cell's bars (one of your gang is locked up)
   lightCell(hit) {
     const g = this.game;
@@ -833,6 +848,16 @@ export class TownLife {
   // the blast takes only the door (and its frame): never the walls or the ground
   blowDoor(c) {
     const g = this.game, F = this.folk, b = c.b, w = g.world;
+    if (c.plain) {
+      for (let dy = -1; dy <= 1; dy++) { const id = w.get(c.hx, c.hy + dy, c.hz); if (id === B.DOOR || id === B.DOOR_OPEN) w.set(c.hx, c.hy + dy, c.hz, B.AIR); }
+      g.particles.burst(c.x, c.y, c.z, [0.35, 0.3, 0.24], 24, 4, 1.2);
+      sfx.explosion(Math.max(0.3, 1 - g.player.pos.distanceTo(new THREE.Vector3(c.x, c.y, c.z)) / 60), false);
+      g.shake = Math.max(g.shake, 0.5);
+      const pd = Math.hypot(g.player.pos.x - c.x, g.player.pos.z - c.z);
+      if (pd < 3) g.damage(Math.round(30 * (1 - pd / 3)), 'blast');
+      this.hearShot(new THREE.Vector3(c.x, c.y, c.z));
+      return;
+    }
     if (c.cell) {
       // a jailbreak: the bars blown out, your men walk free; a crime if anyone sees it
       this.cellDoor(false);
@@ -897,9 +922,9 @@ export class TownLife {
     const v = this.folk.nearest(p, 3.4, (x) => !x.posse && !x.reportTo && !x.sleeping);     // (nobody does business in their sleep)
     // the shopkeeper counts even when a customer stands closer (that hid the Shop button)
     const keeper = this.folk.nearest(p, 3.6, (x) => x.role === 'keeper' && !x.surrendered);
-    if (keeper && keeper !== v) out.push({ a: 'shop', label: t('ctx.shop'), v: keeper });
+    if (keeper && keeper !== v) out.push({ a: 'shop', label: t(keeper.shop === 'land' ? 'ctx.land' : 'ctx.shop'), v: keeper });
     if (v) {
-      if (v.role === 'keeper') out.push({ a: 'shop', label: t('ctx.shop'), v });
+      if (v.role === 'keeper') out.push({ a: 'shop', label: t(v.shop === 'land' ? 'ctx.land' : 'ctx.shop'), v });
       if (v.role === 'sheriff') out.push({ a: 'sheriff', label: t('ctx.sheriff'), v });
       const f = this.job;
       if (f && ((f.giver === v.i && !f.courier) || (f.courier && f.to === v.i))) out.push({ a: 'job', label: t(f.courier ? 'ctx.deliver' : 'ctx.handOver'), v });
@@ -917,14 +942,14 @@ export class TownLife {
       return out;
     }
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
-    const bed = this.cottage.bed;
+    const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
     return out;
   }
   doAction(a) {
     const g = this.game, o = this.ctx.find((x) => x.a === a);
     if (!o || g.paused || g.overlay || g.dead || g.dying) return;
-    if (a === 'shop') { this.shopKeeper = o.v; g.app.openPanel('shop', { shop: o.v.shop, v: o.v }); }
+    if (a === 'shop') { this.shopKeeper = o.v; if (o.v.shop === 'land') g.app.openPanel('land', { v: o.v }); else g.app.openPanel('shop', { shop: o.v.shop, v: o.v }); }
     else if (a === 'sheriff') g.app.openPanel('sheriff', { v: o.v });
     else if (a === 'job') this.askJob(o.v);
     else if (a === 'skin') { g.animals.skin(o.carcass); g.vm.doSwing(); sfx.stab(); }
@@ -966,6 +991,7 @@ export class TownLife {
     this.duels.update(dt);
     this.pens.update(dt);
     this.trades.update(dt);
+    this.houses.update(dt);
     if (this.chooseLater && !g.overlay && !g.dying && (this.chooseT -= dt) <= 0) { this.chooseLater = false; g.app.openPanel('trades', { mode: 'choose' }); }
     this.signs.update(dt);
     if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
@@ -995,6 +1021,7 @@ export class TownLife {
       if (s && (this.sheriffT = (this.sheriffT || 0) - dt) <= 0) { this.sheriffT = 1; if (this.folk.sees(s, 30)) { this.folk.say(s, 'say.sheriffWanted', null, 'warn'); this.formPosse(g.player.pos); } }
     }
     this.livestock(dt);
+    this.helpAgainstAnimals(dt);
     this.updateJail(dt);
     this.updateSupper(dt);
     this.updateDoors(dt);
@@ -1003,6 +1030,23 @@ export class TownLife {
     this.ambience(dt);
     this.updateBar();
     this.jobArrow();
+  }
+  // a wolf or a bear at you: armed men nearby who think well of you come to help
+  // (wanted, or with a bad name in town, you are on your own; your gang always helps)
+  helpAgainstAnimals(dt) {
+    const g = this.game, F = this.folk, P = g.player.pos;
+    this.helpT = (this.helpT || 0) - dt;
+    if (this.helpT > 0) return;
+    this.helpT = 0.5;
+    if (this.bounty > 0 || this.posse || this.honor < 50) return;
+    const danger = g.animals.danger().filter((a) => Math.hypot(a.pos.x - P.x, a.pos.z - P.z) < 22);
+    if (!danger.length) return;
+    const helping = F.list.filter((v) => v.huntAnimal).length;
+    if (helping >= 3) return;
+    const likes = (v) => this.honor >= 60 || (this.rapport[v.homeIdx] || 0) >= 2 || v.role === 'sheriff';
+    const cands = F.list.filter((v) => v.alive && !v.away && !v.female && !v.posse && !v.fight && !v.reportTo && !v.sleeping && !v.huntAnimal && !v.duel && !v.watching && F.bestGun(v) && likes(v) && Math.hypot(v.pos.x - P.x, v.pos.z - P.z) < 50)
+      .sort((a, b) => a.pos.distanceTo(P) - b.pos.distanceTo(P)).slice(0, 3 - helping);
+    for (const v of cands) { v.huntAnimal = danger[0]; v.route = []; F.say(v, 'say.helpWolf', null, 'warn'); }
   }
   // hens lay eggs in the pen
   livestock(dt) {
@@ -1055,7 +1099,8 @@ export class TownLife {
       `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
-      (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '');
+      (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '') +
+      (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '');
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
@@ -1074,7 +1119,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, trades: this.trades.toSave(),
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, trades: this.trades.toSave(), houses: this.houses.toSave(),
       },
     };
   }
@@ -1090,7 +1135,7 @@ export class TownLife {
     stopFolk(); setWind(0);
     this.folk.dispose();
     this.bar.remove(); this.ctxEl.remove(); this.arrowEl.remove();
-    this.furniture.dispose(); if (this.signs) this.signs.dispose(); if (this.pens) this.pens.dispose(); if (this.trades) this.trades.dispose(); if (this.doctor) this.doctor.dispose();
+    this.furniture.dispose(); if (this.signs) this.signs.dispose(); if (this.pens) this.pens.dispose(); if (this.trades) this.trades.dispose(); if (this.houses) this.houses.dispose(); if (this.doctor) this.doctor.dispose();
     if (paintSeason(null) && this.game.tex) this.game.tex.needsUpdate = true;
   }
 }

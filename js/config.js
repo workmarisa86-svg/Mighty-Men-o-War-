@@ -1,5 +1,5 @@
 // Global constants shared by every module.
-export const GAME_VERSION = '1.8.0';
+export const GAME_VERSION = '1.9.0';
 export const SAVE_FORMAT = 4;      // 4: the 14-country campaign; older War saves can't be converted
 // every saved key: blocks-mmow-… (unique to this game on the shared github.io origin)
 export const STORE_PREFIX = 'blocks-mmow-';
@@ -49,5 +49,5 @@ export const BODY = {
 // Town Life's world size and layout version (a save from an older layout
 // keeps the player's coins, honor, belongings and stats, but the world
 // itself is made anew). Here so the menus need none of Town Life's code.
-export const TOWN_SIZE = 256;
-export const TOWN_LAYOUT = 5;      // 5: the hospital and lettered signs
+export const TOWN_SIZE = 512;          // (4 times the land of the first town)
+export const TOWN_LAYOUT = 6;      // 6: a bigger world and a main street

@@ -21,16 +21,20 @@ export function generateTown(world) {
   const n4 = new Simplex2(seed + 3), n5 = new Simplex2(seed + 4), n6 = new Simplex2(seed + 5);
   const rnd = mulberry32(seed + 99);
   const cx = Math.floor(W / 2), cz = Math.floor(D / 2);
-  const VR = 34, VB = 44, ARM = 30;             // town center: flat radius, blend radius, road length
+  // the town: one long main street (east-west) with shops on both sides, a
+  // little plaza in the middle and a short cross street out to the homes
+  const RX = 72, RZ = 30, FLATZ = 26, BLEND = 12;
+  // distance from the town's flat rectangle (0 inside it)
+  const dTown = (x, z) => Math.hypot(Math.max(0, Math.abs(x - cx) - (RX + 8)), Math.max(0, Math.abs(z - cz) - FLATZ));
 
   // --- water mask: a winding river and a couple of lakes, never in the village
   const water = new Uint8Array(W * D);
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    const k = x + z * W, dv = Math.hypot(x - cx, z - cz);
+    const k = x + z * W;
     const rv = Math.abs(n3.fbm(x / 170, z / 170, 2));
     const lk = n4.fbm(x / 80, z / 80, 2);
     let wet = rv < 0.028 || lk > 0.45;
-    if (dv < VB + 4 || x < 4 || z < 4 || x >= W - 4 || z >= D - 4) wet = false;
+    if (dTown(x, z) < 16 || x < 4 || z < 4 || x >= W - 4 || z >= D - 4) wet = false;
     water[k] = wet ? 1 : 0;
   }
   for (let pass = 0; pass < 2; pass++) {
@@ -47,7 +51,7 @@ export function generateTown(world) {
   // --- the cottage: out in the fields, on the driest of four diagonals
   let cot = null;
   for (const a of [0.8, 2.35, 3.9, 5.5].sort(() => rnd() - 0.5)) {
-    const x = Math.floor(cx + Math.cos(a) * 82), z = Math.floor(cz + Math.sin(a) * 82);
+    const x = Math.floor(cx + Math.cos(a) * 140), z = Math.floor(cz + Math.sin(a) * 140);
     let wet = 0;
     for (let dz = -14; dz <= 14; dz += 2) for (let dx = -14; dx <= 14; dx += 2) wet += water[(x + dx) + (z + dz) * W] || 0;
     if (!cot || wet < cot.wet) cot = { x, z, wet };
@@ -69,9 +73,10 @@ export function generateTown(world) {
     const status = STATUS[k], half = HOME_HALF[status], flat = half + 11;
     let best = null;
     for (let tries = 0; tries < 60; tries++) {
-      const a = a0 + (k * 2.399) + (rnd() - 0.5) * (tries < 20 ? 0.6 : 2.4), r = 50 + rnd() * 64;
+      const a = a0 + (k * 2.399) + (rnd() - 0.5) * (tries < 20 ? 0.6 : 2.4), r = 95 + rnd() * 110;
       const x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
       if (x < flat + 4 || z < flat + 4 || x >= W - flat - 4 || z >= D - flat - 4) continue;
+      if (dTown(x, z) < flat + 24) continue;
       if (Math.hypot(x - cot.x, z - cot.z) < 36 + half || homes.some((h) => Math.hypot(h.x - x, h.z - z) < h.flat + flat + 2)) continue;
       const wet = wetness(x, z, flat);
       if (!best || wet < best.wet) best = { x, z, wet, status, half, flat };
@@ -79,8 +84,9 @@ export function generateTown(world) {
     if (best) homes.push(best);
   }
   // each path leaves the center at the end of one of its four roads
-  const armFor = (x, z) => Math.abs(x - cx) > Math.abs(z - cz)
-    ? { x: cx + Math.sign(x - cx) * ARM + 0.5, z: cz + 0.5, axis: 'x' } : { x: cx + 0.5, z: cz + Math.sign(z - cz) * ARM + 0.5, axis: 'z' };
+  // (a path leaves from an end of the main street, or from the end of the cross street)
+  const armFor = (x, z) => Math.abs(x - cx) / RX > Math.abs(z - cz) / (RZ * 1.6)
+    ? { x: cx + Math.sign(x - cx) * RX + 0.5, z: cz + 0.5, axis: 'x' } : { x: cx + 0.5, z: cz + Math.sign(z - cz) * RZ + 0.5, axis: 'z' };
   const dryLine = (a, b) => {
     const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z));
     for (let i = 0; i <= n; i++) {
@@ -109,8 +115,8 @@ export function generateTown(world) {
     let h = raw(x, z);
     const shore = SEA - 1 + (distLand2[k] - 1) / 3;
     h = Math.min(h, shore);
-    const dv = Math.hypot(x - cx, z - cz);
-    if (dv < VB) { const t = dv < VR ? 0 : smooth((dv - VR) / (VB - VR)); h = hv + (h - hv) * t; }
+    const dv = dTown(x, z);
+    if (dv < BLEND) { const t = dv <= 0 ? 0 : smooth(dv / BLEND); h = hv + (h - hv) * t; }
     const dc = Math.hypot(x - cot.x, z - cot.z);
     if (dc < 22) { const t = dc < 16 ? 0 : smooth((dc - 16) / 6); h = hc + (h - hc) * t; }
     for (const o of homes) { const dh = Math.hypot(x - o.x, z - o.z); if (dh < o.flat + 5) { const t = dh < o.flat ? 0 : smooth((dh - o.flat) / 5); h = o.y + (h - o.y) * t; } }
@@ -132,7 +138,7 @@ export function generateTown(world) {
   for (let k = 0; k < W * D; k++) tops[k] = Math.max(4, Math.min(H - 14, tops[k]));
   // the village and cottage stay perfectly flat (the smoothing above can only lower)
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    if (Math.hypot(x - cx, z - cz) < VR) tops[x + z * W] = hv;
+    if (dTown(x, z) <= 0) tops[x + z * W] = hv;
     if (Math.hypot(x - cot.x, z - cot.z) < 16) tops[x + z * W] = hc;
     for (const o of homes) if (Math.hypot(x - o.x, z - o.z) < o.flat) tops[x + z * W] = o.y;
   }
@@ -198,7 +204,7 @@ export function generateTown(world) {
     const i = world.idx(x, y, z);
     world.data[i] = id; world.locked[i] = lock && id !== B.AIR ? 1 : 0;
   };
-  const village = buildVillage(world, put, cx, cz, hv, rnd, homes, ARM);
+  const village = buildVillage(world, put, cx, cz, hv, rnd, homes, RX, RZ);
   const cottage = buildCottage(world, put, cot.x, hc, cot.z, cx, cz);
   // dirt paths from the ends of the center's roads out to every home and the cottage
   for (const b of village.buildings) if (b.type === 'house') b.trail = pave(world, b.arm, b.door);
@@ -206,7 +212,7 @@ export function generateTown(world) {
   village.cottageRoad = { from: cotArm, to: cottage.door, trail: pave(world, cotArm, cottage.door) };
 
   // --- woods: oaks in forest patches, a few lone trees in the fields
-  const clear = (x, z) => Math.hypot(x - cx, z - cz) < VB + 2 || Math.hypot(x - cot.x, z - cot.z) < 24 || homes.some((o) => Math.hypot(x - o.x, z - o.z) < o.flat + 4);
+  const clear = (x, z) => dTown(x, z) < 14 || Math.hypot(x - cot.x, z - cot.z) < 24 || homes.some((o) => Math.hypot(x - o.x, z - o.z) < o.flat + 4);
   for (let z = 4; z < D - 4; z++) for (let x = 4; x < W - 4; x++) {
     const forest = n6.fbm(x / 60, z / 60, 2);
     const p = forest > 0.25 ? 0.05 : 0.004;
@@ -270,40 +276,50 @@ export function plantOak(world, x, y, z, r) {
 // village's livestock pen). Returns the village site: buildings (door,
 // inside spot, keeper spot; homes also have the road end their path leaves
 // from), the fields and the pen.
-function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
+function buildVillage(world, put, cx, cz, hv, rnd, homes, RX, RZ) {
   const floorY = hv, base = hv + 1;
-  // roads (3 wide) and the plaza
-  for (let d = -ARM; d <= ARM; d++) for (let w = -1; w <= 1; w++) {
-    put(cx + d, floorY, cz + w, B.PATH, false); put(cx + w, floorY, cz + d, B.PATH, false);
+  // the main street (7 wide, packed dirt) with plank boardwalks along both
+  // sides, and the short cross street in the middle (5 wide)
+  for (let d = -RX; d <= RX; d++) {
+    for (let w = -3; w <= 3; w++) put(cx + d, floorY, cz + w, B.PATH, false);
+    for (const w of [-5, -4, 4, 5]) put(cx + d, floorY, cz + w, B.WOOD, false);
   }
-  for (let dz = -7; dz <= 7; dz++) for (let dx = -7; dx <= 7; dx++) put(cx + dx, floorY, cz + dz, B.PATH, false);
-  // a stone well in the plaza: its water stands level with the rim (no
-  // shaft to fall into: one block deep, so anyone in it can step back out),
-  // under a little thatched roof on two posts
+  for (let d = -RZ; d <= RZ; d++) for (let w = -2; w <= 2; w++) if (Math.abs(d) > 5) put(cx + w, floorY, cz + d, B.PATH, false);
+  // the plaza in the middle: open ground round the well and the market stalls
+  for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) if (Math.abs(dz) > 5 || Math.abs(dx) <= 12) put(cx + dx, floorY, cz + dz, B.PATH, false);
+  // a stone well: its water stands level with the rim (one block deep: anyone
+  // in it steps back out), under a little thatched roof on two posts
+  const WX = cx - 7, WZ = cz + 8;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-    const X = cx - 5 + dx, Z = cz + 5 + dz;
+    const X = WX + dx, Z = WZ + dz;
     if (dx || dz) { put(X, base, Z, B.STONE); } else { put(X, floorY, Z, B.STONE); put(X, base, Z, B.WATER, false); }
   }
-  for (const dx of [-1, 1]) for (let y = base + 1; y <= base + 2; y++) put(cx - 5 + dx, y, cz + 5, B.LOG);
-  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(cx - 5 + dx, base + 3, cz + 5 + dz, B.THATCH);
+  for (const dx of [-1, 1]) for (let y = base + 1; y <= base + 2; y++) put(WX + dx, y, WZ, B.LOG);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) put(WX + dx, base + 3, WZ + dz, B.THATCH);
+  // hitching posts along the boardwalks, here and there
+  for (let d = -RX + 6; d <= RX - 6; d += 18) for (const w of [-6, 6]) if (Math.abs(d) > 14) { put(cx + d, base, cz + w, B.FENCE); put(cx + d + 1, base, cz + w, B.FENCE); }
 
   const buildings = [];
-  // slot: footprint and which wall has the door (facing the road)
-  const slot = (x0, z0, x1, z1, side) => ({ x0: cx + x0, z0: cz + z0, x1: cx + x1, z1: cz + z1, side });
+  // the shops face the street: on the north side their doors look south, on the south side north
+  const north = (x0, x1, depth) => ({ x0: cx + x0, z0: cz - 6 - depth, x1: cx + x1, z1: cz - 6, side: 's' });
+  const south = (x0, x1, depth) => ({ x0: cx + x0, z0: cz + 6, x1: cx + x1, z1: cz + 6 + depth, side: 'n' });
   const plan = [
-    ['hall', slot(-20, -13, -11, -4, 's'), B.BRICK],          // the sheriff's office
-    ['jail', slot(-9, -14, -3, -8, 's'), B.STONE],
-    ['general', slot(11, -12, 19, -4, 's'), B.WOOD],
-    ['butcher', slot(-19, 4, -12, 11, 'n'), B.BRICK],
-    ['hunting', slot(11, 4, 18, 11, 'n'), B.LOG],
-    ['stable', slot(14, 14, 23, 22, 'w'), B.WOOD],
-    ['hospital', slot(-10, 12, -3, 20, 'e'), B.STONE],     // south of the plaza, its door on the road
+    ['hall', north(-62, -51, 9), B.BRICK],          // the sheriff's office
+    ['jail', north(-45, -38, 7), B.STONE],
+    ['general', north(-30, -20, 8), B.WOOD],
+    ['land', north(18, 26, 8), B.WOOD],             // the land office: houses and lots for sale
+    ['butcher', north(34, 41, 7), B.BRICK],
+    ['hunting', south(-58, -50, 7), B.LOG],
+    ['hospital', south(-40, -31, 8), B.STONE],
+    ['stable', south(20, 31, 9), B.WOOD],
   ];
   for (const [type, s, wall] of plan) buildings.push(building(world, put, s, base, wall, type));
-  // the hitching rail in front of the stable, where its horses wait
-  { const st = buildings.find((b) => b.type === 'stable'), dz = Math.floor(st.door.z);
-    for (let z = st.z0 - 2; z <= st.z1 + 2; z++) if (Math.abs(z - dz) > 2) put(st.x0 - 7, base, z, B.FENCE);   // an opening in front of the door
-    st.hitch = { x: st.x0 - 4.5, y: base, z: st.z0 + 1.5 }; }
+  // the stable: a rail beside its door on the boardwalk, where its horses wait
+  { const st = buildings.find((b) => b.type === 'stable'), dx = Math.floor(st.door.x);
+    for (let x = st.x0; x <= st.x1; x++) if (Math.abs(x - dx) > 2) put(x, base, st.z0 - 2, B.FENCE);
+    st.hitch = { x: st.x1 + 3.5, y: base, z: st.z0 - 1.5 }; }
+  // lots for sale along the street (the land office sells houses on them)
+  const lots = [north(48, 58, 10), north(-14, -4, 9), south(-22, -12, 9), south(40, 50, 10)].map((q) => ({ ...q, y: base, town: true }));
   // market stalls in the plaza: posts, a thatch canopy and a counter with goods
   const stall = (x0, z0, goods) => {
     const x1 = x0 + 4, z1 = z0 + 2;
@@ -313,10 +329,10 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
     return { x0, z0, x1, z1 };
   };
   {
-    const s = stall(cx + 2, cz - 6, null);
+    const s = stall(cx + 2, cz - 11, null);
     buildings.push({ type: 'market', door: { x: cx + 4.5, y: base, z: s.z1 + 1.6 }, inside: { x: cx + 4.5, y: base, z: s.z0 + 0.5 }, keeper: { x: cx + 4.5, y: base, z: s.z1 - 1 + 0.4 }, x0: s.x0, z0: s.z0, x1: s.x1, z1: s.z1,
       sign: { x: cx + 4.5, y: base + 3.55, z: s.z1 + 2.08, face: [0, 1] } });       // on the front of the canopy
-    stall(cx + 2, cz + 4, [B.CABBAGE_R, B.SUPPLY, B.CARROT_R]);
+    stall(cx + 2, cz + 9, [B.CABBAGE_R, B.SUPPLY, B.CARROT_R]);
   }
   // the homes, each facing the road its path comes from, with a field beside it
   const fields = [], pens = [];
@@ -359,7 +375,7 @@ function buildVillage(world, put, cx, cz, hv, rnd, homes, ARM) {
       pens.push(p); b.pen = p;
     }
   });
-  return { type: 'village', cx, cz, y: base, floorY, buildings, fields, pens, radius: 36 };
+  return { type: 'village', cx, cz, y: base, floorY, buildings, fields, pens, lots, radius: RX + 14, rx: RX, rz: RZ };
 }
 
 // One building: walls, a door facing the road, glass windows, a plank floor,
@@ -374,8 +390,8 @@ function building(world, put, s, base, wall, type, H = 4, status = null) {
     const edge = x === x0 || x === x1 || z === z0 || z === z1;
     if (edge) for (let y = base; y < base + H; y++) put(x, y, z, wall);
   }
-  // pitched roof along the longer side
-  const alongX = x1 - x0 >= z1 - z0;
+  // pitched roof along the longer side (shops: along the street, behind a tall false front)
+  const alongX = type !== 'house' && type !== 'hall' && type !== 'market' ? (side === 'n' || side === 's') : x1 - x0 >= z1 - z0;
   const span = alongX ? z1 - z0 : x1 - x0;
   for (let k = 0; k <= Math.ceil(span / 2); k++) {
     const y = base + H + k;
@@ -386,6 +402,11 @@ function building(world, put, s, base, wall, type, H = 4, status = null) {
       const end = alongX ? (x === x0 || x === x1) : (z === z0 || z === z1);
       if (t > k && end && x >= x0 && x <= x1 && z >= z0 && z <= z1) put(x, y, z, wall);
     }
+  }
+  // a shop's false front: the street wall goes up square past the roof, the old-west look
+  if (type !== 'house' && type !== 'hall' && type !== 'market' && (side === 'n' || side === 's')) {
+    const fz = side === 's' ? z1 : z0, top = base + H + Math.ceil(span / 2) + 1;
+    for (let x = x0; x <= x1; x++) for (let y = base + H; y <= top; y++) put(x, y, fz, (x === x0 || x === x1) && y === top ? B.AIR : B.WOOD);
   }
   // door (2 wide, 3 high: room for people and horses) in the middle of the road-side wall
   const mx = Math.floor((x0 + x1) / 2), mz = Math.floor((z0 + z1) / 2);

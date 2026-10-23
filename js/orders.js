@@ -12,7 +12,7 @@ import { FORMATIONS } from './soldiers.js';
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract', 'disperse'];
 export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract', 'disperse'];
 // Town Life: an outlaw's gang takes the same wheel, with its own orders (trades.js)
-export const GANG_ORDERS = ['follow', 'hold', 'defend', 'spread', 'cover', 'loot', 'chaos'];
+export const GANG_ORDERS = ['follow', 'hold', 'loot', 'chaos'];   // (taking cover is automatic: see trades.js)
 const ICONS = { loot: '&#9733;', chaos: '&#9889;', follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
 
 export class OrderWheel {

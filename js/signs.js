@@ -21,7 +21,7 @@ function loadFont() {
   })();
   return fontReady;
 }
-const KEYS = { hall: 'sign.hall', jail: 'sign.jail', general: 'sign.general', butcher: 'sign.butcher', hunting: 'sign.hunting', market: 'sign.market', stable: 'sign.stable', hospital: 'sign.hospital' };
+const KEYS = { hall: 'sign.hall', jail: 'sign.jail', general: 'sign.general', butcher: 'sign.butcher', hunting: 'sign.hunting', market: 'sign.market', stable: 'sign.stable', hospital: 'sign.hospital', land: 'sign.land' };
 const NEAR = 42, FAR = 70, H = 0.62, TEXH = 80;       // 160-pixel-high lettering: sharp at street distance, small in memory
 const boardMat = new THREE.MeshLambertMaterial({ color: 0x3a2618 });
 
