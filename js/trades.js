@@ -490,10 +490,12 @@ export class Trades {
     point = point ? point.clone() : g.player.pos.clone();
     if (cmd === 'loot') return this.orderLoot(at.house || this.houseNear(point), point);
     if (cmd === 'chaos') return this.orderBrawl(point);
-    if (cmd !== 'follow') cmd = 'hold';            // (Hold here: spread out round the spot, guard it, defend themselves)
+    if (cmd === 'gun') return this.orderGun();
+    if (cmd !== 'follow' && cmd !== 'disperse') cmd = 'hold';            // (Hold here: spread out round the spot, guard it, defend themselves)
     this.order = { cmd, point };
-    for (const v of this.free()) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; }
+    for (const v of this.free()) { v.holdAt = v.pos.clone(); v.route = []; v.coverAt = null; v.distractT = 0; v.spot = null; v.spotT = 0; v.spotBest = null; v.hideAt = null; v.hidden = false; }
     if (cmd === 'hold') this.ringSpots(point, 5);
+    if (cmd === 'disperse') { this.alarm = 0; this.quiet = false; this.hideSpots(); }
     this.quiet = cmd === 'follow' && this.alarm > 0;     // called back in a fight: they come with you (shooting as they go)
     if (cmd === 'distract') {
       const p = this.order.point;
@@ -502,6 +504,45 @@ export class Trades {
     }
     g.hud.toast(t('gang.order', { o: t('gord.' + cmd) }));
     sfx.toggle();
+  }
+  // Disperse: every man scatters his own way, 30 to 45 m out, away from the
+  // posse if there is one, and lies low there (down, quiet, not shooting
+  // unless someone is right on him). Hidden men are not found by the posse.
+  // Follow me brings them back together.
+  hideSpots() {
+    const F = this.town.folk, P = this.game.player.pos, men = this.free(), n = Math.max(1, men.length);
+    const posse = this.town.posse && this.town.posse.members.find((m) => m.alive);
+    const away = posse ? Math.atan2(P.z - posse.pos.z, P.x - posse.pos.x) : Math.random() * 6.28;
+    men.forEach((v, i) => {
+      let spot = null;
+      for (let k = 0; k < 12 && !spot; k++) {
+        const a = away + (i - (n - 1) / 2) * (posse ? 0.9 : 6.28 / n) + (Math.random() - 0.5) * 0.6, r = 30 + Math.random() * 15;
+        const x = v.pos.x + Math.cos(a) * r, z = v.pos.z + Math.sin(a) * r, y = F.ground(x, z, v.pos.y + 6);
+        if (y != null && F.free(x, y, z)) spot = new THREE.Vector3(x, y, z);
+      }
+      v.hideAt = spot || v.pos.clone(); v.hidden = false; v.route = [];
+    });
+  }
+  // Give me a gun: the nearest of your men hands you one of his (each man once a
+  // day): a revolver if you have no gun, else his rifle or shotgun
+  canGiveGun() { const day = Math.floor(this.game.time); return this.gang.some((m) => m.alive && !m.jailed && m.gaveDay !== day); }
+  orderGun() {
+    const g = this.game, P = g.player.pos, day = Math.floor(g.time);
+    const v = this.gang.filter((m) => m.alive && !m.jailed && m.gaveDay !== day).sort((a, b) => a.pos.distanceTo(P) - b.pos.distanceTo(P))[0];
+    if (!v) { g.hud.toast(t('gang.noGun')); sfx.error(); return; }
+    v.gaveDay = day; v.task = null;
+    v.giveGun = { t: 0 };               // he walks over to you and hands it over (memberAi)
+    g.hud.toast(t('gang.gunComing', { name: v.name }));
+    sfx.toggle();
+  }
+  handGun(v) {
+    const g = this.game, guns = ['revolver', 'lever', 'shotgun'];
+    const id = !guns.some((x) => g.has(x)) ? 'revolver' : guns.find((x) => !g.has(x)) || 'revolver';
+    g.give(id, 1); if (!g.has('knife')) g.give('knife', 1);
+    g.hud.dirtyHotbar = true;
+    this.town.folk.say(v, 'say.gunHere', null, 'ok');
+    g.hud.toast(t('gang.gotGun', { name: v.name, gun: t('item.' + id) }), 'pick'); sfx.pickup ? sfx.pickup() : sfx.coins();
+    v.giveGun = null;
   }
   // men free for an order (not in jail, not off looting or brawling)
   free() { return this.gang.filter((m) => m.alive && !m.jailed && !m.task); }
@@ -781,6 +822,28 @@ export class Trades {
     }
     if (v.task && v.task.kind === 'loot') return this.lootAi(v, dt);
     if (v.task && v.task.kind === 'brawl') return this.brawlAi(v, dt);
+    if (v.giveGun) {                    // bringing you a gun
+      const gd = Math.hypot(P.x - v.pos.x, P.z - v.pos.z);
+      v.giveGun.t += dt;
+      if (gd < 1.8 || v.giveGun.t > 25) { v.speed = 0; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); this.handGun(v); return true; }
+      if (gd > 60 && !F.visible(v)) { const a = Math.random() * 6.28, gy = F.ground(P.x + Math.cos(a) * 3, P.z + Math.sin(a) * 3, P.y + 2); if (gy != null) v.pos.set(P.x + Math.cos(a) * 3, gy, P.z + Math.sin(a) * 3); }
+      F.goDirect(v, P, gd > 8 ? 6.6 : 3.6, dt, 1.2); v.crouch = false;
+      return true;
+    }
+    if (O.cmd === 'disperse' && v.hideAt) {          // scattered: lying low
+      const hd = Math.hypot(v.hideAt.x - v.pos.x, v.hideAt.z - v.pos.z);
+      v.target = null; v.duelAim = false;
+      if (hd > 1) { F.goDirect(v, v.hideAt, 6.6, dt, 0.8); v.crouch = false; v.hidden = false; if (v.stuckT > 2) { v.hideAt = v.pos.clone(); v.stuckT = 0; } }
+      else {
+        v.speed = 0; v.crouch = true;
+        // hidden once down and no one is close by
+        const near = this.town.posse && this.town.posse.members.some((m) => m.alive && m.pos.distanceTo(v.pos) < 12);
+        v.hidden = !near;
+        if (near) { const m = this.town.posse.members.find((x) => x.alive && x.pos.distanceTo(v.pos) < 12); v.cool -= dt; v.yaw = Math.atan2(-(m.pos.x - v.pos.x), -(m.pos.z - v.pos.z)); if (v.armed !== F.bestGun(v)) F.armed(v, F.bestGun(v)); if (v.cool <= 0) this.gangShoot(v, { ref: m }, m.pos.distanceTo(v.pos)); v.crouch = v.cool > 0.4; }
+      }
+      return true;
+    }
+    v.hidden = false;
     v.cool -= dt;
     v.tgtT = (v.tgtT || 0) - dt;
     if (v.tgtT <= 0) { v.tgtT = 0.4; v.target = this.gangTarget(v); if (v.target && !v.target.animal) this.raiseAlarm(12); }

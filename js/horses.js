@@ -21,6 +21,12 @@ const JUMP_V = 8.6, HORSE_G = 24;
 const BODY_PTS = [];
 for (const f of [-0.95, -0.45, 0, 0.45, 0.9]) for (const sd of [-0.32, 0.32]) BODY_PTS.push([f, sd, 1.05, 1.95]);
 for (const sd of [-0.15, 0.15]) BODY_PTS.push([1.3, sd, 1.6, 2.45]);   // the neck and head
+for (const sd of [-0.12, 0.12]) BODY_PTS.push([1.8, sd, 1.55, 2.2]);   // the muzzle, out in front
+BODY_PTS.push([-1.05, 0, 0.6, 1.5]);                                    // the tail
+// the four legs: the hooves stand on the highest ground under any of them, so
+// no leg ever sinks into a block (a step or a kerb lifts the whole horse)
+const HOOVES = [[0.6, -0.22], [0.6, 0.22], [-0.6, -0.22], [-0.6, 0.22]];
+for (const [f, sd] of HOOVES) BODY_PTS.push([f, sd, 0.15, 1.0]);
 const NECK = { base: 0.8, upper: -0.42, head: 1.68 };         // a jump clears about a block and a half
 export const SADDLE_ROOT = 0.6;          // where a rider's feet-root goes above the horse's hooves
 const COATS = [0x5a3a24, 0x3a2618, 0x7a5a3a, 0x2a2420, 0x8a7a68, 0x6a4a2e];
@@ -91,7 +97,13 @@ class Horse {
     if (!this.alive) return;
     const d = Math.hypot(v.pos.x - this.pos.x, v.pos.z - this.pos.z);
     this.speed = Math.min(GALLOP, d / Math.max(0.016, this.mgr.dt || 0.016));
-    this.pos.copy(v.pos); this.yaw = v.yaw;
+    this.pos.copy(v.pos);
+    // its long body swings clear of a wall the rider brushes past (near you only)
+    const M = this.mgr, P = M.game.player.pos;
+    if (Math.abs(this.pos.x - P.x) + Math.abs(this.pos.z - P.z) < MODEL_M && !M.clear(this.pos.x, this.pos.y, this.pos.z, v.yaw)) {
+      for (const k of [1, -1, 2, -2, 3, -3, 4, -4]) { const ya = v.yaw + k * 0.35; if (M.clear(this.pos.x, this.pos.y, this.pos.z, ya)) { this.yaw = ya; return; } }
+    }
+    this.yaw = v.yaw;
   }
   unseat(v) { if (this.rider === v) this.rider = null; }
   animate(dt) {
@@ -148,7 +160,7 @@ export class Horses {
   // string); stable and farm horses return to their rail or yard
   stable(h) {
     if (h.owner === 'posse') { h.alive = false; h.deadT = 999; h.drop(); this.list = this.list.filter((x) => x !== h); return; }
-    if (h.home) { h.pos.set(h.home.x, h.home.y, h.home.z); h.goal = null; }
+    if (h.home) { h.pos.set(h.home.x, h.home.y, h.home.z); h.goal = null; h.settled = false; }
   }
   mountFor(v) {
     if (this.list.filter((h) => h.alive).length >= 32) return null;          // (only the nearest MAX_MODELS are drawn)
@@ -203,6 +215,30 @@ export class Horses {
     for (let yy = Math.floor(y); yy > 1; yy--) if (SOLID[w.get(bx, yy, bz)]) return yy + 1;
     return null;
   }
+  // the floor under the whole horse: the highest under its four hooves and its
+  // middle (null: no footing under its middle)
+  footFloor(x, z, y, yaw) {
+    const c = this.floorUnder(x, z, y);
+    if (c == null) return null;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw); let best = c;
+    for (const [f, sd] of HOOVES) { const v = this.floorUnder(x + fx * f - fz * sd, z + fz * f + fx * sd, y); if (v != null && v > best) best = v; }
+    return best;
+  }
+  // a free place for a horse near (x, z): standing there no part of it is in a
+  // block (turned whichever way fits); null if there is none within r
+  freeSpot(x, y, z, yaw = 0, r = 5) {
+    for (let d = 0; d <= r; d += 0.5) {
+      const n = d ? Math.max(6, Math.round(d * 8)) : 1;
+      for (let k = 0; k < n; k++) {
+        const a = k / n * Math.PI * 2, px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+        for (let j = 0; j < 8; j++) {
+          const ya = yaw + j * Math.PI / 4, gy = this.footFloor(px, pz, y + 1.5, ya);
+          if (gy != null && Math.abs(gy - y) <= 2 && this.clear(px, gy, pz, ya)) return { x: px, y: gy, z: pz, yaw: ya };
+        }
+      }
+    }
+    return null;
+  }
   // the top of the water in this column (null: no water at the horse)
   waterTop(x, y, z) {
     const w = this.game.world, bx = Math.floor(x), bz = Math.floor(z);
@@ -239,7 +275,7 @@ export class Horses {
     const st = h.speed * dt, nx = h.pos.x - Math.sin(h.yaw) * st, nz = h.pos.z - Math.cos(h.yaw) * st;
     const ok = (x, z) => {
       const climb = swimming ? 1.7 : 1.05;                                  // out of the water onto a bank
-      const gy = this.floorUnder(x, z, h.pos.y + climb);
+      const gy = this.footFloor(x, z, h.pos.y + climb, h.yaw);
       if (gy == null || gy > h.pos.y + climb) return null;                  // the edge of the world, or a wall too high (jump it)
       return this.clear(x, Math.max(gy, h.pos.y + (swimming ? 1 : 0)), z, h.yaw) ? true : null;   // swimming, its legs hang below the bank's edge
     };
@@ -248,7 +284,7 @@ export class Horses {
     else if (Math.abs(nz - h.pos.z) > 0.002 && ok(h.pos.x, nz)) h.pos.z = nz;
     else h.speed *= 0.3;
     // vertical: step up, fall with gravity, float when swimming
-    const floor = this.floorUnder(h.pos.x, h.pos.z, h.pos.y + 1.05);
+    const floor = this.footFloor(h.pos.x, h.pos.z, h.pos.y + 1.05, h.yaw);
     if (swimming || (wTop != null && floor != null && wTop - floor >= 1.6)) {
       const want = wTop - 1.35;                                             // body under water, head and rider above
       h.vy = 0; h.pos.y += (want - h.pos.y) * Math.min(1, dt * 4);
@@ -316,7 +352,7 @@ export class Horses {
   }
 
   fall(h, dt) {
-    const wt = this.waterTop(h.pos.x, h.pos.y, h.pos.z), fy = this.floorUnder(h.pos.x, h.pos.z, h.pos.y + 0.5);
+    const wt = this.waterTop(h.pos.x, h.pos.y, h.pos.z), fy = this.footFloor(h.pos.x, h.pos.z, h.pos.y + 0.5, h.yaw);
     if (wt != null && (fy == null || wt - fy >= 1.6)) { h.vy = 0; h.pos.y += (wt - 1.35 - h.pos.y) * Math.min(1, dt * 3); return; }
     if (fy == null) return;
     if (h.pos.y > fy + 0.03) { h.vy = Math.max(-25, (h.vy || 0) - 22 * dt); h.pos.y = Math.max(fy, h.pos.y + h.vy * dt); if (h.pos.y <= fy) h.vy = 0; }
@@ -336,14 +372,15 @@ export class Horses {
       const dP = Math.hypot(h.pos.x - P.x, h.pos.z - P.z);
       if (dP > 90 && ((h.owner === 'posse' && !h.rider) || ((h.owner === 'stable' || h.owner === 'farm') && h.home && Math.hypot(h.pos.x - h.home.x, h.pos.z - h.home.z) > 12))) { this.stable(h); continue; }
       // a horse placed (or left) with its head or rump in a wall turns to a free heading
-      if (!h.settled) { h.settled = true; if (!this.clear(h.pos.x, h.pos.y, h.pos.z, h.yaw)) for (let k = 1; k < 16; k++) { const y = h.yaw + k * Math.PI / 8; if (this.clear(h.pos.x, h.pos.y, h.pos.z, y)) { h.yaw = y; break; } } }
+      // (or, if no heading fits there, steps out to the nearest place it fits)
+      if (!h.settled) { h.settled = true; if (!this.clear(h.pos.x, h.pos.y, h.pos.z, h.yaw)) { const f = this.freeSpot(h.pos.x, h.pos.y, h.pos.z, h.yaw); if (f) { h.pos.set(f.x, f.y, f.z); h.yaw = f.yaw; } } }
       // grazing and ambling around home; a lost posse horse stays where it is
       h.wanderT -= dt;
       if (h.wanderT <= 0) { h.wanderT = 5 + Math.random() * 8; const a = Math.random() * 6.28, r = Math.random() * (h.owner === 'stable' ? 1.5 : 4); h.goal = h.owner === 'posse' ? null : { x: h.home.x + Math.cos(a) * r, z: h.home.z + Math.sin(a) * r }; }
       if (h.goal && Math.hypot(h.goal.x - h.pos.x, h.goal.z - h.pos.z) > 0.4 && Math.hypot(h.pos.x - P.x, h.pos.z - P.z) < MODEL_M) {
         const a = Math.atan2(-(h.goal.x - h.pos.x), -(h.goal.z - h.pos.z));
         { const ny = turnTo(h.yaw, a, dt * 2); if (this.clear(h.pos.x, h.pos.y, h.pos.z, ny)) h.yaw = ny; else h.goal = null; }
-        const nx = h.pos.x - Math.sin(h.yaw) * 1.1 * dt, nz = h.pos.z - Math.cos(h.yaw) * 1.1 * dt, gy = this.ground(nx, nz, h.pos.y + 1);
+        const nx = h.pos.x - Math.sin(h.yaw) * 1.1 * dt, nz = h.pos.z - Math.cos(h.yaw) * 1.1 * dt, gy = this.ground(nx, nz, h.pos.y + 1) != null ? this.footFloor(nx, nz, h.pos.y + 1, h.yaw) : null;
         if (gy != null && Math.abs(gy - h.pos.y) <= 1 && this.clear(nx, gy, nz, h.yaw)) { h.pos.x = nx; h.pos.z = nz; h.pos.y = gy; h.speed = 1.1; } else { h.goal = null; h.speed = 0; }
       } else h.speed = Math.max(0, h.speed - dt * 3);
     }

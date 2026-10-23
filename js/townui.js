@@ -97,6 +97,7 @@ export function installTownUI(UI) {
       <div class="menu">
         ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
         <button class="btn" id="sturn">${t('law.turnIn')}</button>` : ''}
+        ${T.held && !T.held.forfeit && !T.jailed ? `<button class="btn primary" id="sguns">${t('law.gunsBack')}</button>` : ''}
         <button class="btn" id="sjob">${t('ctx.job')}</button>
         <button class="btn" id="sboard">${t('bounty.board')}${Tr.claimable().length ? ` <b class="badge">${Tr.claimable().length}</b>` : ''}</button>
         <button class="btn ghost" id="strade">${t('trade.change', { n: Tr.changeFee() })}</button>
@@ -108,6 +109,7 @@ export function installTownUI(UI) {
     if ($('#spay')) $('#spay').onclick = () => { T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
     if ($('#sturn')) $('#sturn').onclick = () => { this.app.closePanel(); T.jail(); };
     $('#sjob').onclick = () => { this.app.closePanel(); T.askJob(v); };
+    if ($('#sguns')) $('#sguns').onclick = () => { T.returnGuns(); this.app.closePanel(); };
   };
 
 
@@ -212,7 +214,7 @@ export function installTownUI(UI) {
   P.r_jailed = function ({ lost = [] }) {
     const touch = this.app.input.touch;
     const body = `<p>${t('jail.text')}</p>
-      <ul class="steps"><li>${t('jail.noFine')}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t(touch ? 'jail.howSleepTouch' : 'jail.howSleep')}</li><li>${t(touch ? 'jail.howPickTouch' : 'jail.howPick')}</li></ul>`;
+      <ul class="steps"><li>${t('jail.noFine')}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t(touch ? 'jail.howSleepTouch' : 'jail.howSleep')}</li><li>${t(touch ? 'jail.howPickTouch' : 'jail.howPick')}</li>${this.app.game.town.trades.gang.some((m) => m.alive && !m.jailed) ? `<li>${t('jail.howGang')}</li>` : ''}<li>${t('jail.howGuns')}</li></ul>`;
     this.panel(t('law.jailTitle'), body, { onBack: () => this.app.closePanel() });
   };
 

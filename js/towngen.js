@@ -9,6 +9,7 @@
 import { SEA, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
+import { buildHidden } from './hiddengen.js';
 
 export { TOWN_SIZE, TOWN_LAYOUT };      // (kept in config.js so the menus don't load Town Life's code)
 // half-size of each kind of home
@@ -224,6 +225,9 @@ export function generateTown(world) {
     if (!flat || world.get(x, top + 1, z) !== B.AIR) continue;
     plantOak(world, x, top + 1, z, mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9)));
   }
+
+  // hidden places out in the hills (their own random numbers: nothing else moves)
+  village.hidden = buildHidden(world, put, { seed, tops, dTown, cot, homes });
 
   world.sites.push({ type: 'cabin', x: cottage.x, y: cottage.y, z: cottage.z, r: cottage.r, bed: cottage.bed, chest: cottage.chest, fire: cottage.fire, door: cottage.door, pen: cottage.pen, garden: cottage.garden });
   world.sites.push(village);

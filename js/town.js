@@ -39,6 +39,7 @@ export const SHOPS = {
 };
 const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40, escape: 50 };
 const PICK_TIME = 6;                  // seconds to pick the cell's lock
+const HELD = ['revolver', 'lever', 'shotgun', 'rifle', 'pistol', 'knife', 'dynamite'];   // what the sheriff locks away when you are jailed
 const JOBS = [
   { item: 'wood', n: 6, pay: 8 }, { item: 'stone', n: 6, pay: 8 }, { item: 'meat_raw', n: 2, pay: 10 }, { item: 'egg', n: 3, pay: 8 },
   { item: 'milk', n: 1, pay: 6 }, { item: 'wheat', n: 4, pay: 9 }, { item: 'clay', n: 4, pay: 8 }, { item: 'hide', n: 1, pay: 12 },
@@ -109,6 +110,7 @@ export class TownLife {
     }
     if (g.app.townNewStory) { g.app.townNewStory = false; setTimeout(() => g.hud.bigMessage(t('town.newStory'), t('town.newStorySub')), 1200); }
     this.jailed = saved.jailed || null;
+    this.held = saved.held || null;          // your weapons in the sheriff's gun cabinet
     if (this.jailed) this.cellDoor(true, true);
     g.animals.onKill = (a) => { if (a.owner === 'village') this.crime('livestock', { pos: a.pos }); };
     // HUD: coins, honor and bounty; context buttons for phones
@@ -374,7 +376,7 @@ export class TownLife {
         v.foeT = (v.foeT || 0) - dt;
         if (v.foeT <= 0) {
           v.foeT = 3 + Math.random() * 2;
-          const gang = this.trades.gang.filter((m) => m.alive && m.pos.distanceTo(v.pos) < 35);
+          const gang = this.trades.gang.filter((m) => m.alive && !m.jailed && !m.hidden && m.pos.distanceTo(v.pos) < 35);     // (a man lying low after Disperse is not found)
           v.foe = gang.length && Math.random() < 0.55 ? gang.sort((a, b) => a.pos.distanceTo(v.pos) - b.pos.distanceTo(v.pos))[0] : null;
         }
         const foe = v.foe && v.foe.alive ? v.foe : null;
@@ -494,6 +496,11 @@ export class TownLife {
     for (const [id, n] of Object.entries(this.stolen)) { const k = Math.min(n, g.count(id)); if (k > 0) { g.take(id, k); lost.push(t('item.' + id)); } }
     this.stolen = {};
     if (g.has('scuba')) { g.inv.counts.scuba = 0; lost.push(t('item.scuba')); }
+    // your weapons go into the sheriff's gun cabinet: back when you are let out
+    // (ask him at his office); break out and they stay there
+    const held = this.held && !this.held.forfeit ? this.held.items : {};
+    for (const id of HELD) { const n = g.count(id); if (n > 0) { g.take(id, n); held[id] = (held[id] || 0) + n; } }
+    if (Object.keys(held).length) { this.held = { items: held }; lost.push(t('jail.weaponsHeld')); }
     if (p.riding && g.horses) g.horses.dismount(true);
     if (this.fishing) this.fishing.reelIn();
     const h = (g.time % 1) * 24, day = Math.floor(g.time);
@@ -534,7 +541,7 @@ export class TownLife {
     if (C && !early) { g.player.pos.set(C.out.x + 0.5, C.out.y, C.out.z); g.player.vel.set(0, 0, 0); }
     g.player.health = 100;
     this.addHonor(5);                     // you served your time: the town gives you a little credit back
-    g.hud.bigMessage(t('jail.releasedTitle'), t('jail.releasedSub'));
+    g.hud.bigMessage(t('jail.releasedTitle'), t(this.held && !this.held.forfeit ? 'jail.releasedGuns' : 'jail.releasedSub'));
     g.app.saveGame(true);
   }
   // picking the lock: stand at the cell door; it takes a few seconds
@@ -557,9 +564,69 @@ export class TownLife {
         // out! but the bounty is back, and bigger
         this.pick = null; g.hud.digProgress = 0;
         this.bounty = J.bounty + BOUNTY.escape; this.lastCrime = g.time;
-        this.jailed = null; this.cellDoor(false);
-        g.hud.alert(t('jail.escaped', { n: this.bounty })); sfx.alert();
+        this.escaped();
       }
+    }
+    // your gang coming to blow the bars
+    if (this.rescue && (this.rescue.t -= dt) <= 0) {
+      this.rescue = null;
+      const [x, y, z] = C.door[1] || C.door[0];
+      this.boom(x + 0.5, y + 0.5, z + 0.5);
+      this.trades.breakOut();
+      this.escaped();
+    }
+  }
+  // out of the cell without serving: the bounty is back (and bigger) and the
+  // sheriff keeps your weapons (ask your gang for a gun)
+  escaped() {
+    const g = this.game, J = this.jailed;
+    this.bounty = J.bounty + BOUNTY.escape; this.lastCrime = g.time;
+    this.jailed = null; this.cellDoor(false);
+    if (this.held) this.held.forfeit = true;
+    g.hud.alert(t('jail.escaped', { n: this.bounty }) + (this.held ? ' ' + t('jail.gunsKept') : '')); sfx.alert();
+  }
+  boom(x, y, z) {
+    const g = this.game;
+    g.particles.burst(x, y, z, [0.35, 0.3, 0.24], 24, 4, 1.2);
+    sfx.explosion(Math.max(0.3, 1 - g.player.pos.distanceTo(new THREE.Vector3(x, y, z)) / 60), false);
+    g.shake = Math.max(g.shake, 0.5);
+    this.hearShot(new THREE.Vector3(x, y, z));
+  }
+  // locked up with men of yours still free: whistle and they come at night
+  // (in a few seconds of game) and blow the bars
+  callGang() {
+    const g = this.game;
+    if (!this.jailed || this.rescue) return;
+    if (!this.trades.gang.some((m) => m.alive && !m.jailed)) { g.hud.toast(t('jail.noGang')); return; }
+    this.rescue = { t: 12 };
+    g.hud.toast(t('jail.gangComing')); sfx.toggle();
+  }
+  // the sheriff gives your weapons back (you served your time)
+  returnGuns() {
+    const g = this.game, H = this.held;
+    if (!H || H.forfeit || this.jailed) return false;
+    for (const [id, n] of Object.entries(H.items)) g.give(id, n);
+    this.held = null; g.hud.dirtyHotbar = true;
+    g.hud.toast(t('jail.gunsBack'), 'pick'); sfx.coins();
+    return true;
+  }
+  // picking the lock of the cell from outside: your men locked up walk free
+  // (a jailbreak: a crime if anyone sees it)
+  startPickGang() {
+    if (this.jailed || this.pickGang || !this.trades.jailedMen().length) return;
+    this.pickGang = { t: 0 }; this.game.hud.toast(t('jail.picking'));
+  }
+  updatePickGang(dt) {
+    const g = this.game, P = this.pickGang, C = this.jailB && this.jailB.cell;
+    if (!P || !C) return;
+    const [x, , z] = C.door[1] || C.door[0];
+    if (Math.hypot(g.player.pos.x - x - 0.5, g.player.pos.z - z - 0.5) > 2.6 || !this.trades.jailedMen().length) { this.pickGang = null; g.hud.digProgress = 0; g.hud.toast(t('jail.pickStopped')); return; }
+    P.t += dt; g.hud.digProgress = P.t / PICK_TIME;
+    if ((P.tick = (P.tick || 0) - dt) <= 0) { P.tick = 0.5; sfx.craftTick(); }
+    if (P.t >= PICK_TIME) {
+      this.pickGang = null; g.hud.digProgress = 0;
+      this.cellDoor(false); this.trades.breakOut();
+      this.crime('escape', { pos: g.player.pos.clone() });
     }
   }
   wakeAtHome() {
@@ -939,7 +1006,12 @@ export class TownLife {
       const C = this.jailB.cell;
       if (Math.hypot(C.cot.x + 1 - p.x, C.cot.z + 0.5 - p.z) < 2.2) out.push({ a: 'jailsleep', label: t('ctx.jailSleep') });
       if (Math.hypot(C.door[0][0] + 1 - p.x, C.door[0][2] + 0.5 - p.z) < 2.2 && !this.pick) out.push({ a: 'picklock', label: t('ctx.pickLock') });
+      if (!this.rescue && this.trades.gang.some((m) => m.alive && !m.jailed)) out.push({ a: 'callgang', label: t('ctx.callGang') });
       return out;
+    }
+    if (this.jailB && this.jailB.cell && this.trades.jailedMen().length && !this.pickGang) {
+      const [x, , z] = this.jailB.cell.door[1] || this.jailB.cell.door[0];
+      if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 2.4) out.push({ a: 'pickgang', label: t('ctx.pickGang') });
     }
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
@@ -960,6 +1032,8 @@ export class TownLife {
     else if (a === 'sleep') this.sleep();
     else if (a === 'jailsleep') this.serveNight();
     else if (a === 'picklock') this.startPick();
+    else if (a === 'pickgang') this.startPickGang();
+    else if (a === 'callgang') this.callGang();
     else if (a === 'craft') g.app.openPanel('craft');      // (this case was missing: the Craft button did nothing)
     this.ctxT = 0;
   }
@@ -1022,7 +1096,7 @@ export class TownLife {
     }
     this.livestock(dt);
     this.helpAgainstAnimals(dt);
-    this.updateJail(dt);
+    this.updateJail(dt); this.updatePickGang(dt);
     this.updateSupper(dt);
     this.updateDoors(dt);
     this.invite(dt);
@@ -1119,7 +1193,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, trades: this.trades.toSave(), houses: this.houses.toSave(),
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(),
       },
     };
   }
