@@ -65,6 +65,7 @@ export class TownLife {
     this.rapport = saved.rapport || {};            // how much each household likes you
     this.inviteT = 60 + Math.random() * 60;
     this.charges = [];                             // lit dynamite at a door
+    this.broken = saved.broken || [];              // village windows broken (mended in time)
     this.doorT = 0;
     this.st = Object.assign({ days: 0, earned: 0, jobs: 0, jailed: 0, harvested: 0 }, saved.st || {});
     if (this.st.favors != null) { this.st.jobs += this.st.favors; delete this.st.favors; }
@@ -345,7 +346,7 @@ export class TownLife {
     while (P.members.filter((m) => m.alive).length < size && pool.length) {
       const v = pool.shift();
       v.posse = true; v.route = []; v.planT = 0; v.idleT = 0;
-      v.hp = Math.max(v.hp, 170);                                    // tougher than ordinary townsfolk
+      v.hp = Math.max(v.hp, 220);                                    // tougher than ordinary townsfolk (and more ride in: frontier.js)
       F.armed(v, F.bestGun(v) || (Math.random() < 0.5 ? 'lever' : 'shotgun'));
       if (g.horses && P.members.filter((m) => m.horse).length < 12) g.horses.mountFor(v);   // they ride
       P.members.push(v);
@@ -427,7 +428,7 @@ export class TownLife {
   posseLost(v) {
     const P = this.posse;
     if (!P) return;
-    if (!P.members.some((m) => m.alive)) this.disband('law.posseGone');
+    if (!P.members.some((m) => m.alive) && !(this.frontier && this.frontier.reinforce())) this.disband('law.posseGone');     // (more ride in first: frontier.js)
   }
   disband(msgKey = 'law.gaveUp') {
     const P = this.posse;
@@ -514,6 +515,22 @@ export class TownLife {
     if (C) { this.cellDoor(true); p.pos.set(C.inside.x, C.inside.y, C.inside.z); p.vel.set(0, 0, 0); p.yaw = Math.atan2(-(C.door[0][0] + 1 - C.inside.x), -(C.door[0][2] + 0.5 - C.inside.z)); p.pitch = 0; }
     g.hud.dirtyHotbar = true;
     g.app.openPanel('jailed', { lost });
+  }
+  // a window shot or knifed out: a village window is mended within half a
+  // day (unless the house is yours now); your own you mend yourself (dig out
+  // the broken pane, put in new glass)
+  breakWindow(x, y, z) {
+    const g = this.game, w = g.world;
+    if (w.get(x, y, z) !== B.GLASS) return;
+    w.set(x, y, z, B.GLASS_BROKEN);
+    if (w.isLocked(x, y, z)) this.broken.push({ x, y, z, at: g.time + 0.5 });
+    this.hearShot(new THREE.Vector3(x, y, z));
+  }
+  mendWindows() {
+    const g = this.game, w = g.world;
+    if (!this.broken.length) return;
+    for (const q of this.broken) if (q.at <= g.time && w.isLocked(q.x, q.y, q.z) && w.get(q.x, q.y, q.z) === B.GLASS_BROKEN) w.set(q.x, q.y, q.z, B.GLASS);
+    this.broken = this.broken.filter((q) => q.at > g.time && w.isLocked(q.x, q.y, q.z));
   }
   // the cell's door of bars: shut (and unbreakable) while you are locked up
   cellDoor(shut, first = false) {
@@ -1113,6 +1130,7 @@ export class TownLife {
     this.updateJail(dt); this.updatePickGang(dt);
     this.updateSupper(dt);
     this.updateDoors(dt);
+    if ((this.mendT = (this.mendT || 0) - dt) <= 0) { this.mendT = 5; this.mendWindows(); }
     this.invite(dt);
     this.guestCheck();
     this.ambience(dt);
@@ -1208,7 +1226,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(),
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), broken: this.broken,
       },
     };
   }

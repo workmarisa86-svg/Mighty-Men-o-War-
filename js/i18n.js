@@ -520,6 +520,9 @@ const STR = {
     'rumor.3': 'A drifter swore he saw a cave with a strongbox in it, up in the hills.', 'rumor.4': 'Outlaws carry maps sometimes. Treasure maps, I mean.',
     'rumor.5': 'Silas Crane bought half the valley cheap. Funny how folk got sick just before.', 'rumor.6': 'Stagecoach leaves at nine for the east station. Carries a strongbox, they say.',
     'animal.cow': 'cow', 'animal.pig': 'pig', 'animal.chicken': 'chicken', 'animal.sheep': 'sheep',
+    'fr.houseTitle': 'The house is yours', 'fr.houseSub': 'At gunpoint the family hands over the house and leaves town. Take it apart or rebuild it as you like; its windows are yours to mend.',
+    'ctx.stealHouse': 'Take their house', 'fr.deputy': 'Deputy', 'tmap.stolen': 'your house (taken)',
+    'fr.reinfTitle': 'Reinforcements!', 'fr.reinfSub': '{n} more lawmen ride in from the county. The law never runs out of men.',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1038,6 +1041,9 @@ const STR = {
     'rumor.3': 'Un vagabundo juró que vio una cueva con un cofre dentro, allá en las colinas.', 'rumor.4': 'Los forajidos a veces llevan mapas. Mapas del tesoro, digo.',
     'rumor.5': 'Silas Crane compró medio valle barato. Qué curioso que la gente enfermara justo antes.', 'rumor.6': 'La diligencia sale a las nueve hacia la estación del este. Lleva un cofre, dicen.',
     'animal.cow': 'vaca', 'animal.pig': 'cerdo', 'animal.chicken': 'gallina', 'animal.sheep': 'oveja',
+    'fr.houseTitle': 'La casa es tuya', 'fr.houseSub': 'A punta de pistola la familia te entrega la casa y se va del pueblo. Desmóntala o reconstrúyela a tu gusto; sus ventanas las reparas tú.',
+    'ctx.stealHouse': 'Quedarte su casa', 'fr.deputy': 'Ayudante', 'tmap.stolen': 'tu casa (robada)',
+    'fr.reinfTitle': '¡Refuerzos!', 'fr.reinfSub': 'Llegan {n} agentes más del condado. A la ley nunca le faltan hombres.',
   },
 };
 

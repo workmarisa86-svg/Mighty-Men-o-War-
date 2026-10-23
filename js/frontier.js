@@ -61,6 +61,9 @@ export class Frontier {
     this.hunterT = saved.hunterT ?? (g.time + 1);
     this.rustleNight = saved.rustleNight ?? -1;
     this.goalT = 2; this.slowT = 0; this.posters = null; this.fire = null; this.cold = 0;
+    this.stolen = saved.stolen || [];                // village houses you took (building indexes)
+    for (const i of this.stolen) this.unlock(V.buildings[i]);
+    this.deputies = [];
     this.bankB = V.buildings.find((b) => b.type === 'bank') || null;
     this.saloonB = V.buildings.find((b) => b.type === 'saloon') || null;
     if (this.look) this.applyLook();
@@ -110,6 +113,55 @@ export class Frontier {
     this.person('silas', () => S && this.man('Silas Crane', 8103, { shirt: 0x1e1e22, trousers: 0x1e1e22, vest: 0x5a4a2a, hat: 'felt', hatColor: 0x121212, hair: 0x8a8a84, moustache: true }, { x: S.inside.x + 1.5, y: S.inside.y, z: S.inside.z }, { silas: true, money: 120, guns: ['revolver'], goods: ['gold'], brave: 0.4 }), !!S && nearTown && h > 15 && h < 23.5 && this.q.well !== 'done');
     // the fair's judge in the plaza on fair day
     this.person('judge', () => this.man(t('fr.judge'), 8104, { shirt: 0xd8d0b8, trousers: 0x3a3a3e, vest: 0x8a2a22, hat: 'felt', hatColor: 0x2a2a2a, hair: 0xb8b0a0, moustache: true }, { x: V.cx + 6.5, y: V.y, z: V.cz + 3.5 }, { judge: true }), this.ev.kind === 'fair' && nearTown && h > 8 && h < 19);
+  }
+
+  // ---- a village house taken at gunpoint: yours to live in, take apart, rebuild ----
+  unlock(b) {
+    const w = this.game.world, y0 = this.T.village.y;
+    if (!b) return;
+    for (let z = b.z0 - 1; z <= b.z1 + 1; z++) for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let y = y0; y < y0 + 16; y++) if (w.inside(x, y, z)) w.locked[w.idx(x, y, z)] = 0;
+  }
+  stealHouse(v) {
+    const g = this.game, T = this.T, F = T.folk, b = v.home, i = T.village.buildings.indexOf(b);
+    if (!b || i < 0 || this.stolen.includes(i)) return;
+    this.stolen.push(i); this.unlock(b);
+    // the family moves out (for good)
+    for (const o of F.list) if (o.home === b) { o.alive = false; o.away = true; F.dropRig(o); F.dead[o.i] = 1e9; }
+    T.addBounty(100, 'robbery'); T.crime('robbery', { value: 300, pos: g.player.pos.clone() }); T.addHonor(-15); T.trades.rep('outlaws', 8); T.trades.rep('farmers', -15);
+    g.hud.bigMessage(t('fr.houseTitle'), t('fr.houseSub'));
+  }
+
+  // ---- the posse never runs out of men: deputies ride in from the county ----
+  updatePosse() {
+    const g = this.game, T = this.T, F = T.folk, P = T.posse, pl = g.player.pos;
+    if (!P) {
+      if (this.deputies.length) { for (const v of this.deputies) { F.dropRig(v); v.away = true; v.alive = false; if (v.horse) g.horses.stable(v.horse); } F.extra = F.extra.filter((x) => !this.deputies.includes(x)); this.deputies = []; }
+      return;
+    }
+    if (P.members.filter((m) => m.alive).length < 3) this.reinforce();
+  }
+  // a hostile posse nearly (or all) beaten: the next wave of deputies (false: no more)
+  reinforce() {
+    const g = this.game, T = this.T, F = T.folk, P = T.posse, pl = g.player.pos;
+    if (!P || !P.hostile) return false;
+    P.waves = P.waves || 0;
+    if (P.waves >= 3 || (P.waveT && P.waveT > g.time)) return false;
+    P.waves++; P.waveT = g.time + 0.02;
+    const V = T.village, a = Math.atan2(V.cz - pl.z, V.cx - pl.x), n = 3 + P.waves;
+    for (let k = 0; k < n; k++) {
+      const at = { x: pl.x + Math.cos(a + (k - n / 2) * 0.15) * 75, y: pl.y + 4, z: pl.z + Math.sin(a + (k - n / 2) * 0.15) * 75 };
+      const gy = F.ground(at.x, at.z, at.y + 6); if (gy != null) at.y = gy;
+      const look = { shirt: 0x5a5040, trousers: 0x2e2a26, vest: 0x2a2420, hat: 'felt', hatColor: 0x3a2e22, hair: 0x3a2a1c, moustache: k % 2 === 0, gunbelt: true, star: true };
+      const v = T.trades.makeMan(t('fr.deputy') + ' ' + (this.deputies.length + 1), 9600 + this.deputies.length, look, at);
+      Object.assign(v, { posse: true, deputy: true, hp: 240, guns: k % 2 ? ['lever', 'revolver'] : ['shotgun', 'revolver'], money: 10, goods: [], brave: 1 });
+      v.onKill = () => {}; v.onHurt = () => {};
+      F.armed(v, F.bestGun(v));
+      if (g.horses) g.horses.mountFor(v);
+      F.extra.push(v); P.members.push(v); this.deputies.push(v);
+    }
+    g.hud.bigMessage(t('fr.reinfTitle'), t('fr.reinfSub', { n }));
+    sfx.alert();
+    return true;
   }
 
   // ---- the bank ----------------------------------------------------------------------------
@@ -780,6 +832,9 @@ export class Frontier {
     // a shopkeeper with his hands up: take his shop
     const k = T.folk.nearest(p, 3, (x) => x.role === 'keeper' && x.surrendered > 0 && BIZ[x.shop] && !this.biz[x.shop]);
     if (k) out.push({ a: 'deed', label: t('ctx.deed'), v: k, run: () => this.stealBiz(k) });
+    // anyone of a household with his hands up: take the family's house
+    const o = !k && T.folk.nearest(p, 3, (x) => x.surrendered > 0 && x.home && x.home.type === 'house' && !this.stolen.includes(T.village.buildings.indexOf(x.home)));
+    if (o) out.push({ a: 'house', label: t('ctx.stealHouse'), v: o, run: () => this.stealHouse(o) });
     // the stagecoach: rob it, or ride shotgun from the depot
     const st = this.coachNear(p, 7);
     if (st) {
@@ -815,6 +870,7 @@ export class Frontier {
       this.updatePeople();
       if (!this.raid && g.time > this.raidT && Object.keys(this.biz).length && this.hour() > 9 && this.hour() < 18 && !T.jailed) { this.raidT = g.time + 2.5 + Math.random() * 2.5; this.startRaid(); }
       this.updateRaid();
+      this.updatePosse();
       this.updateHunters();
       this.updateRustlers();
       this.updateQuests();
@@ -832,6 +888,7 @@ export class Frontier {
     const out = [], R = this.route(), C = this.coach;
     if (C && C.x != null) out.push({ x: C.x, z: R.z, kind: 'coach', label: t('tmap.coach') });
     out.push({ x: R.x1, z: R.z, kind: 'station', label: t('tmap.station') });
+    for (const i of this.stolen) { const b = this.T.village.buildings[i]; if (b) out.push({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, kind: 'quest', label: t('tmap.stolen') }); }
     if (this.raid) out.push({ x: this.raid.b.door.x, z: this.raid.b.door.z, kind: 'raid', label: t('tmap.raid') });
     if (this.fire) out.push({ x: this.fire.spots[0].x, z: this.fire.spots[0].z, kind: 'fire', label: t('tmap.fire') });
     if (this.people.clara && this.q.clara !== 'done') out.push({ x: this.people.clara.pos.x, z: this.people.clara.pos.z, kind: 'quest', label: 'Clara' });
@@ -848,7 +905,7 @@ export class Frontier {
   toSave() {
     return {
       done: this.done, bank: this.bank, biz: this.biz, st: this.st, q: this.q, look: this.look, hands: this.hands, ev: this.ev, foals: this.foals,
-      raidT: this.raidT, hunterT: this.hunterT, rustleNight: this.rustleNight,
+      raidT: this.raidT, hunterT: this.hunterT, rustleNight: this.rustleNight, stolen: this.stolen,
     };
   }
   dispose() {
