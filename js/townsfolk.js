@@ -56,7 +56,7 @@ export class Townsfolk {
     // shopkeepers, the stable keeper and the sheriff are men of middle-class
     // and wealthy homes (the market stall is kept by a woman)
     this.specs = [];
-    const jobs = [['keeper', 'general'], ['keeper', 'butcher'], ['keeper', 'hunting'], ['keeper', 'stable'], ['sheriff', 'hall']];
+    const jobs = [['keeper', 'general'], ['keeper', 'butcher'], ['keeper', 'hunting'], ['keeper', 'stable'], ['keeper', 'land'], ['sheriff', 'hall']];
     let fam = 0;
     homes.forEach((h, hi) => {
       const status = h.status || 'house', last = LAST[(hi * 7 + (game.cfg.seed % 13)) % LAST.length];
@@ -383,6 +383,8 @@ export class Townsfolk {
     const dir = b.clone().sub(a), L = dir.length(); dir.divideScalar(L);
     const block = g.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, L - 0.4, false, 'bullet');
     v.cool = 1.6 + Math.random() * 1.2; v.fired = true;
+    v.firedOnGang = performance.now() / 1000 + 20;                 // the gang fires back at whoever shoots at them
+    if (g.town && g.town.trades) g.town.trades.raiseAlarm(15);
     sfx.shot(v.armed === 'revolver' ? 'revolver' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
     const end = block ? a.clone().addScaledVector(dir, block.dist) : b;
     const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
@@ -448,6 +450,7 @@ export class Townsfolk {
       else if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
       else if (v.posse) T.posseBehaviour(v, dt, d);
       else if (v.fight) this.fightBehaviour(v, dt, d);
+      else if (v.huntAnimal) this.animalFightBehaviour(v, dt);
       else if (v.duel) this.duelBehaviour(v, dt);
       else if (v.reportTo) this.reportBehaviour(v, dt);
       else if (v.watching) this.watchBehaviour(v, dt);
@@ -645,6 +648,25 @@ export class Townsfolk {
     v.yaw = turn(v.yaw, Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)), dt * 4);
     if (v.surrendered <= 0) { v.surrendered = 0; v.scaredT = 20; }
   }
+  // helping you against a wolf or a bear: run up, draw and shoot it
+  animalFightBehaviour(v, dt) {
+    const g = this.game, a = v.huntAnimal;
+    if (!a || a.state === 'dead' || !g.animals.list.includes(a) || !g.animals.danger().includes(a)) {
+      v.huntAnimal = null; this.armed(v, null); if (a && a.state === 'dead') this.say(v, 'say.helpDone'); return;
+    }
+    const gun = this.bestGun(v); if (v.armed !== gun) this.armed(v, gun);
+    const d = Math.hypot(a.pos.x - v.pos.x, a.pos.z - v.pos.z);
+    if (d > 14) this.goDirect(v, { x: a.pos.x, y: a.pos.y, z: a.pos.z }, RUN, dt, 12); else v.speed = 0;
+    v.yaw = Math.atan2(-(a.pos.x - v.pos.x), -(a.pos.z - v.pos.z));
+    v.cool -= dt;
+    if (v.cool > 0 || d > 30) return;
+    v.cool = 1.2 + Math.random() * 0.8; v.fired = true;
+    sfx.shot(gun === 'revolver' ? 'revolver' : gun === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
+    const A = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z), Bp = new THREE.Vector3(a.pos.x, a.pos.y + a.T.height * 0.6, a.pos.z);
+    const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
+    pos.setXYZ(0, A.x, A.y, A.z); pos.setXYZ(1, Bp.x, Bp.y, Bp.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere(); tr.l.visible = true; tr.t = 0.07;
+    if (Math.random() < Math.max(0.3, 0.75 - d / 60)) g.animals.hurt(a, gun === 'shotgun' ? Math.max(15, 45 - d) : gun === 'lever' ? 40 : 30);
+  }
   // a brawl (your gang's chaos): watch it from a ring round the fighters, cheering
   watchBehaviour(v, dt) {
     const B = v.watching;
@@ -656,13 +678,33 @@ export class Townsfolk {
     v.cheerT = (v.cheerT ?? 2 + Math.random() * 6) - dt;
     if (v.cheerT <= 0) { v.cheerT = 5 + Math.random() * 8; this.say(v, v.role === 'sheriff' ? 'say.sheriffBreakUp' : 'say.cheer' + (1 + Math.floor(Math.random() * 3))); }
   }
-  // fists up: a guard, and a quick jab now and then
+  // fists up: a guard; a straight jab or a wide hook with the body behind it;
+  // reeling back from a blow; knocked flat and getting up again
   brawlPose(v, rig) {
-    const p = Math.min(1, (v.punch || 0) / 0.35), jab = Math.sin(p * Math.PI), right = (Math.floor((v.punchT || 0) * 10) % 2) === 0;
-    rig.armL.rotation.set(-1.2 - (right ? 0 : 0.5 * jab), 0, -0.25); rig.elbowL.rotation.x = 1.7 - (right ? 0 : 1.4 * jab);
-    rig.armR.rotation.set(-1.25 - (right ? 0.5 * jab : 0), 0, 0.25); rig.elbowR.rotation.x = 1.7 - (right ? 1.4 * jab : 0);
-    rig.body.rotation.y = Math.sin(this.game.time * 900 + v.i) * 0.15 + (right ? -0.25 : 0.25) * jab;
-    rig.body.rotation.x = 0.12;
+    if (v.down > 0) {
+      // flat on the back (falling, lying, then getting up)
+      const fall = Math.min(1, (1.9 - v.down) / 0.3), up = Math.min(1, v.down / 0.35), k = Math.min(fall, up);
+      rig.body.rotation.x = -(Math.PI / 2 - 0.1) * k; rig.body.position.y = 0.08 * k;
+      rig.armL.rotation.set(-2.2 * k, 0, -0.9 * k); rig.armR.rotation.set(-2.0 * k, 0, 0.9 * k);
+      rig.elbowL.rotation.x = 0.3; rig.elbowR.rotation.x = 0.3;
+      rig.legL.rotation.set(-0.5 * k, 0, -0.12 * k); rig.legR.rotation.set(-0.2 * k, 0, 0.15 * k);
+      rig.kneeL.rotation.x = -0.6 * k; rig.kneeR.rotation.x = -0.2 * k;
+      return;
+    }
+    const p = v.punch > 0 ? Math.sin(Math.min(1, 1 - v.punch / 0.4) * Math.PI) : 0, right = !!v.right, hook = !!v.hook;
+    const jab = (isRight) => (right === isRight ? p : 0);
+    // the guard (fists by the chin, elbows in), the punching arm thrown out
+    rig.armL.rotation.set(-1.25 - 0.45 * jab(false), hook && !right ? -0.6 * jab(false) : 0, -0.3 + (hook && !right ? 0.9 * jab(false) : 0));
+    rig.armR.rotation.set(-1.3 - 0.45 * jab(true), hook && right ? 0.6 * jab(true) : 0, 0.3 - (hook && right ? 0.9 * jab(true) : 0));
+    rig.elbowL.rotation.x = 1.75 - 1.55 * jab(false) * (hook ? 0.5 : 1);
+    rig.elbowR.rotation.x = 1.75 - 1.55 * jab(true) * (hook ? 0.5 : 1);
+    // body: weight behind the blow, a twist into it; thrown back by a hit taken
+    const kn = v.knock > 0 ? v.knock / 0.45 : 0;
+    rig.body.rotation.x = 0.14 + 0.28 * p - 0.55 * kn;
+    rig.body.rotation.y = (right ? -0.45 : 0.45) * p + Math.sin(this.game.time * 900 + v.i) * 0.1;
+    rig.head.rotation.x = -0.15 - 0.35 * kn;
+    // a boxer's stance: knees bent
+    rig.kneeL.rotation.x = Math.min(rig.kneeL.rotation.x, -0.35); rig.kneeR.rotation.x = Math.min(rig.kneeR.rotation.x, -0.3);
   }
   // fighting back (a hold-up gone wrong, a robbed household, a break-in)
   fightBehaviour(v, dt, d) {
