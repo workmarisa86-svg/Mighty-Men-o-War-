@@ -12,8 +12,8 @@ import { FORMATIONS } from './soldiers.js';
 const SHORT = ['hold', 'defend', 'spread', 'cover', 'attack', 'distract', 'disperse'];
 export const ORDERS = ['follow', 'hold', 'defend', 'cover', 'spread', 'advance', 'attack', 'distract', 'disperse'];
 // Town Life: an outlaw's gang takes the same wheel, with its own orders (trades.js)
-export const GANG_ORDERS = ['follow', 'hold', 'loot', 'chaos'];   // (taking cover is automatic: see trades.js)
-const ICONS = { loot: '&#9733;', chaos: '&#9889;', follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;' };
+export const GANG_ORDERS = ['follow', 'hold', 'loot', 'chaos', 'disperse', 'gun'];   // (taking cover is automatic: see trades.js)
+const ICONS = { loot: '&#9733;', chaos: '&#9889;', follow: '&#10148;', hold: '&#9632;', defend: '&#9960;', cover: '&#9686;', spread: '&#8943;', advance: '&#8679;', attack: '&#8853;', distract: '&#9835;', disperse: '&#10007;', formation: '&#8942;', gun: '&#9737;' };
 
 export class OrderWheel {
   constructor(game) {
@@ -133,7 +133,7 @@ export class OrderWheel {
       // what the orders are aimed at: the spot you look at, or a house to loot
       const Tr = g.town.trades, h = this.at && this.at.house;
       this.center.innerHTML = `<b>${t('order.title2')}</b><span>${t('gang.toGang', { n: Tr.free().length })}</span><span class="muted">${h ? t('gang.aimHouse', { house: Tr.houseName(h) }) : t('gang.aimSpot')}</span>`;
-      this.items.forEach((b, i) => { const cmd = this.list[i]; b.innerHTML = `<i>${ICONS[cmd]}</i><span>${t('gord.' + cmd)}</span><kbd>${i + 1}</kbd>`; b.classList.toggle('on', i === this.sel); b.hidden = false; b.disabled = cmd === 'loot' && !h; });
+      this.items.forEach((b, i) => { const cmd = this.list[i]; b.innerHTML = `<i>${ICONS[cmd]}</i><span>${t('gord.' + cmd)}</span><kbd>${i + 1}</kbd>`; b.classList.toggle('on', i === this.sel); b.hidden = false; b.disabled = (cmd === 'loot' && !h) || (cmd === 'gun' && !Tr.canGiveGun()); });
       return;
     }
     const sel = E.selection();

@@ -9,6 +9,7 @@
 import { SEA, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
 import { B } from './blocks.js';
 import { Simplex2, mulberry32, hash2 } from './noise.js';
+import { buildHidden } from './hiddengen.js';
 
 export { TOWN_SIZE, TOWN_LAYOUT };      // (kept in config.js so the menus don't load Town Life's code)
 // half-size of each kind of home
@@ -205,6 +206,10 @@ export function generateTown(world) {
     world.data[i] = id; world.locked[i] = lock && id !== B.AIR ? 1 : 0;
   };
   const village = buildVillage(world, put, cx, cz, hv, rnd, homes, RX, RZ);
+  // 2.0: the bank and the saloon at the east end of Main Street (added after
+  // everything else, so the homes and their people keep their places)
+  village.buildings.push(building(world, put, { x0: cx + 55, z0: cz + 6, x1: cx + 65, z1: cz + 14, side: 'n' }, hv, B.BRICK, 'bank'));
+  village.buildings.push(building(world, put, { x0: cx + 60, z0: cz - 16, x1: cx + 70, z1: cz - 6, side: 's' }, hv, B.WOOD, 'saloon'));
   const cottage = buildCottage(world, put, cot.x, hc, cot.z, cx, cz);
   // dirt paths from the ends of the center's roads out to every home and the cottage
   for (const b of village.buildings) if (b.type === 'house') b.trail = pave(world, b.arm, b.door);
@@ -224,6 +229,9 @@ export function generateTown(world) {
     if (!flat || world.get(x, top + 1, z) !== B.AIR) continue;
     plantOak(world, x, top + 1, z, mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9)));
   }
+
+  // hidden places out in the hills (their own random numbers: nothing else moves)
+  village.hidden = buildHidden(world, put, { seed, tops, dTown, cot, homes });
 
   world.sites.push({ type: 'cabin', x: cottage.x, y: cottage.y, z: cottage.z, r: cottage.r, bed: cottage.bed, chest: cottage.chest, fire: cottage.fire, door: cottage.door, pen: cottage.pen, garden: cottage.garden });
   world.sites.push(village);

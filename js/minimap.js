@@ -119,6 +119,14 @@ export class Minimap {
         if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8); }
         else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(x, y, 3, 0, Math.PI * 2); c.fill(); c.stroke(); }
       }
+      for (const m of g.town.hidden.mapMarks().concat(g.town.frontier.mapMarks())) {
+        const [x, y, d] = toRadar(m.x, m.z);
+        if (d > RADAR_RANGE + (m.r || 0)) continue;
+        c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
+        if (m.kind === 'treasure') { c.strokeStyle = '#ffd040'; c.setLineDash([3, 2]); c.beginPath(); c.arc(x, y, Math.max(5, m.r * scale), 0, Math.PI * 2); c.stroke(); c.setLineDash([]); continue; }
+        c.fillStyle = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
+        c.beginPath(); c.arc(x, y, 3.5, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
       const marks = g.town.marks();
       for (const v of g.town.folk.extra.length ? g.town.folk.list.concat(g.town.folk.extra) : g.town.folk.list) {
         if (!v.alive || v.away) continue;

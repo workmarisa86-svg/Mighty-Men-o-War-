@@ -50,11 +50,19 @@ export function installTownUI(UI) {
         return `<div class="shop-row"><img src="${itemIcon(id)}" alt=""><span>${t('item.' + id)} <small>×${n}</small></span><b>${p}</b>
           <button class="btn small primary" data-sell="${id}" data-n="1">${t('shop.sell')}</button>${n > 1 ? `<button class="btn small" data-sell="${id}" data-n="${n}">${t('shop.sellAll', { n: p * n })}</button>` : ''}</div>`;
       }).join('') || `<p class="muted">${t('shop.nothing')}</p>`;
+    const myHorses = g.horses.list.filter((h) => h.alive && h.owner === 'player').length;
+    const extras = shop === 'general' ? `<div class="row"><button class="btn" id="xclothes">${t('fr.clothes')}</button></div>`
+      : shop === 'stable' ? `<div class="row"><button class="btn" id="xbreed" ${myHorses >= 2 && T.money >= 25 ? '' : 'disabled'}>${t('fr.breed', { n: 25 })}</button><button class="btn" id="xdrive" ${T.frontier.drive ? 'disabled' : ''}>${t('fr.driveJob')}</button></div>` : '';
     const body = `<div class="who"><b>${esc(v.name)}</b><span class="muted small">${t('shop.' + shop)}</span></div>
       <p class="coins-line">${t('shop.youHave', { n: T.money })}${T.honor >= 65 ? ' · ' + t('shop.goodPrices') : T.honor < 35 ? ' · ' + t('shop.badPrices') : ''}</p>
       <div class="seg tabs"><button data-tab="buy" class="${tab === 'buy' ? 'on' : ''}">${t('shop.buyTab')}</button><button data-tab="sell" class="${tab === 'sell' ? 'on' : ''}">${t('shop.sellTab')}</button></div>
-      <div class="shop">${rows}</div>`;
+      <div class="shop">${rows}</div>${extras}`;
     const panel = this.panel(t('shop.' + shop), body, { wide: true, onBack: () => this.app.closePanel() });
+    // 2.0: clothes at the general store; breeding and the cattle drive at the stable
+    const xb = (id, fn) => { const b = panel.querySelector(id); if (b) b.onclick = fn; };
+    xb('#xclothes', () => this.show('clothes', {}));
+    xb('#xbreed', () => { if (T.frontier.breed()) this.app.closePanel(); });
+    xb('#xdrive', () => { this.app.closePanel(); T.frontier.startDrive(); });
     panel.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => this.show('shop', { shop, v, tab: b.dataset.tab }));
     panel.querySelectorAll('[data-buy]').forEach((b) => b.onclick = () => { if (T.buy(shop, b.dataset.buy)) this.show('shop', { shop, v, tab }); });
     panel.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => { if (T.sell(shop, b.dataset.sell, +b.dataset.n)) this.show('shop', { shop, v, tab }); });
@@ -97,6 +105,7 @@ export function installTownUI(UI) {
       <div class="menu">
         ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
         <button class="btn" id="sturn">${t('law.turnIn')}</button>` : ''}
+        ${T.held && !T.held.forfeit && !T.jailed ? `<button class="btn primary" id="sguns">${t('law.gunsBack')}</button>` : ''}
         <button class="btn" id="sjob">${t('ctx.job')}</button>
         <button class="btn" id="sboard">${t('bounty.board')}${Tr.claimable().length ? ` <b class="badge">${Tr.claimable().length}</b>` : ''}</button>
         <button class="btn ghost" id="strade">${t('trade.change', { n: Tr.changeFee() })}</button>
@@ -108,6 +117,7 @@ export function installTownUI(UI) {
     if ($('#spay')) $('#spay').onclick = () => { T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
     if ($('#sturn')) $('#sturn').onclick = () => { this.app.closePanel(); T.jail(); };
     $('#sjob').onclick = () => { this.app.closePanel(); T.askJob(v); };
+    if ($('#sguns')) $('#sguns').onclick = () => { T.returnGuns(); this.app.closePanel(); };
   };
 
 
@@ -212,7 +222,7 @@ export function installTownUI(UI) {
   P.r_jailed = function ({ lost = [] }) {
     const touch = this.app.input.touch;
     const body = `<p>${t('jail.text')}</p>
-      <ul class="steps"><li>${t('jail.noFine')}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t(touch ? 'jail.howSleepTouch' : 'jail.howSleep')}</li><li>${t(touch ? 'jail.howPickTouch' : 'jail.howPick')}</li></ul>`;
+      <ul class="steps"><li>${t('jail.noFine')}</li>${lost.length ? `<li>${t('law.jailLost', { list: lost.join(', ') })}</li>` : ''}<li>${t(touch ? 'jail.howSleepTouch' : 'jail.howSleep')}</li><li>${t(touch ? 'jail.howPickTouch' : 'jail.howPick')}</li>${this.app.game.town.trades.gang.some((m) => m.alive && !m.jailed) ? `<li>${t('jail.howGang')}</li>` : ''}<li>${t('jail.howGuns')}</li></ul>`;
     this.panel(t('law.jailTitle'), body, { onBack: () => this.app.closePanel() });
   };
 
@@ -280,7 +290,7 @@ export function installTownUI(UI) {
     box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
     // labels: in the whole view the town center is one label and homes show
     // their kind; the closer view names every building with its icon
-    const ICON = { land: '📜', general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
+    const ICON = { bank: '💰', saloon: '🍺', land: '📜', general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
     const label = (txt, x, y, size = 11) => { c.font = `${size * dpr / zoom}px Oswald, Arial`; c.textAlign = 'center'; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.strokeText(txt, x, y); c.fillStyle = '#f0e8cc'; c.fillText(txt, x, y); };
     if (zoom > 1) {
       for (const b of V.buildings) if (b.type !== 'house') label((ICON[b.type] || '') + ' ' + t('tmap.b.' + b.type), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 0.8) * sc, 10);
@@ -308,6 +318,15 @@ export function installTownUI(UI) {
       c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
       if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2); label('✕ ' + m.name, X, Z - r - 4 * dpr / zoom, 10); }
       else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(X, Z, r, 0, Math.PI * 2); c.fill(); c.stroke(); }
+    }
+    // hidden places you have found, treasure circles, the stagecoach, raids, fires
+    for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks())) {
+      const X = m.x * sc, Z = m.z * sc;
+      c.lineWidth = 2 * dpr / zoom; c.strokeStyle = '#000';
+      if (m.kind === 'treasure') { c.setLineDash([4 * dpr / zoom, 3 * dpr / zoom]); c.strokeStyle = '#ffd040'; c.beginPath(); c.arc(X, Z, m.r * sc, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); label('✕ ' + t('tmap.treasure'), X, Z, 10); continue; }
+      const col = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
+      c.fillStyle = col; c.beginPath(); c.arc(X, Z, 4.5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
+      if (m.label) label(m.label, X, Z - 7 * dpr / zoom, 10);
     }
     // whoever pays for your job: a gold ring
     const jt = T.jobTarget();

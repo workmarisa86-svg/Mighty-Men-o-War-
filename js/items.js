@@ -194,6 +194,12 @@ const ICON_DRAW = {
     c.beginPath(); c.arc(15, 28, 8, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.arc(33, 28, 8, 0, Math.PI * 2); c.stroke();
     c.lineWidth = 2; c.strokeStyle = '#6a6a72'; c.beginPath(); c.moveTo(22, 24); c.lineTo(26, 24); c.stroke();
   },
+  tmap(c) {
+    c.fillStyle = '#d8c490'; c.fillRect(8, 10, 32, 28); c.fillStyle = '#b8a070'; c.fillRect(8, 10, 4, 28); c.fillRect(36, 10, 4, 28);
+    c.strokeStyle = '#7a5a30'; c.lineWidth = 1.5; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(14, 32); c.quadraticCurveTo(20, 16, 30, 22); c.stroke(); c.setLineDash([]);
+    c.strokeStyle = '#a02818'; c.lineWidth = 3; c.beginPath(); c.moveTo(27, 17); c.lineTo(34, 25); c.moveTo(34, 17); c.lineTo(27, 25); c.stroke();
+  },
+  note(c) { c.fillStyle = '#e8dcc0'; c.fillRect(12, 8, 24, 32); c.strokeStyle = '#6a5a48'; c.lineWidth = 1; for (let y = 14; y < 36; y += 4) { c.beginPath(); c.moveTo(15, y); c.lineTo(33, y); c.stroke(); } },
   dynamite(c) {
     c.fillStyle = '#a8442e'; for (const x of [14, 21, 28]) c.fillRect(x, 14, 6, 24);
     c.fillStyle = '#d8c890'; c.fillRect(12, 22, 24, 4);

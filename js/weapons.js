@@ -212,6 +212,15 @@ export class Combat {
     sfx.hitMark();
   }
 
+  // a window broken by a shot or a thrown knife
+  shatter(x, y, z) {
+    const g = this.game;
+    if (g.town) g.town.breakWindow(x, y, z);
+    else g.world.set(x, y, z, B.GLASS_BROKEN);
+    g.particles.burst(x + 0.5, y + 0.5, z + 0.5, [0.78, 0.86, 0.9], 12, 2.5, 0.5, 14);
+    sfx.breakBlock('glass');
+  }
+
   melee(damage, range, silent) {
     const g = this.game;
     g.vm.doSwing();
@@ -272,6 +281,10 @@ export class Combat {
           else if (hit.villager || hit.soldier) { k.stuckPerson = hit.villager || hit.soldier; k.local = k.pos.clone().sub(k.stuckPerson.pos); }
           else k.drop = true;
           k.mesh.rotation.set(0, k.yaw, 0); k.mesh.rotateX(-0.3);
+        } else if (block && block.id === B.GLASS && k.vel.length() > 6) {
+          // through the window: the glass shatters and the knife flies on (a little slower)
+          this.shatter(block.x, block.y, block.z); k.vel.multiplyScalar(0.75);
+          k.pos.addScaledVector(d, step);
         } else if (block) {
           const soft = SOFT.has(block.id);
           if (soft || k.bounces >= 2 || k.vel.length() < 5) {
@@ -320,7 +333,12 @@ export class Combat {
     if (g.scopeView.sniper) spread *= 0.3;
     dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2;
     dir.normalize();
-    const block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, W.range, true, 'bullet');
+    let block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, W.range, true, 'bullet');
+    // a window in the way: the shot breaks it and goes on through (whatever is behind can be hit)
+    for (let k = 0; k < 3 && block && block.id === B.GLASS && !this.target(eye, dir, block.dist); k++) {
+      this.shatter(block.x, block.y, block.z);
+      block = g.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, W.range, true, 'bullet');
+    }
     const maxD = block ? block.dist : W.range;
     const hit = this.target(eye, dir, maxD);
     let end;
@@ -356,7 +374,7 @@ export class Combat {
     sfx.shot(W.sound);
     g.animals.noise(p.pos, W.loud);
     g.enemies.hear(p.pos, W.loud * 1.5);
-    if (g.town) g.town.hearShot(p.pos);
+    if (g.town) { g.town.hearShot(p.pos); if (g.town.frontier) g.town.frontier.onShot(eye, dir); }     // (the fair's shooting contest)
   }
 
   dispose() { this.game.scene.remove(this.arc); this.arc.geometry.dispose(); this.chargeEl.remove(); for (const tr of this.tracers) { this.game.scene.remove(tr.l); tr.l.geometry.dispose(); } for (const k of this.knives || []) this.game.scene.remove(k.mesh); this.knives = []; }

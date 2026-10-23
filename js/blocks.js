@@ -17,6 +17,8 @@ export const B = {
   GATE: 44, GATE_OPEN: 45,
   // Town Life: a plank door you buy and place (2 high); it opens and closes with use
   DOOR: 46, DOOR_OPEN: 47,
+  // Town Life: a window shot or knifed out (shards in the frame; dig it out and put new glass in)
+  GLASS_BROKEN: 48,
 };
 
 export const BLOCKS = [];
@@ -55,6 +57,7 @@ def(B.SAND, { name: 'sand', tiles: { top: 'sand', side: 'sand', bottom: 'sand' }
 def(B.CLAY, { name: 'clay', tiles: { top: 'clay', side: 'clay', bottom: 'clay' }, hard: 0.45, drop: 'clay', color: [0.55, 0.52, 0.5] });
 def(B.BRICK, { name: 'brick', tiles: { top: 'brick', side: 'brick', bottom: 'brick' }, hard: 1.1, drop: 'brick', color: [0.55, 0.28, 0.2] });
 // glass: see-through middle, drawn without faces between neighbouring panes
+def(B.GLASS_BROKEN, { name: 'glass_broken', solid: false, opaque: false, render: 'glass', tiles: { top: 'glass_broken', side: 'glass_broken', bottom: 'glass_broken' }, hard: 0.15, drop: null, color: [0.7, 0.8, 0.82] });
 def(B.GLASS, { name: 'glass', opaque: false, render: 'glass', tiles: { top: 'glass', side: 'glass', bottom: 'glass' }, hard: 0.3, drop: 'glass', color: [0.7, 0.8, 0.82] });
 def(B.THATCH, { name: 'thatch', tiles: { top: 'thatch', side: 'thatch', bottom: 'thatch' }, hard: 0.3, drop: 'thatch', color: [0.7, 0.6, 0.32] });
 def(B.ICE, { name: 'ice', tiles: { top: 'ice', side: 'ice', bottom: 'ice' }, hard: 0.5, drop: null, color: [0.72, 0.84, 0.9] });

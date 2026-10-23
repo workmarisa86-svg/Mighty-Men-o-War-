@@ -14,7 +14,7 @@ const TILE_NAMES = [
   'ladder', 'ladder_top',
   // War headquarters rooms
   'med_side', 'med_top', 'rack', 'map_top',
-  'door', 'gate', 'gate_open', 'pdoor', 'pdoor_open',
+  'door', 'gate', 'gate_open', 'pdoor', 'pdoor_open', 'glass_broken',
 ];
 // season currently painted into the seasonal tiles (grass, leaves): null = War look
 let SEASON = null;
@@ -342,6 +342,14 @@ const PAINT = {
     p.rect(0, 0, 32, 2, f); p.rect(0, 30, 32, 2, f); p.rect(0, 0, 2, 32, f); p.rect(30, 0, 2, 32, f);
     p.rect(15, 0, 2, 32, f); p.rect(0, 15, 32, 2, f);
     for (let i = 0; i < 4; i++) p.px(5 + i, 4 + i, [230, 240, 244], 0.9);   // glint (opaque enough to show)
+  },
+  // a window shot out: the frame, jagged shards left in the corners
+  glass_broken(p) {
+    p.clear();
+    const f = [96, 76, 52], g = [200, 220, 228];
+    p.rect(0, 0, 32, 2, f); p.rect(0, 30, 32, 2, f); p.rect(0, 0, 2, 32, f); p.rect(30, 0, 2, 32, f);
+    p.rect(15, 0, 2, 9, f); p.rect(0, 15, 7, 2, f); p.rect(25, 15, 7, 2, f); p.rect(15, 26, 2, 6, f);
+    for (const [cx, cy, sx, sy] of [[2, 2, 1, 1], [29, 2, -1, 1], [2, 29, 1, -1], [29, 29, -1, -1]]) for (let i = 0; i < 6; i++) for (let j = 0; j < 6 - i; j++) if ((i + j * 3) % 4 !== 3) p.px(cx + sx * i, cy + sy * j, g, 0.75);
   },
   thatch(p) {
     p.fill([170, 142, 76], 18);
