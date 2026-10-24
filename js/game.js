@@ -581,6 +581,8 @@ export class Game {
 
   handleKeys(input) {
     const inv = this.inv;
+    // in a tank or a plane: only the map here (its own keys: vehiclewar.js)
+    if (this.vwar && this.vwar.active) { if (input.hit('KeyM')) this.app.openPanel('map', { from: 'game' }); return; }
     // in a car: only driving and the gun in your hands (E gets out, L or F the headlights)
     if (this.player.car) {
       // (not the same E press that just got you in)

@@ -21,7 +21,10 @@ import { tankModel } from './soldiers.js';
 const WAVES = { beginner: 3, easy: 3, medium: 4, hard: 5, impossible: 6 };
 const AIM = { beginner: 0.05, easy: 0.04, medium: 0.03, hard: 0.022, impossible: 0.016 };   // AI gun spread
 const RELOAD = 3.2, SHELL_V = 70, G = 9;
-const PLANE_MIN = 34, PLANE_MAX = 78, PLANE_HP = 100;
+// arcade flying, as in mobile dogfight games: slow enough to line up a shot
+const PLANE_MIN = 16, PLANE_MAX = 38, CRUISE = 26, PLANE_HP = 100;
+const ASSIST = 0.2;            // aim help: an enemy this close to your nose (radians) draws your bullets
+const AUTOFIRE = 0.1;          // phones: the guns fire by themselves when an enemy is this close to the nose
 const HULL = { allies: 0x4a5534, axis: 0x4a5058 };
 
 export class VehicleWar {
@@ -39,7 +42,7 @@ export class VehicleWar {
     this.hud = document.createElement('div'); this.hud.id = 'vwar'; this.hud.className = 'vwar ' + this.mode;
     document.getElementById('hud').appendChild(this.hud);
     this.hudHtml = '';
-    document.body.classList.add('vwar-on');
+    document.body.classList.add('vwar-on'); if (this.mode === 'tank') document.body.classList.add('vw-tank');
   }
   get active() { return this.started && !!this.me && !this.over; }
   side(f) { const s = this.game.cfg.side; return f === 'ally' ? s : (s === 'allies' ? 'axis' : 'allies'); }
@@ -251,15 +254,50 @@ export class VehicleWar {
     T.pref = -(T.pref || 1);
     return want + Math.PI;
   }
+  // where the camera sits: behind and above the tank (looking where you look), or at the gunner's sight
+  tankCam(T) {
+    const g = this.game, p = g.player, w = g.world;
+    if (this.view === 'sight') return { pos: new THREE.Vector3(T.pos.x, T.pos.y + 2.3, T.pos.z) };
+    const back = new THREE.Vector3(Math.sin(p.yaw) * Math.cos(p.pitch), -Math.sin(p.pitch), Math.cos(p.yaw) * Math.cos(p.pitch));
+    const pos = new THREE.Vector3(T.pos.x, T.pos.y + 3.2, T.pos.z).addScaledVector(back, 9);
+    pos.y = Math.max(pos.y, T.pos.y + 1.2);
+    for (let k = 0; k < 6 && SOLID[w.get(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))]; k++) pos.y += 1;
+    return { pos };
+  }
+  // what the middle of the screen points at (the ground, a wall, a tank), up to 260 m
+  aimPoint(T) {
+    const g = this.game, p = g.player, C = this.tankCam(T);
+    const dir = new THREE.Vector3(-Math.sin(p.yaw) * Math.cos(p.pitch), Math.sin(p.pitch), -Math.cos(p.yaw) * Math.cos(p.pitch));
+    const from = C.pos.clone().addScaledVector(dir, this.view === 'sight' ? 3.5 : 10);     // (past your own tank)
+    const hit = g.world.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, 260, false, 'bullet');
+    let d = hit ? hit.dist : 260;
+    const ray = new THREE.Ray(from, dir), box = new THREE.Box3(), pt = new THREE.Vector3();
+    for (const o of this.tanks) {
+      if (o === T || !o.alive) continue;
+      const b = this.tankBox(o); box.min.set(b.minX, b.minY, b.minZ); box.max.set(b.maxX, b.maxY, b.maxZ);
+      if (ray.intersectBox(box, pt)) d = Math.min(d, pt.distanceTo(from));
+    }
+    return from.addScaledVector(dir, d);
+  }
+  // the gun's elevation to drop a shell on a point (the flatter of the two arcs)
+  elevFor(T, at) {
+    const dx = at.x - T.pos.x, dz = at.z - T.pos.z, d = Math.max(1, Math.hypot(dx, dz)), dy = at.y - (T.pos.y + 1.85);
+    const v2 = SHELL_V * SHELL_V, disc = v2 * v2 - G * (G * d * d + 2 * dy * v2);
+    const e = disc < 0 ? 0.4 : Math.atan((v2 - Math.sqrt(disc)) / (G * d));
+    return Math.max(-0.15, Math.min(0.4, e));
+  }
   driveTank(dt, it, input) {
     const g = this.game, T = this.me, p = g.player;
-    // hull: W/S, A/D; the turret follows the mouse
+    // hull: W/S, A/D; the turret and the gun turn to put the shell where the crosshair is
     const want = it.fwd * (it.fwd > 0 ? 7 : 3);
     T.speed += (want - T.speed) * Math.min(1, dt * 2);
     T.yaw -= it.strafe * dt * 0.9;
     if (Math.abs(T.speed) > 0.05 && !this.moveTank(T, T.speed, dt)) T.speed *= 0.3;
-    T.turret = turn(T.turret, p.yaw - T.yaw, dt * 1.6);
-    T.elev = Math.max(-0.12, Math.min(0.35, p.pitch));
+    const at = this.aim = this.aimPoint(T);
+    T.turret = turn(T.turret, Math.atan2(-(at.x - T.pos.x), -(at.z - T.pos.z)) - T.yaw, dt * 1.8);
+    T.elev += (this.elevFor(T, at) - T.elev) * Math.min(1, dt * 6);
+    // the headlight (F or L; LIGHT on phones)
+    if (input.hit('KeyF') || input.hit('KeyL') || input.thit('light')) this.toggleLight();
     T.cool -= dt; T.mgCool -= dt;
     if ((input.mouse.leftPressed || input.thit('dig')) && T.cool <= 0) this.fire(T);
     else if ((input.mouse.leftPressed || input.thit('dig')) && T.cool > 0) sfx.dryFire && sfx.dryFire();
@@ -275,10 +313,29 @@ export class VehicleWar {
       sfx.shot('rifle', 0.5);
     }
     if (input.hit('KeyV') || input.thit('zoom')) { this.view = this.view === 'third' ? 'sight' : 'third'; T.mesh.visible = this.view !== 'sight'; }
+    if (this.lamp) {
+      const a = T.yaw + T.turret;
+      this.lamp.position.set(T.pos.x - Math.sin(T.yaw) * 2.3, T.pos.y + 1.3, T.pos.z - Math.cos(T.yaw) * 2.3);
+      this.lamp.target.position.set(T.pos.x - Math.sin(a) * 30, T.pos.y, T.pos.z - Math.cos(a) * 30);
+    }
     p.pos.set(T.pos.x, T.pos.y + 1.6, T.pos.z); p.vel.set(0, 0, 0); p.onGround = true;
     if (this.engine) this.engine.set(Math.min(1, Math.abs(T.speed) / 7));
   }
 
+  // the tank's headlight: a beam ahead of the hull, along the gun
+  toggleLight() {
+    const g = this.game;
+    if (!this.lamp) {
+      this.lamp = new THREE.SpotLight(0xfff0d0, 0, 80, 0.5, 0.45, 1);
+      g.scene.add(this.lamp, this.lamp.target);
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.3, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff4c0 }));
+      glow.position.set(0.8, 0.9, -2.12); glow.visible = false; this.me.mesh.add(glow); this.lampGlow = glow;
+    }
+    this.lightOn = !this.lightOn;
+    this.lamp.intensity = this.lightOn ? 9 : 0; this.lampGlow.visible = this.lightOn;
+    sfx.toggle();
+    g.hud.toast(t(this.lightOn ? 'vw.lightOn' : 'vw.lightOff'));
+  }
   // ---- planes ----
   planeModel(faction) {
     const side = this.side(faction), g = new THREE.Group();
@@ -299,7 +356,7 @@ export class VehicleWar {
   }
   addPlane(faction, x, y, z, player = false) {
     const g = this.game;
-    const P = { kind: 'plane', faction, player, pos: new THREE.Vector3(x, y, z), yaw: 0, pitch: 0, roll: 0, speed: 52, hp: player ? 160 : PLANE_HP, maxHp: player ? 160 : PLANE_HP, alive: true, cool: 1, burst: 0, ammo: 1500, vy: 0, deadT: 0 };
+    const P = { kind: 'plane', faction, player, pos: new THREE.Vector3(x, y, z), yaw: 0, pitch: 0, roll: 0, speed: CRUISE, hp: player ? 160 : PLANE_HP, maxHp: player ? 160 : PLANE_HP, alive: true, cool: 1, burst: 0, ammo: 1500, vy: 0, deadT: 0 };
     if (!player) { const m = this.planeModel(faction); P.mesh = m.g; P.prop = m.prop; g.scene.add(m.g); }
     this.planes.push(P);
     return P;
@@ -323,20 +380,37 @@ export class VehicleWar {
   guns(P, dt) {
     const g = this.game, f = this.fwd(P);
     P.ammo--;
-    const dir = f.clone(); dir.x += (Math.random() - 0.5) * 0.012; dir.y += (Math.random() - 0.5) * 0.012; dir.z += (Math.random() - 0.5) * 0.012; dir.normalize();
     const side = (P.gunSide = -(P.gunSide || 1)) * 2.4;
     const right = new THREE.Vector3(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
     const from = P.pos.clone().addScaledVector(right, side).addScaledVector(f, 3);
+    // your guns: an enemy close to the nose pulls the burst onto it (aim help)
+    const tg = P.player ? this.assistTarget(P) : null;
+    const dir = tg ? tg.pos.clone().addScaledVector(this.fwd(tg), tg.speed * tg.pos.distanceTo(from) / 500).sub(from).normalize() : f.clone();
+    const sp = tg ? 0.008 : 0.012;
+    dir.x += (Math.random() - 0.5) * sp; dir.y += (Math.random() - 0.5) * sp; dir.z += (Math.random() - 0.5) * sp; dir.normalize();
     let best = null, bd = 420;
     for (const o of this.planes) {
       if (!o.alive || o.faction === P.faction) continue;
       const v = o.pos.clone().sub(from), along = v.dot(dir);
       if (along < 0 || along > bd) continue;
-      if (v.addScaledVector(dir, -along).length() < (o.player ? 2.6 : 3.4)) { bd = along; best = o; }
+      if (v.addScaledVector(dir, -along).length() < (o.player ? 2.6 : 4.2)) { bd = along; best = o; }
     }
     this.tracer(from.clone().addScaledVector(dir, Math.min(bd, 30) * 0.2), from.clone().addScaledVector(dir, Math.min(bd, 60)), 0.05);
     if (P.player || from.distanceTo(g.camera.position) < 120) sfx.shot('smg', P.player ? 0.45 : 0.25);
     if (best) this.hurtPlane(best, P.player ? 7 : 5, P);
+  }
+  // the enemy nearest your nose, if close enough to it (and in range)
+  assistTarget(P, cone = ASSIST) {
+    const f = this.fwd(P);
+    let best = null, ba = cone;
+    for (const o of this.planes) {
+      if (!o.alive || o.faction === P.faction) continue;
+      const v = o.pos.clone().sub(P.pos), d = v.length();
+      if (d > 380) continue;
+      const a = Math.acos(Math.max(-1, Math.min(1, v.divideScalar(d).dot(f))));
+      if (a < ba) { ba = a; best = o; }
+    }
+    return best;
   }
   hurtPlane(P, dmg, by) {
     const g = this.game;
@@ -363,14 +437,14 @@ export class VehicleWar {
       const lead = best.pos.clone().addScaledVector(this.fwd(best), best.speed * Math.min(1.2, bd / 300));
       const v = lead.sub(P.pos);
       wy = Math.atan2(-v.x, -v.z); wp = Math.atan2(v.y, Math.hypot(v.x, v.z));
-      if (bd < 35) { wy += Math.PI * 0.6; wp = 0.4; }                    // too close: break off and come round again
+      if (bd < 25) { wy += Math.PI * 0.6; wp = 0.4; }                    // too close: break off and come round again
     }
     const m = 30;
     if (P.pos.x < m || P.pos.z < m || P.pos.x > w.W - m || P.pos.z > w.D - m) { wy = Math.atan2(-(w.W / 2 - P.pos.x), -(w.D / 2 - P.pos.z)); }
     if (P.pos.y < ground + 30) wp = Math.max(wp, 0.45);
     if (P.pos.y > ground + 140) wp = Math.min(wp, -0.2);
-    this.steer(P, wy, wp, { beginner: 0.55, easy: 0.65, medium: 0.8, hard: 0.95, impossible: 1.1 }[this.diff] || 0.8, dt);
-    P.speed += ((bd < 80 ? 46 : 62) - P.speed) * Math.min(1, dt);
+    this.steer(P, wy, wp, { beginner: 0.42, easy: 0.5, medium: 0.6, hard: 0.72, impossible: 0.85 }[this.diff] || 0.6, dt);
+    P.speed += ((bd < 70 ? 22 : 30) - P.speed) * Math.min(1, dt);
     this.flyPlane(P, dt);
     // fire when the target is in front
     P.cool -= dt;
@@ -393,12 +467,15 @@ export class VehicleWar {
   }
   flyMe(dt, it, input) {
     const g = this.game, P = this.me, p = g.player, w = g.world;
-    // the mouse sets where the nose goes; A/D roll it round harder
-    p.yaw -= it.strafe * dt * 0.8;
-    p.pitch = Math.max(-1.1, Math.min(1.1, p.pitch));
-    this.steer(P, p.yaw, p.pitch, 1.15, dt);
-    const thr = it.fwd;
-    P.speed = Math.max(PLANE_MIN, Math.min(PLANE_MAX, P.speed + thr * 14 * dt - (thr === 0 ? (P.speed - 55) * 0.2 * dt : 0) - Math.sin(P.pitch) * 9 * dt));
+    const touch = g.app.input.touch;
+    // a computer: the mouse sets where the nose goes, A/D turn harder, W/S the throttle;
+    // a phone (like the dogfight games): the stick flies the plane (up: nose up), the throttle looks after itself
+    if (touch) { p.yaw -= it.strafe * dt * 1.1; p.pitch += it.fwd * dt * 0.8; }
+    else p.yaw -= it.strafe * dt * 0.8;
+    p.pitch = Math.max(-1.0, Math.min(1.0, p.pitch));
+    this.steer(P, p.yaw, p.pitch, 1.0, dt);
+    const thr = touch ? 0 : it.fwd;
+    P.speed = Math.max(PLANE_MIN, Math.min(PLANE_MAX, P.speed + thr * 8 * dt - (thr === 0 ? (P.speed - CRUISE) * 0.5 * dt : 0) - Math.sin(P.pitch) * 4 * dt));
     this.flyPlane(P, dt);
     // the map's edge: the controls turn you back
     const m = 12;
@@ -411,7 +488,8 @@ export class VehicleWar {
     if (P.pos.y < ground + 1.2) { g.explosives.explode(P.pos.x, ground, P.pos.z, { radius: 2.5, power: 0, destroy: true, destroyRadius: 1.6, owner: 'tank' }); this.lose('crash'); return; }
     // guns
     P.cool -= dt;
-    if ((input.mouse.left || input.tdown('dig')) && P.ammo > 0 && P.cool <= 0) { P.cool = 0.075; this.guns(P, dt); }
+    const auto = g.app.input.touch && this.assistTarget(P, AUTOFIRE);       // (phones: the guns fire by themselves on target)
+    if ((input.mouse.left || input.tdown('dig') || auto) && P.ammo > 0 && P.cool <= 0) { P.cool = 0.09; this.guns(P, dt); }
     p.pos.copy(P.pos); p.vel.set(0, 0, 0); p.onGround = false;
     if (this.engine) this.engine.set(0.3 + (P.speed - PLANE_MIN) / (PLANE_MAX - PLANE_MIN) * 0.7);
   }
@@ -467,18 +545,11 @@ export class VehicleWar {
     if (g.thirdPerson && g.thirdPerson.rig) g.thirdPerson.rig.root.visible = false;    // (you are inside)
     g.vm.hidden = true;                                                                 // (no hand-held weapon in a tank or a plane)
     if (this.mode === 'tank') {
-      const T = this.me, a = T.yaw + T.turret;
-      if (this.view === 'sight') {
-        cam.position.set(T.pos.x, T.pos.y + 2.3, T.pos.z);
-        cam.rotation.set(T.elev, a, 0, 'YXZ');
-        if (cam.fov !== 32) { cam.fov = 32; cam.updateProjectionMatrix(); }
-      } else {
-        const back = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
-        cam.position.set(T.pos.x + back.x * 9, T.pos.y + 4.6, T.pos.z + back.z * 9);
-        const w = g.world; for (let k = 0; k < 6 && SOLID[w.get(Math.floor(cam.position.x), Math.floor(cam.position.y), Math.floor(cam.position.z))]; k++) cam.position.y += 1;
-        cam.rotation.set(-0.16 + p.pitch * 0.6, a, 0, 'YXZ');
-        if (cam.fov !== 70) { cam.fov = 70; cam.updateProjectionMatrix(); }
-      }
+      const T = this.me, C = this.tankCam(T);
+      cam.position.copy(C.pos);
+      cam.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
+      const fov = this.view === 'sight' ? 32 : 70;
+      if (cam.fov !== fov) { cam.fov = fov; cam.updateProjectionMatrix(); }
     } else {
       const P = this.me;
       cam.position.copy(P.pos);
@@ -537,18 +608,25 @@ export class VehicleWar {
         <div>${t('vw.waveN', { n: this.wave, of: this.maxWaves })} · ${t('vw.kills', { n: this.kills })}</div>
         <div>${t('vw.speed', { n: Math.round(Math.abs(T.speed) * 3.6) })}</div></div>
         ${this.view === 'sight' ? '<div class="vw-sight"></div>' : ''}`;
-      // where a shell fired now would land (a ring on the screen)
-      if ((this.aimT = (this.aimT || 0) - 1) <= 0 || !this.aimAt) { this.aimT = 3; this.aimAt = this.impact(T); }
-      const v = this.aimAt.clone().project(g.camera);
-      if (v.z < 1) html += `<div class="vw-cross" style="left:${((v.x + 1) / 2 * 100).toFixed(1)}%;top:${((1 - v.y) / 2 * 100).toFixed(1)}%"></div>`;
+      // the crosshair in the middle (where you aim); a dot where the gun points right now
+      // (it moves onto the crosshair as the turret comes round)
+      html += '<div class="vw-center"></div>';
+      const v = this.impact(T).project(g.camera);
+      if (v.z < 1) html += `<div class="vw-dot ${Math.abs(v.x) < 0.04 && Math.abs(v.y) < 0.06 ? 'on' : ''}" style="left:${((v.x + 1) / 2 * 100).toFixed(1)}%;top:${((1 - v.y) / 2 * 100).toFixed(1)}%"></div>`;
     } else {
       const ground = this.surface(P.pos.x, P.pos.z);
       html = `<div class="vw-box"><div>${t('vw.speed', { n: Math.round(P.speed * 3.6) })} · ${t('vw.alt', { n: Math.round(P.pos.y - ground) })}</div>
         <div>${t('vw.airframe')} <span class="vw-bar"><i style="width:${hp}%;background:${hp > 40 ? '#7ac860' : '#e0603a'}"></i></span></div>
         <div>${t('vw.ammo', { n: P.ammo })}</div><div>${t('vw.waveN', { n: this.wave, of: this.maxWaves })} · ${t('vw.kills', { n: this.kills })}</div></div>
         <div class="vw-ring"><i></i></div>${this.low ? `<div class="vw-warn">${t('vw.pullUp')}</div>` : this.edgeT ? `<div class="vw-warn">${t('vw.edge')}</div>` : ''}`;
-      // a red ring on each enemy in front of you
+      // the aim point for the enemy nearest your nose: put the gunsight on it
       const cam = g.camera, v = new THREE.Vector3();
+      const at = this.assistTarget(P, 0.6);
+      if (at) {
+        v.copy(at.pos).addScaledVector(this.fwd(at), at.speed * at.pos.distanceTo(P.pos) / 500).project(cam);
+        if (v.z < 1) html += `<div class="vw-lead ${this.assistTarget(P) === at ? 'on' : ''}" style="left:${((v.x + 1) / 2 * 100).toFixed(1)}%;top:${((1 - v.y) / 2 * 100).toFixed(1)}%"></div>`;
+      }
+      // a red ring on each enemy in front of you
       for (const o of this.planes) {
         if (!o.alive || o.faction !== 'enemy') continue;
         v.copy(o.pos).project(cam);
@@ -583,8 +661,9 @@ export class VehicleWar {
     for (const tr of this.tracers) { g.scene.remove(tr.l); tr.l.geometry.dispose(); }
     if (this.cockpitObj) g.camera.remove(this.cockpitObj);
     if (this.engine) this.engine.stop();
+    if (this.lamp) g.scene.remove(this.lamp, this.lamp.target);
     this.hud.remove();
-    document.body.classList.remove('vwar-on');
+    document.body.classList.remove('vwar-on', 'vw-tank');
   }
 }
 

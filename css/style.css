@@ -803,3 +803,12 @@ body.vwar-on #crosshair, body.vwar-on #hotbar, body.vwar-on #keyhint, body.vwar-
 .vw-warn { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); font-size: 26px; color: #ff6a4a; font-weight: 600; letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
 @media (max-width: 760px) { .vw-box { top: 70px; font-size: 12px; } .vw-ring { width: 96px; height: 96px; margin: -48px 0 0 -48px; } }
 body.vwar-on [data-btn=jump], body.vwar-on [data-btn=crouch], body.vwar-on [data-btn=run], body.vwar-on [data-btn=light], body.vwar-on [data-btn=inv], body.vwar-on [data-btn=craft], body.vwar-on [data-btn=dive], body.vwar-on [data-btn=orders], body.vwar-on [data-btn=follow], body.vwar-on [data-btn=askiron], body.vwar-on [data-btn=askweapon], body.vwar-on [data-btn=chest] { display: none !important; }
+.vw-lead { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #ffd860; transform: rotate(45deg); box-shadow: 0 0 4px #000; }
+.vw-lead.on { border-color: #7aff70; width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+.vw-center { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border: 2px solid rgba(255, 255, 255, 0.9); border-radius: 50%; box-shadow: 0 0 3px #000; }
+.vw-center::before, .vw-center::after { content: ""; position: absolute; background: rgba(255, 255, 255, 0.9); }
+.vw-center::before { left: 50%; top: -9px; bottom: -9px; width: 2px; margin-left: -1px; }
+.vw-center::after { top: 50%; left: -9px; right: -9px; height: 2px; margin-top: -1px; }
+.vw-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #ffb040; box-shadow: 0 0 3px #000; }
+.vw-dot.on { background: #7aff70; }
+body.vwar-on.vw-tank [data-btn=light] { display: inline-block !important; }
