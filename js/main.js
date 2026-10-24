@@ -146,6 +146,12 @@ class App {
         cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'battle', battle, country: BATTLE[battle].c, mission } });
       return;
     }
+    if (gameType === 'tanks' || gameType === 'air') {
+      this.lastVwar = { side, difficulty, gameType };
+      this.startGame({ v: SAVE_FORMAT, id: 'battle', name: t(gameType === 'tanks' ? 'vw.tankTitle' : 'vw.airTitle'), created: now, updated: now, followers: 0,
+        cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType, mission, country: M.startCountry(side) } });
+      return;
+    }
     this.startGame({
       v: SAVE_FORMAT, id: 'w' + now.toString(36), name, created: now, updated: now, followers: 4,
       cfg: { seed, size, mode, sub, side, difficulty, timeMode, gameType: 'open', mission, country: M.startCountry(side) },
@@ -257,7 +263,7 @@ class App {
 
   saveGame(quiet) {
     if (!this.game) return;
-    if (this.game.battle) return;                 // battles are never saved
+    if (this.game.battle || this.game.vwar) return;     // battles, tank battles and dogfights are never saved
     this.game.flushStats();
     const ok = this.game.town ? this.game.town.save() : writeSave(this.game.toSave());
     if (!quiet || !ok) this.game.hud.toast(t(ok ? 'hud.saved' : 'hud.saveFail'));

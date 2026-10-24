@@ -195,15 +195,20 @@ export class UI {
   // -------------------------------------------------------------- new game
   // War: choose a side, then the difficulty, then Open World or Battles.
   r_newgame(p) {
-    const st = Object.assign({ step: 'side', side: null, difficulty: 'medium', gameType: 'open' }, p);
+    // War: your side, then the kind of war (infantry, a tank battle or a
+    // dogfight), then the difficulty; infantry then picks Open World or Battles
+    const st = Object.assign({ step: 'side', side: null, kind: 'infantry', difficulty: 'medium', gameType: 'open' }, p);
     const go = (patch) => this.show('newgame', Object.assign({}, st, patch));
     let body = '';
     if (st.step === 'side') {
       body = `<p class="label">${t('new.side')}</p><div class="choices sides">${['allies', 'axis'].map((sd) => `
         <div class="choice side-${sd}" data-side="${sd}"><div class="flags">${SIDE_NATIONS[sd].map((n) => `<img src="${flagURL(n)}" alt="" title="${t('nation.' + n)}">`).join('')}</div>
         <h3>${t('side.' + sd)}</h3><p>${t('side.' + sd + 'Desc')}</p></div>`).join('')}</div>`;
+    } else if (st.step === 'kind') {
+      body = `<p class="muted small">${t('side.' + st.side)}</p><p class="label">${t('new.kind')}</p><div class="choices">${['infantry', 'tanks', 'air'].map((k) => `
+        <div class="choice small" data-kind="${k}"><h3>${t('new.kind.' + k)}</h3><p>${t('new.kind.' + k + 'Desc')}</p></div>`).join('')}</div>`;
     } else if (st.step === 'diff') {
-      body = `<p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
+      body = `<p class="muted small">${t('side.' + st.side)} · ${t('new.kind.' + st.kind)}</p><p class="label">${t('new.diff')}</p><div class="diffs">${DIFFICULTIES.map((d, i) => `
         <div class="choice small" data-d="${d}">
           <h3>${'▮'.repeat(i + 1)}<span class="dim">${'▮'.repeat(4 - i)}</span> ${t('diff.' + d)}</h3><p>${t('diff.' + d + 'Desc')}</p></div>`).join('')}</div>`;
     } else {
@@ -215,10 +220,16 @@ export class UI {
         <p class="label">${t('new.name')}</p><input id="wname" maxlength="32" value="${esc(t('new.defaultName', { n }))}">
         <div class="row end"><button class="btn primary" id="startbtn">${t('menu.start')}</button></div>`;
     }
-    const back = () => this.show(st.step === 'side' ? 'main' : 'newgame', st.step === 'side' ? {} : Object.assign({}, st, { step: st.step === 'diff' ? 'side' : 'diff' }));
+    const prev = { side: 'main', kind: 'side', diff: 'kind', final: 'diff' }[st.step];
+    const back = () => (prev === 'main' ? this.show('main', {}) : this.show('newgame', Object.assign({}, st, { step: prev })));
     const panel = this.panel(t('new.title'), body, { onBack: back, wide: true });
-    panel.querySelectorAll('.choice[data-side]').forEach((c) => c.onclick = () => go({ step: 'diff', side: c.dataset.side }));
-    panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => go({ step: 'final', difficulty: c.dataset.d }));
+    panel.querySelectorAll('.choice[data-side]').forEach((c) => c.onclick = () => go({ step: 'kind', side: c.dataset.side }));
+    panel.querySelectorAll('.choice[data-kind]').forEach((c) => c.onclick = () => go({ step: 'diff', kind: c.dataset.kind }));
+    panel.querySelectorAll('.choice[data-d]').forEach((c) => c.onclick = () => {
+      // a tank battle or a dogfight starts at once (never saved, like a battle)
+      if (st.kind !== 'infantry') { this.app.newGame({ side: st.side, difficulty: c.dataset.d, gameType: st.kind }); return; }
+      go({ step: 'final', difficulty: c.dataset.d });
+    });
     panel.querySelectorAll('.choice[data-gt]').forEach((c) => c.onclick = () => { if (c.dataset.gt === 'battles') { this.show('battles', { side: st.side, difficulty: st.difficulty }); return; } go({ gameType: 'open' }); });
     const sb = panel.querySelector('#startbtn');
     if (sb) sb.onclick = () => {

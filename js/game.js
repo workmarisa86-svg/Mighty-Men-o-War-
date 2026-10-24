@@ -7,6 +7,7 @@ import { generate, landFor, hasCoast, COAST } from './worldgen.js';
 import { M } from './modes.js';       // each game's own code (loaded before the game starts)
 import { Collide } from './collide.js';
 import { Battle } from './battle.js';
+import { VehicleWar } from './vehiclewar.js';
 import { COUNTRY, WEATHER } from './countries.js';
 import { Bubbles } from './bubbles.js';
 import { AimUse } from './aimuse.js';
@@ -172,6 +173,8 @@ export class Game {
     // War, Stage 2: the Open World campaign (14 countries) or one battle
     this.campaign = !this.townMode && this.cfg.gameType === 'open' && this.cfg.country ? new M.Campaign(this, save.campaign) : null;
     this.battle = !this.townMode && this.cfg.gameType === 'battle' ? new Battle(this) : null;
+    // War: a tank battle or a dogfight instead of the infantry war (vehiclewar.js)
+    this.vwar = !this.townMode && (this.cfg.gameType === 'tanks' || this.cfg.gameType === 'air') ? new VehicleWar(this) : null;
     this.paratroops = this.townMode ? null : new M.Paratroops(this);
     this.forts = new Forts(this, save.forts);
     this.cabin = new Cabin(this, save.cabin);
@@ -320,7 +323,8 @@ export class Game {
     const wasDiving = p.diving;
     // on horseback the horse moves (and carries you); otherwise you walk
     // in a car the car moves (and carries you)
-    const res = p.car ? (this.vehicles.drive(dt, it), { fallDamage: 0 }) : p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
+    const vw = this.vwar && this.vwar.active;
+    const res = vw ? (playing && this.vwar.drive(dt, it, input), { fallDamage: 0 }) : p.car ? (this.vehicles.drive(dt, it), { fallDamage: 0 }) : p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
     if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
 
@@ -332,9 +336,9 @@ export class Game {
     } else this.breath = Math.min(AIR, this.breath + dt * 5);
     this.underwaterFx(dt, p.headInWater);
 
-    if (playing && !p.riding && !p.car) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
+    if (playing && !p.riding && !p.car && !vw) { this.handleDig(dt, input); this.handleUse(dt, input); this.handlePlace(dt, input); }
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
-    this.combat.update(dt, input, playing);
+    this.combat.update(dt, input, playing && !vw);
     this.updateCraft(dt);
     if (!this.paused) this.updateHunger(dt);
 
@@ -342,10 +346,12 @@ export class Game {
     this.particles.update(dt);
     if (!this.paused) {
       this.animals.update(dt); this.pickups.update(dt); this.fishing.update(dt);
-      this.enemies.update(dt); this.explosives.update(dt); this.forts.update(dt);
+      if (!(this.vwar && this.vwar.mode === 'air')) this.enemies.update(dt);     // (no ground war under a dogfight)
+      this.explosives.update(dt); this.forts.update(dt);
       if (this.mission) this.mission.update(dt);
       if (this.campaign) this.campaign.update(dt);
       if (this.battle) this.battle.update(dt);
+      if (this.vwar) this.vwar.update(dt);
       if (this.paratroops) this.paratroops.update(dt);
       if (this.horses) this.horses.update(dt);
       if (this.vehicles) this.vehicles.update(dt);
@@ -389,6 +395,7 @@ export class Game {
       this.camera.rotation.set(p.pitch * (1 - e) + 0.35 * e, p.yaw, this.knockRoll * e, 'YXZ');
     }
     if (this.thirdPerson) this.thirdPerson.update(dt, this.dying);
+    if (this.vwar) this.vwar.camera();
     const scoped = this.scopeView.ease() > 0.5;
     const targetFov = this.scopeView.fov(p.running && Math.hypot(p.vel.x, p.vel.z) > 5 ? 80 : 75) * (1 - 0.24 * (this.duelZoom || 0));   // a duel's standoff: the view slowly closes in
     if (Math.abs(this.camera.fov - targetFov) > 0.05) {
@@ -1039,6 +1046,13 @@ export class Game {
   damage(n, cause = 'hurt', from = null, opts = {}) {
     if (this.dead || this.dying || n <= 0) return;
     if (this.player.car && cause === 'combat') n = this.vehicles.absorb(n);     // the car takes most of it
+    if (this.vwar && this.vwar.active) {                                       // your tank or plane takes it
+      n = this.vwar.absorb(n, cause);
+      if (n <= 0) return;
+      this.player.health = Math.max(0, this.player.health - n); this.hud.flash();
+      if (this.player.health <= 0) this.vwar.lose();
+      return;
+    }
     n *= 1 - this.armor();
     this.player.health = Math.max(0, this.player.health - n);
     this.hud.flash();
@@ -1170,6 +1184,7 @@ export class Game {
     paintLand(null); this.scene.fog = null;
     if (this.horses) this.horses.dispose();
     if (this.vehicles) this.vehicles.dispose();
+    if (this.vwar) this.vwar.dispose();
     if (this.paratroops) this.paratroops.dispose();
     if (this.campaign) this.campaign.dispose();
     if (this.town) this.town.dispose();
