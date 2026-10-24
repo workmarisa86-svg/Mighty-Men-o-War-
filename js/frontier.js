@@ -15,7 +15,14 @@ import { civLook } from './characters.js';
 
 // businesses on Main Street: their price, and what they bring in a day (4%)
 export const BIZ = { general: 1600, butcher: 900, hunting: 1200, stable: 1000, saloon: 1500 };
-const RIVALS = ['crane', 'blackhats'];
+// the rival gangs of the territory (each keeps a camp out in the hills)
+export const RIVALS = ['crane', 'blackhats', 'redsash', 'coyote', 'sidewinder', 'hollister'];
+const GANG_LOOK = {
+  crane: { shirt: 0x2a2a30, vest: 0x5a4a2a, hatColor: 0x121212 }, blackhats: { shirt: 0x3a2a24, vest: 0x161412, hatColor: 0x0a0a0a },
+  redsash: { shirt: 0x8a2a22, vest: 0x2a2018, hatColor: 0x3a2a1c }, coyote: { shirt: 0x9a8a62, vest: 0x6a5a3a, hatColor: 0x8a7a5a },
+  sidewinder: { shirt: 0x3a4a2a, vest: 0x1e2618, hatColor: 0x2a3020 }, hollister: { shirt: 0x2a3a5a, vest: 0x1a2232, hatColor: 0x1a1a22 },
+  hunter: { shirt: 0x5a4a32, vest: 0x3a3024, hatColor: 0x4a3a28 },
+};
 const HAND_PAY = 8;              // a ranch hand's day wage
 const HUNTER_BOUNTY = 120;       // bounty hunters ride in above this
 const POSTER_BOUNTY = 40;
@@ -48,7 +55,7 @@ export class Frontier {
     this.done = saved.done || [];
     this.bank = Object.assign({ balance: 0, vault: 700, vaultDay: 0, robbedDay: -9 }, saved.bank || {});
     this.biz = saved.biz || {};                       // shop -> { how: 'bought'|'stolen', day, hurt }
-    this.st = Object.assign({ ribbons: 0, rivalsBeaten: 0, bearSeasons: [], bears: 0, wolves: 0, raidsWon: 0, coaches: 0, drives: 0 }, saved.st || {});
+    this.st = Object.assign({ ribbons: 0, rivalsBeaten: 0, bearSeasons: [], bears: 0, wolves: 0, raidsWon: 0, coaches: 0, drives: 0, campsBroken: 0 }, saved.st || {});
     this.q = Object.assign({ clara: 'none', well: 'none' }, saved.q || {});
     this.look = saved.look || null;
     this.hands = saved.hands || 0;                    // ranch hands hired
@@ -62,8 +69,11 @@ export class Frontier {
     this.rustleNight = saved.rustleNight ?? -1;
     this.goalT = 2; this.slowT = 0; this.posters = null; this.fire = null; this.cold = 0;
     this.stolen = saved.stolen || [];                // village houses you took (building indexes)
-    for (const i of this.stolen) this.unlock(V.buildings[i]);
+    for (const i of this.stolen) { this.unlock(V.buildings[i]); town.houses.addTaken(i, false); }
     this.deputies = [];
+    this.camps = saved.camps || null;                // each rival gang's camp out in the hills
+    this.warT = saved.warT ?? (g.time + 1.5); this.ambushT = saved.ambushT ?? (g.time + 1.2);
+    this.war = null; this.ambush = null;
     this.bankB = V.buildings.find((b) => b.type === 'bank') || null;
     this.saloonB = V.buildings.find((b) => b.type === 'saloon') || null;
     if (this.look) this.applyLook();
@@ -128,6 +138,8 @@ export class Frontier {
     // the family moves out (for good)
     for (const o of F.list) if (o.home === b) { o.alive = false; o.away = true; F.dropRig(o); F.dead[o.i] = 1e9; }
     T.addBounty(100, 'robbery'); T.crime('robbery', { value: 300, pos: g.player.pos.clone() }); T.addHonor(-15); T.trades.rep('outlaws', 8); T.trades.rep('farmers', -15);
+    const h = T.houses.addTaken(i, false);
+    if (h) T.houses.moveInto(h);                                      // you live there now: its double bed is yours
     g.hud.bigMessage(t('fr.houseTitle'), t('fr.houseSub'));
   }
 
@@ -221,15 +233,14 @@ export class Frontier {
   // ---- rival gangs: raids on your businesses, ambushes, bounty hunters -------------------------
   rivalMan(gang, k, at, opts = {}) {
     const g = this.game, F = this.T.folk;
-    const looks = { crane: { shirt: 0x2a2a30, vest: 0x5a4a2a, hatColor: 0x121212 }, blackhats: { shirt: 0x3a2a24, vest: 0x161412, hatColor: 0x0a0a0a }, hunter: { shirt: 0x5a4a32, vest: 0x3a3024, hatColor: 0x4a3a28 } };
-    const L = looks[gang] || looks.hunter;
+    const L = GANG_LOOK[gang] || GANG_LOOK.hunter;
     const look = { shirt: L.shirt, trousers: 0x262420, vest: L.vest, hat: 'felt', hatColor: L.hatColor, hair: 0x2a1c12, moustache: k % 2 === 0, gunbelt: true };
     const gy = F.ground(at.x, at.z, at.y + 4); if (gy != null) at.y = gy;
-    const v = this.T.trades.makeMan(t('fr.gang.' + gang) + ' ' + (k + 1), 9300 + k + (gang.length * 13), look, at);
+    const v = this.T.trades.makeMan(t('fr.gang.' + gang) + ' ' + (k + 1), 9300 + k + RIVALS.indexOf(gang) * 37 + (gang === 'hunter' ? 500 : 0), look, at);
     Object.assign(v, { outlaw: true, rival: gang, guns: k % 3 === 2 ? ['lever', 'revolver'] : ['revolver'], money: 15 + Math.floor(Math.random() * 30), goods: Math.random() < 0.2 ? ['tmap'] : ['bread'], brave: 0.9 }, opts);
     v.fight = { armed: F.bestGun(v) }; F.armed(v, v.fight.armed);       // (a foe for your gang to shoot)
     v.ai = (o, dt, d) => this.rivalAi(o, dt, d);
-    v.onHurt = () => {};
+    v.onHurt = (o) => { o.provoked = true; if (o.camp) for (const m of o.camp.men || []) m.provoked = true; };
     v.onKill = () => {};
     F.extra.push(v);
     return v;
@@ -244,6 +255,10 @@ export class Frontier {
       let best = d < 60 ? null : null, bd = 999;
       if (d < 45 || v.hunter) { best = 'player'; bd = d; }
       for (const m of this.T.trades.gang) if (m.alive && !m.jailed && !m.hidden) { const dd = m.pos.distanceTo(v.pos); if (dd < bd && dd < 45) { bd = dd; best = m; } }
+      // men of another gang: gang war
+      if (v.rival !== 'hunter') for (const o of this.T.folk.extra) if (o.alive && o.rival && o.rival !== 'hunter' && o.rival !== v.rival && !(o.surrendered > 0)) { const dd = o.pos.distanceTo(v.pos); if (dd < bd && dd < 50) { bd = dd; best = o; } }
+      // a camp's men stay by their fire until someone comes close
+      if (v.camp && best && !v.provoked && (best === 'player' ? d : bd) > 32) best = null;
       v.tg = best;
     }
     const goal = v.tg === 'player' ? P : v.tg ? v.tg.pos : v.goal;
@@ -258,12 +273,106 @@ export class Frontier {
     if (d > 220) { v.away = true; v.alive = false; }       // gone off: dropped from the world
     return true;
   }
+  // ---- the gangs' camps: a fire, two tents, and their men round it ----
+  makeCamps() {
+    const g = this.game, w = g.world, V = this.T.village, H = this.T.hidden, out = [];
+    const homes = V.buildings.filter((b) => b.type === 'house');
+    for (const gang of RIVALS) {
+      for (let k = 0; k < 300; k++) {
+        const a = Math.random() * Math.PI * 2, r = 110 + Math.random() * 120;
+        const x = Math.floor(V.cx + Math.cos(a) * r), z = Math.floor(V.cz + Math.sin(a) * r);
+        if (x < 24 || z < 24 || x >= w.W - 24 || z >= w.D - 24) continue;
+        if (homes.some((b) => Math.hypot(b.inside.x - x, b.inside.z - z) < 45) || H.places.some((q) => Math.hypot(q.x - x, q.z - z) < 45) || out.some((c) => Math.hypot(c.x - x, c.z - z) < 60)) continue;
+        const C = this.T.cottage; if (Math.hypot(C.x - x, C.z - z) < 60) continue;
+        const y = w.surfaceY(x, z), top = w.get(x, y - 1, z);
+        if (top !== B.GRASS && top !== B.DIRT) continue;
+        let flat = true; for (const [dx, dz] of [[5, 0], [-5, 0], [0, 5], [0, -5]]) if (Math.abs(w.surfaceY(x + dx, z + dz) - y) > 1) flat = false;
+        if (!flat) continue;
+        out.push({ gang, x, y, z, beaten: -99 });
+        // the fire ring and a woodpile, two canvas tents
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) w.set(x + dx, y, z + dz, B.STONE);
+        w.set(x, y, z, B.CHARCOAL);
+        for (const sx of [-4, 4]) for (let dz = -1; dz <= 1; dz++) { w.set(x + sx - 1, y, z + 3 + dz, B.THATCH); w.set(x + sx + 1, y, z + 3 + dz, B.THATCH); w.set(x + sx, y + 1, z + 3 + dz, B.THATCH); }
+        w.set(x + 3, y, z - 3, B.LOG); w.set(x + 4, y, z - 3, B.LOG);
+        break;
+      }
+    }
+    return out;
+  }
+  updateCamps() {
+    const g = this.game, T = this.T, P = g.player.pos, F = T.folk;
+    if (!this.camps) this.camps = this.makeCamps();
+    for (const c of this.camps) {
+      const d = Math.hypot(c.x - P.x, c.z - P.z), up = c.beaten < g.time - 6;
+      if (!c.men && up && d < 80) {
+        // the gang at its fire (more of them in the bigger gangs)
+        const n = 4 + (RIVALS.indexOf(c.gang) % 3);
+        c.men = [];
+        for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; const v = this.rivalMan(c.gang, k + 20, { x: c.x + 0.5 + Math.cos(a) * 3.5, y: c.y, z: c.z + 0.5 + Math.sin(a) * 3.5 }); v.camp = c; v.goal = { x: c.x + 0.5 + Math.cos(a) * 3.5, y: c.y, z: c.z + 0.5 + Math.sin(a) * 3.5 }; c.men.push(v); }
+        if (!c.seen) { c.seen = true; g.hud.toast(t('fr.campSeen', { gang: t('fr.gangs.' + c.gang) })); }
+      }
+      if (!c.men) continue;
+      const left = c.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
+      if (!left.length) {
+        // the camp is broken: their loot is yours
+        c.beaten = g.time; c.men = null;
+        const pay = 90 + Math.floor(Math.random() * 90);
+        T.money += pay; this.st.rivalsBeaten++; this.st.campsBroken = (this.st.campsBroken || 0) + 1;
+        T.trades.rep(T.trades.trade === 'outlaw' ? 'outlaws' : 'law', 6);
+        g.hud.bigMessage(t('fr.campWon', { gang: t('fr.gangs.' + c.gang) }), t('fr.campWonSub', { n: pay }));
+      } else if (d > 160) {
+        for (const m of c.men) { F.dropRig(m); m.away = true; m.alive = false; }
+        c.men = null;
+      }
+    }
+  }
+  // two gangs shooting it out somewhere near you (join in, or keep clear)
+  updateWar() {
+    const g = this.game, P = g.player.pos, F = this.T.folk, W = this.war;
+    if (W) {
+      const sides = W.gangs.map((gg) => W.men.filter((m) => m.rival === gg && m.alive && !m.away && !(m.surrendered > 0)).length);
+      if (sides.some((n) => n === 0) || g.time > W.until) {
+        for (const m of W.men) if (m.alive) { F.dropRig(m); m.away = true; m.alive = false; }
+        if (sides.some((n) => n === 0)) { const win = W.gangs[sides[0] ? 0 : 1]; g.hud.toast(t('fr.warOver', { gang: t('fr.gangs.' + win) })); }
+        this.war = null;
+      }
+      return;
+    }
+    if (g.time < this.warT || this.T.jailed || this.hour() < 8 || this.hour() > 20) return;
+    this.warT = g.time + 1.5 + Math.random() * 1.5;
+    const V = this.T.village;
+    if (Math.hypot(P.x - V.cx, P.z - V.cz) < 60) return;           // never in the middle of town
+    const i = Math.floor(Math.random() * RIVALS.length), gangs = [RIVALS[i], RIVALS[(i + 1 + Math.floor(Math.random() * (RIVALS.length - 1))) % RIVALS.length]];
+    const a = Math.random() * 6.28, cx = P.x + Math.cos(a) * 60, cz = P.z + Math.sin(a) * 60, men = [];
+    gangs.forEach((gg, side) => { for (let k = 0; k < 3; k++) { const v = this.rivalMan(gg, k + 30 + side * 3, { x: cx + (side ? 12 : -12), y: P.y, z: cz + (k - 1) * 4 }); men.push(v); } });
+    this.war = { gangs, men, until: g.time + 0.12 };
+    g.hud.alert(t('fr.warStart', { a: t('fr.gangs.' + gangs[0]), b: t('fr.gangs.' + gangs[1]) })); sfx.alert();
+  }
+  // an Outlaw's gang out in the country: a rival gang rides at you
+  updateAmbush() {
+    const g = this.game, T = this.T, P = g.player.pos, F = T.folk, A = this.ambush;
+    if (A) {
+      const left = A.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
+      if (!left.length) { this.ambush = null; this.st.rivalsBeaten++; T.trades.rep('outlaws', 6); T.money += 50; g.hud.bigMessage(t('fr.ambushWon'), t('fr.ambushWonSub', { gang: t('fr.gangs.' + A.gang) })); }
+      else if (g.time > A.until) { for (const m of left) { F.dropRig(m); m.away = true; m.alive = false; } this.ambush = null; }
+      return;
+    }
+    if (T.trades.trade !== 'outlaw' || !T.trades.gang.some((m) => m.alive && !m.jailed) || g.time < this.ambushT || T.jailed) return;
+    const V = T.village;
+    if (Math.hypot(P.x - V.cx, P.z - V.cz) < 110) return;
+    this.ambushT = g.time + 1.2 + Math.random() * 1.3;
+    const gang = RIVALS[Math.floor(Math.random() * RIVALS.length)], a = Math.random() * 6.28, men = [];
+    for (let k = 0; k < 4; k++) { const v = this.rivalMan(gang, k + 40, { x: P.x + Math.cos(a) * 55 + k * 2, y: P.y, z: P.z + Math.sin(a) * 55 }); v.provoked = true; men.push(v); }
+    this.ambush = { gang, men, until: g.time + 0.15 };
+    g.hud.bigMessage(t('fr.ambushTitle', { gang: t('fr.gangs.' + gang) }), t('fr.ambushSub'));
+    sfx.alert();
+  }
   startRaid() {
     const g = this.game, T = this.T, shops = Object.keys(this.biz);
     if (!shops.length) return;
     const shop = shops[Math.floor(Math.random() * shops.length)], b = this.bizBuilding(shop) || this.saloonB;
     if (!b) return;
-    const gang = RIVALS[Math.floor(Math.random() * 2)], men = [];
+    const gang = RIVALS[Math.floor(Math.random() * RIVALS.length)], men = [];
     const out = b.side === 's' ? 1 : -1, n = 3 + Math.floor(Math.random() * 2);
     for (let k = 0; k < n; k++) {
       const at = { x: b.door.x + (k - n / 2) * 2.5, y: b.door.y, z: b.door.z + out * (6 + (k % 2) * 2) };
@@ -272,7 +381,7 @@ export class Frontier {
       men.push(v);
     }
     this.raid = { shop, b, gang, men, until: g.time + 1.5 / 24 };
-    g.hud.bigMessage(t('fr.raidTitle', { gang: t('fr.gang.' + gang) }), t('fr.raidSub', { shop: t('tmap.b.' + shop) }));
+    g.hud.bigMessage(t('fr.raidTitle', { gang: t('fr.gangs.' + gang) }), t('fr.raidSub', { shop: t('tmap.b.' + shop) }));
     sfx.alert();
     // your gang rides to defend it with you
     const Tr = T.trades, free = Tr.free();
@@ -290,7 +399,7 @@ export class Frontier {
       this.raid = null; this.st.raidsWon++; this.st.rivalsBeaten++;
       const pay = 60 + R.men.length * 15; this.T.money += pay;
       this.T.trades.rep('outlaws', 5); this.T.addHonor(2);
-      g.hud.bigMessage(t('fr.raidWon'), t('fr.raidWonSub', { n: pay, gang: t('fr.gang.' + R.gang) }));
+      g.hud.bigMessage(t('fr.raidWon'), t('fr.raidWonSub', { n: pay, gang: t('fr.gangs.' + R.gang) }));
       return;
     }
     if (g.time > R.until) {
@@ -816,7 +925,7 @@ export class Frontier {
     const T = this.T, H = T.hidden;
     return [
       ['bear', this.st.bears], ['wolf', this.st.wolves], ['outlaws', T.st.bounties || 0], ['treasure', T.st.treasure || 0],
-      ['places', H.seen.length], ['ribbons', this.st.ribbons], ['raids', this.st.raidsWon], ['coaches', this.st.coaches], ['drives', this.st.drives],
+      ['places', H.seen.length], ['ribbons', this.st.ribbons], ['raids', this.st.raidsWon], ['camps', this.st.campsBroken || 0], ['coaches', this.st.coaches], ['drives', this.st.drives],
     ];
   }
 
@@ -871,6 +980,9 @@ export class Frontier {
       if (!this.raid && g.time > this.raidT && Object.keys(this.biz).length && this.hour() > 9 && this.hour() < 18 && !T.jailed) { this.raidT = g.time + 2.5 + Math.random() * 2.5; this.startRaid(); }
       this.updateRaid();
       this.updatePosse();
+      this.updateCamps();
+      this.updateWar();
+      this.updateAmbush();
       this.updateHunters();
       this.updateRustlers();
       this.updateQuests();
@@ -888,6 +1000,8 @@ export class Frontier {
     const out = [], R = this.route(), C = this.coach;
     if (C && C.x != null) out.push({ x: C.x, z: R.z, kind: 'coach', label: t('tmap.coach') });
     out.push({ x: R.x1, z: R.z, kind: 'station', label: t('tmap.station') });
+    for (const c of this.camps || []) if (c.seen || this.T.trades.trade === 'outlaw') out.push({ x: c.x, z: c.z, kind: c.beaten > this.game.time - 6 ? 'place' : 'raid', label: t('fr.camp', { gang: t('fr.gangs.' + c.gang) }) });
+    if (this.war) out.push({ x: this.war.men[0].pos.x, z: this.war.men[0].pos.z, kind: 'raid', label: t('tmap.war') });
     for (const i of this.stolen) { const b = this.T.village.buildings[i]; if (b) out.push({ x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, kind: 'quest', label: t('tmap.stolen') }); }
     if (this.raid) out.push({ x: this.raid.b.door.x, z: this.raid.b.door.z, kind: 'raid', label: t('tmap.raid') });
     if (this.fire) out.push({ x: this.fire.spots[0].x, z: this.fire.spots[0].z, kind: 'fire', label: t('tmap.fire') });
@@ -905,7 +1019,7 @@ export class Frontier {
   toSave() {
     return {
       done: this.done, bank: this.bank, biz: this.biz, st: this.st, q: this.q, look: this.look, hands: this.hands, ev: this.ev, foals: this.foals,
-      raidT: this.raidT, hunterT: this.hunterT, rustleNight: this.rustleNight, stolen: this.stolen,
+      raidT: this.raidT, hunterT: this.hunterT, camps: this.camps && this.camps.map(({ gang, x, y, z, beaten, seen }) => ({ gang, x, y, z, beaten, seen })), warT: this.warT, ambushT: this.ambushT, rustleNight: this.rustleNight, stolen: this.stolen,
     };
   }
   dispose() {

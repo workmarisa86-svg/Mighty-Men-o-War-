@@ -2309,6 +2309,26 @@ export class Enemies {
 }
 
 // ---------------------------------------------------------------------------
+// The light tank's model (the boss below, and every tank of a tank battle:
+// vehiclewar.js). faction 'enemy' or 'ally'; hull colour: grey or olive.
+export function tankModel(faction = 'enemy', hull = 0x3e4650) {
+  const F = FACTIONS[faction] || FACTIONS.enemy;
+  const g = new THREE.Group();
+  const dark = 0x22262a;
+  g.add(bx(2.6, 0.9, 4.2, hull, 0, 0.75, 0));
+  g.add(bx(2.2, 0.35, 3.4, hull, 0, 1.3, 0.1));
+  for (const s of [-1, 1]) { g.add(bx(0.55, 0.8, 4.4, dark, s * 1.4, 0.45, 0)); for (let i = 0; i < 5; i++) g.add(bx(0.58, 0.3, 0.3, 0x30343a, s * 1.4, 0.3, -1.7 + i * 0.85)); }
+  const turret = new THREE.Group(); turret.position.set(0, 1.5, 0.3);
+  turret.add(bx(1.6, 0.65, 1.8, hull, 0, 0.32, 0));
+  const gun = new THREE.Group(); gun.position.set(0, 0.35, -0.8); turret.add(gun);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.4, 8), mat(dark));
+  barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0, -1.2); gun.add(barrel);
+  const ins = bx(0.3, 0.3, 0.04, F.insignia, 0.81, 0.35, 0); ins.rotation.y = Math.PI / 2; ins.rotation.x = Math.PI / 4; turret.add(ins);
+  const ins2 = bx(0.3, 0.3, 0.04, F.insignia, -0.81, 0.35, 0); ins2.rotation.y = Math.PI / 2; ins2.rotation.x = Math.PI / 4; turret.add(ins2);
+  turret.add(bx(0.5, 0.15, 0.5, dark, 0.3, 0.7, 0.3));
+  g.add(turret);
+  return { group: g, turret, gun };
+}
 // Rare boss: a light tank. Bullets barely scratch it; grenades and TNT work.
 class Tank {
   constructor(mgr, x, y, z) {
@@ -2316,19 +2336,7 @@ class Tank {
     this.pos = new THREE.Vector3(x, y, z);
     this.yaw = 0; this.turret = 0; this.hp = 380; this.alive = true; this.cool = 6; this.deadT = 0;
     this.engineT = 0; this.wp = { x, z };
-    const F = FACTIONS.enemy;
-    const g = new THREE.Group();
-    const hull = 0x3e4650, dark = 0x22262a;
-    g.add(bx(2.6, 0.9, 4.2, hull, 0, 0.75, 0));
-    g.add(bx(2.2, 0.35, 3.4, hull, 0, 1.3, 0.1));
-    for (const s of [-1, 1]) { g.add(bx(0.55, 0.8, 4.4, dark, s * 1.4, 0.45, 0)); for (let i = 0; i < 5; i++) g.add(bx(0.58, 0.3, 0.3, 0x30343a, s * 1.4, 0.3, -1.7 + i * 0.85)); }
-    const turret = new THREE.Group(); turret.position.set(0, 1.5, 0.3);
-    turret.add(bx(1.6, 0.65, 1.8, hull, 0, 0.32, 0));
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.4, 8), mat(dark));
-    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.35, -2.0); turret.add(barrel);
-    const ins = bx(0.3, 0.3, 0.04, F.insignia, 0.81, 0.35, 0); ins.rotation.y = Math.PI / 2; ins.rotation.x = Math.PI / 4; turret.add(ins);
-    turret.add(bx(0.5, 0.15, 0.5, dark, 0.3, 0.7, 0.3));
-    g.add(turret);
+    const { group: g, turret } = tankModel('enemy');
     this.turretObj = turret; this.mesh = g;
     this.game.scene.add(g);
   }

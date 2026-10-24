@@ -137,6 +137,15 @@ export function installWarUI(UI) {
       { wide: true, onBack: () => this.show('newgame', { step: 'final', side, difficulty }) });
     panel.querySelectorAll('[data-b]').forEach((c) => c.onclick = () => this.app.newGame({ side, difficulty, gameType: 'battle', battle: c.dataset.b }));
   };
+  // the end of a tank battle or a dogfight
+  P.r_vwarEnd = function ({ win, kills, mode, why }) {
+    const g = this.app.game, cfg = g.cfg;
+    const body = `<p class="big">${t(win ? 'vw.won' : why === 'crash' ? 'vw.crashed' : mode === 'tank' ? 'vw.tankLost' : 'vw.shotDown')}</p><p>${t('vw.kills', { n: kills })}</p>
+      <div class="menu"><button class="btn primary" id="vagain">${t('battle.replay')}</button><button class="btn" id="vmenu">${t('vw.menu')}</button></div>`;
+    this.panel(t(win ? 'battle.wonTitle' : 'battle.lostTitle'), body, { back: false });
+    this.root.querySelector('#vagain').onclick = () => { this.app.quitToMenu(true); this.app.newGame({ side: cfg.side, difficulty: cfg.difficulty, gameType: cfg.gameType }); };
+    this.root.querySelector('#vmenu').onclick = () => this.app.quitToMenu();
+  };
   P.r_battleEnd = function ({ win, id }) {
     const g = this.app.game, cfg = g.cfg;
     const body = `<p class="big">${t(win ? 'battle.won' : 'battle.lost')}</p><p>${esc(t('battle.' + id))}</p>

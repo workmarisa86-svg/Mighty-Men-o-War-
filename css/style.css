@@ -783,3 +783,23 @@ body.driving #aimprompt { display: none; }
 .swatches .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; color: #ccc; padding: 0; }
 .swatches .sw.on { border-color: #f0d890; box-shadow: 0 0 0 2px rgba(240, 216, 144, 0.4); }
 input.text { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(0, 0, 0, 0.3); color: inherit; font-size: 1em; margin: 6px 0 10px; }
+
+/* ---- War: tank battles and dogfights ---- */
+body.vwar-on #crosshair, body.vwar-on #hotbar, body.vwar-on #keyhint, body.vwar-on #ctxbar { display: none !important; }
+.vwar { position: absolute; inset: 0; pointer-events: none; color: #f0e8cc; font-family: Oswald, Arial, sans-serif; }
+.vw-box { position: absolute; left: 14px; top: 90px; background: rgba(20, 22, 16, 0.6); border: 1px solid rgba(240, 232, 204, 0.25); border-radius: 6px; padding: 8px 12px; font-size: 14px; text-shadow: 0 1px 2px #000; }
+.vw-box div { margin: 2px 0; } .vw-box b { color: #ffd870; }
+.vw-bar { display: inline-block; width: 110px; height: 8px; background: rgba(255, 255, 255, 0.15); border-radius: 4px; vertical-align: middle; margin-left: 6px; overflow: hidden; }
+.vw-bar i { display: block; height: 100%; background: #d8b048; }
+.vw-cross { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px solid rgba(255, 255, 255, 0.85); border-radius: 50%; box-shadow: 0 0 3px #000; }
+.vw-sight { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 38%, rgba(0, 0, 0, 0.92) 40%); }
+.vw-sight::before, .vw-sight::after { content: ""; position: absolute; background: rgba(20, 20, 20, 0.85); }
+.vw-sight::before { left: 50%; top: 22%; bottom: 22%; width: 2px; }
+.vw-sight::after { top: 50%; left: 30%; right: 30%; height: 2px; }
+.vw-ring { position: absolute; left: 50%; top: 50%; width: 130px; height: 130px; margin: -65px 0 0 -65px; border: 2px solid rgba(255, 190, 90, 0.85); border-radius: 50%; box-shadow: 0 0 8px rgba(255, 170, 60, 0.45); }
+.vw-ring i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255, 190, 90, 0.95); }
+.vw-mark { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; border: 2px dashed #ff6a4a; border-radius: 50%; }
+.vw-mark span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #ffb0a0; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.vw-warn { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); font-size: 26px; color: #ff6a4a; font-weight: 600; letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
+@media (max-width: 760px) { .vw-box { top: 70px; font-size: 12px; } .vw-ring { width: 96px; height: 96px; margin: -48px 0 0 -48px; } }
+body.vwar-on [data-btn=jump], body.vwar-on [data-btn=crouch], body.vwar-on [data-btn=run], body.vwar-on [data-btn=light], body.vwar-on [data-btn=inv], body.vwar-on [data-btn=craft], body.vwar-on [data-btn=dive], body.vwar-on [data-btn=orders], body.vwar-on [data-btn=follow], body.vwar-on [data-btn=askiron], body.vwar-on [data-btn=askweapon], body.vwar-on [data-btn=chest] { display: none !important; }

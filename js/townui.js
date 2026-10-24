@@ -142,7 +142,7 @@ export function installTownUI(UI) {
     const cur = Hs.home();
     mine.push(`<div class="shop-row"><span><b>${t('land.yourHome')}</b> ${cur ? t('house.' + cur.design) : t('land.cottage')}</span><b></b><span></span></div>`);
     if (cur && !Hs.cottageSold) mine.push(`<div class="shop-row"><span>${t('land.cottage')}${Hs.cottageTaken ? ' · <span class="muted">' + t('land.taken') + '</span>' : ''}</span><b>${Math.round(60 * T.trades.priceK('house', false))}</b><button class="btn small" data-sellc="1" ${Hs.cottageTaken ? 'disabled' : ''}>${t('shop.sell')}</button></div>`);
-    for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b>${Math.round(DESIGNS[h.design].value * T.trades.priceK('house', false))}</b><button class="btn small" data-sell="${h.id}">${t('shop.sell')}</button></div>`);
+    for (const h of Hs.homes) if (h.id !== Hs.homeId && h.taken == null) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b>${Math.round(DESIGNS[h.design].value * T.trades.priceK('house', false))}</b><button class="btn small" data-sell="${h.id}">${t('shop.sell')}</button></div>`);
     for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b></b><button class="btn small" data-move="${h.id}">${t('land.moveIn')}</button></div>`);
     if (Hs.bp) mine.push(`<div class="shop-row"><span>${t('land.bpOn', { house: t('house.' + Hs.bp.design), n: (Hs.total || 0) - (Hs.left || 0), total: Hs.total || 0 })}</span><b></b><button class="btn small ghost" data-cancel="1">${t('land.cancelBp')}</button></div>`);
     const cards = DESIGN_IDS.map((id) => {

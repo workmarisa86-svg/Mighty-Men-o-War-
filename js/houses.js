@@ -135,16 +135,31 @@ export class Houses {
     const C = h ? this.spots(h) : this.cottageHome;
     cab.site.bed = { ...C.bed }; cab.site.chest = { ...C.chest };
     cab.site.x = C.x; cab.site.y = C.y; cab.site.z = C.z; cab.site.r = C.r;
-    if (cab.mesh) { cab.mesh.position.set(C.bed.x, C.bed.y, C.bed.z); cab.mesh.rotation.y = C.bedYaw || 0; }
+    if (cab.mesh) { cab.mesh.position.set(C.bed.x, C.bed.y, C.bed.z); cab.mesh.rotation.y = C.bedYaw || 0; cab.mesh.visible = !(h && h.taken != null); }   // (a taken house has its own bed)
+  }
+  // a village house taken at gunpoint (frontier.js): its own double bed is yours
+  // now; your chest stays where it was
+  addTaken(idx, move = true) {
+    const g = this.game, b = this.town.village.buildings[idx];
+    if (!b || !b.furn || this.homes.some((h) => h.taken === idx)) return null;
+    const ch = g.cabin && g.cabin.site ? g.cabin.site.chest : this.town.cottage.chest;
+    const h = { id: 'taken' + idx, taken: idx, design: 'taken', x: b.x0, y: this.town.village.y, z: b.z0, chest: { ...ch } };
+    this.homes.push(h);
+    if (move) this.moveInto(h);
+    return h;
   }
   // a house's bed, chest, middle and size in the world
   spots(h) {
+    if (h.taken != null) {
+      const b = this.town.village.buildings[h.taken], bd = b.furn.beds[0], y = this.town.village.y;
+      return { bed: { x: bd.pos.x, y, z: bd.pos.z }, wake: { x: bd.foot.x, y, z: bd.foot.z }, chest: { ...h.chest }, x: Math.floor(b.inside.x), y, z: Math.floor(b.inside.z), r: Math.max(b.x1 - b.x0, b.z1 - b.z0) / 2, bedYaw: 0 };
+    }
     const P = DESIGNS[h.design].plan(), at = (q) => { const [a, c] = turn(q[0], q[2], h.rot, P.w - 2, P.d - 2); return { x: h.x + a, y: h.y + q[1], z: h.z + c }; };
     const bed = at(P.bed), chest = at(P.chest), mid = at([(P.w - 2) / 2, 0, (P.d - 2) / 2]);
     bed.x += 0.5; bed.z += 0.5;
     return { bed, chest: { x: Math.floor(chest.x), y: chest.y, z: Math.floor(chest.z) }, x: Math.floor(mid.x), y: h.y, z: Math.floor(mid.z), r: Math.max(P.w, P.d) / 2, bedYaw: (h.rot & 3) * Math.PI / 2 };
   }
-  wakeSpot() { const h = this.home(); if (!h) return null; const S = this.spots(h); return { x: S.bed.x + 1, y: S.bed.y, z: S.bed.z }; }
+  wakeSpot() { const h = this.home(); if (!h) return null; const S = this.spots(h); return S.wake || { x: S.bed.x + 1, y: S.bed.y, z: S.bed.z }; }
   moveInto(h) {
     const g = this.game;
     const wasCottage = !this.homeId;
@@ -299,7 +314,7 @@ export class Houses {
   }
   sellHome(h) {
     const T = this.town, g = this.game;
-    if (!h || h.id === this.homeId) return;
+    if (!h || h.id === this.homeId || h.taken != null) return;      // (no deed to sell for a house taken at gunpoint)
     const pay = Math.round(DESIGNS[h.design].value * this.town.trades.priceK('house', false));
     T.money += pay; T.st.earned += pay;
     this.homes = this.homes.filter((x) => x !== h);
