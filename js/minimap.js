@@ -123,7 +123,7 @@ export class Minimap {
         const [x, y, d] = toRadar(m.x, m.z);
         if (d > RADAR_RANGE + (m.r || 0)) continue;
         c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
-        if (m.kind === 'treasure') { c.strokeStyle = '#ffd040'; c.setLineDash([3, 2]); c.beginPath(); c.arc(x, y, Math.max(5, m.r * scale), 0, Math.PI * 2); c.stroke(); c.setLineDash([]); continue; }
+        if (m.kind === 'treasure') { c.lineWidth = 2; c.strokeStyle = '#ff3a2a'; c.beginPath(); c.moveTo(x - 4, y - 4); c.lineTo(x + 4, y + 4); c.moveTo(x + 4, y - 4); c.lineTo(x - 4, y + 4); c.stroke(); continue; }      // the exact spot
         c.fillStyle = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
         c.beginPath(); c.arc(x, y, 3.5, 0, Math.PI * 2); c.fill(); c.stroke();
       }

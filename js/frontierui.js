@@ -21,7 +21,7 @@ export function installFrontierUI(UI) {
       .concat(map ? [`<div class="shop-row"><img src="${itemIcon('tmap')}" alt=""><span>${t('hid.aMap')}</span><b></b></div>`] : []).join('');
     const body = `${rich ? `<p class="say">${t('hid.rich')}</p>` : ''}<div class="shop">${rows}</div>
       ${note ? `<div class="note-paper"><img src="${itemIcon('note')}" alt=""><p>${esc(t(note))}</p></div>` : ''}
-      ${map ? `<p class="say">${t('hid.mapAt', { ...coords(map.cx, map.cz, this.app.game.world), r: 14 })}</p><p class="muted small">${t('hid.mapHow')}</p>` : ''}`;
+      ${map ? `<p class="say">${t('hid.mapSpotAt', coords(map.x, map.z, this.app.game.world))}</p><p class="muted small">${t('hid.mapHow')}</p>` : ''}`;
     this.panel(title, body, { onBack: () => this.app.closePanel() });
   };
 
