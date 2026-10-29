@@ -65,11 +65,12 @@ export class Frontier {
     this.people = {};                                // teller, barkeep, silas, judge, clara (spawned near you)
     this.coach = null; this.coachJob = null;
     this.raidT = saved.raidT ?? (g.time + 2.5 + Math.random() * 2);
+    this.roadOk = !!saved.roadOk; this.bridges = saved.bridges || null;
     this.hunterT = saved.hunterT ?? (g.time + 1);
     this.rustleNight = saved.rustleNight ?? -1;
     this.goalT = 2; this.slowT = 0; this.posters = null; this.fire = null; this.cold = 0;
     this.stolen = saved.stolen || [];                // village houses you took (building indexes)
-    for (const i of this.stolen) { this.unlock(V.buildings[i]); town.houses.addTaken(i, false); }
+    for (const i of this.stolen) { this.unlock(V.buildings[i]); this.rehome(V.buildings[i]); town.houses.addTaken(i, false); }
     this.deputies = [];
     this.camps = saved.camps || null;                // each rival gang's camp out in the hills
     this.warT = saved.warT ?? (g.time + 1.5); this.ambushT = saved.ambushT ?? (g.time + 1.2);
@@ -126,17 +127,42 @@ export class Frontier {
   }
 
   // ---- a village house taken at gunpoint: yours to live in, take apart, rebuild ----
+  // a house you took: every block of it yours to dig out or build on, and a
+  // plank door of your own in its doorway (it opens for you like the doors you buy)
   unlock(b) {
-    const w = this.game.world, y0 = this.T.village.y;
+    const w = this.game.world;
     if (!b) return;
-    for (let z = b.z0 - 1; z <= b.z1 + 1; z++) for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let y = y0; y < y0 + 16; y++) if (w.inside(x, y, z)) w.locked[w.idx(x, y, z)] = 0;
+    b.taken = true;
+    const y0 = Math.floor(b.door.y) - 1;
+    for (let z = b.z0 - 1; z <= b.z1 + 1; z++) for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let y = y0; y < y0 + 18; y++) if (w.inside(x, y, z)) w.locked[w.idx(x, y, z)] = 0;
+    // the family's house door becomes your plank door (two high; the top of the doorway walled up)
+    const cols = new Map();
+    for (const [x, y, z] of b.doorCells || []) { const k = x + ',' + z; if (!cols.has(k) || cols.get(k)[1] > y) cols.set(k, [x, y, z]); }
+    for (const [x, y, z] of cols.values()) {
+      const id = w.get(x, y, z);
+      if (id === B.DOOR || id === B.DOOR_OPEN) continue;            // (already done, or changed by you)
+      if (id === B.HDOOR || id === B.AIR) { w.set(x, y, z, B.DOOR); w.set(x, y + 1, z, B.DOOR); if (w.get(x, y + 2, z) === B.AIR || w.get(x, y + 2, z) === B.HDOOR) w.set(x, y + 2, z, B.WOOD); }
+    }
+  }
+  // the family of a house you took moves in with neighbors (they keep their jobs:
+  // the shopkeeper still keeps the shop, the market woman still keeps her stall)
+  rehome(b) {
+    const T = this.T, F = T.folk, V = T.village, g = this.game;
+    const others = V.buildings.filter((o) => o.type === 'house' && o !== b && !o.taken);
+    const to = others.sort((a, c) => Math.hypot(a.inside.x - b.inside.x, a.inside.z - b.inside.z) - Math.hypot(c.inside.x - b.inside.x, c.inside.z - b.inside.z))[0];
+    if (!to) return;
+    for (const o of F.list) {
+      if (o.home !== b) continue;
+      o.home = to;
+      // (older saves: they had left town for good; they come back)
+      if (F.dead[o.i] >= 1e8) { delete F.dead[o.i]; o.alive = true; o.away = false; o.hp = 100; o.deadT = 0; o.pos.set(to.inside.x, to.inside.y, to.inside.z); o.route = []; }
+    }
+    void g;
   }
   stealHouse(v) {
-    const g = this.game, T = this.T, F = T.folk, b = v.home, i = T.village.buildings.indexOf(b);
+    const g = this.game, T = this.T, b = v.home, i = T.village.buildings.indexOf(b);
     if (!b || i < 0 || this.stolen.includes(i)) return;
-    this.stolen.push(i); this.unlock(b);
-    // the family moves out (for good)
-    for (const o of F.list) if (o.home === b) { o.alive = false; o.away = true; F.dropRig(o); F.dead[o.i] = 1e9; }
+    this.stolen.push(i); this.unlock(b); this.rehome(b);
     T.addBounty(100, 'robbery'); T.crime('robbery', { value: 300, pos: g.player.pos.clone() }); T.addHonor(-15); T.trades.rep('outlaws', 8); T.trades.rep('farmers', -15);
     const h = T.houses.addTaken(i, false);
     if (h) T.houses.moveInto(h);                                      // you live there now: its double bed is yours
@@ -195,7 +221,7 @@ export class Frontier {
 
   // ---- businesses --------------------------------------------------------------------------
   owns(shop) { return !!this.biz[shop]; }
-  income(shop) { return Math.round(BIZ[shop] * 0.04); }
+  income(shop) { return Math.round(BIZ[shop] * 0.08); }        // (a business pays for itself in about two weeks)
   buyBiz(shop) {
     const T = this.T;
     if (this.biz[shop] || T.money < BIZ[shop]) { sfx.error(); return false; }
@@ -224,7 +250,7 @@ export class Frontier {
     const T = this.T, day = this.day();
     let n = 0;
     for (const [shop, b] of Object.entries(this.biz)) { const k = b.hurt >= day ? 0.3 : 1; n += Math.round(this.income(shop) * k * (this.ev.kind === 'market' ? 1.5 : 1)); }
-    if (n > 0) { this.bank.balance += n; this.game.hud.toast(t('fr.takings', { n }), 'pick'); }
+    if (n > 0) { this.bank.balance += n; this.game.hud.bigMessage(t('fr.takingsTitle'), t('fr.takings', { n, total: this.bank.balance })); }
     // the bank pays a little interest and its vault fills up again
     this.bank.balance += Math.floor(this.bank.balance * 0.01);
     this.bank.vault = Math.min(900, this.bank.vault + 250);
@@ -438,32 +464,167 @@ export class Frontier {
     if (h < 17) return { x: R.x1 - L * (h - 15) / 2, moving: true, dir: -1 };
     return { x: R.x0, moving: false, dir: 1 };
   }
+  // the stage road: a dirt road out to the station, cleared of trees, with
+  // plank bridges over the water (bridges can be blown; crews mend them by morning)
+  buildRoad() {
+    const g = this.game, w = g.world, R = this.route(), SEA_Y = this.seaY();
+    this.bridges = [];
+    let span = null;
+    for (let x = Math.floor(R.x0) - 2; x <= Math.ceil(R.x1) + 2; x++) {
+      const z0 = Math.floor(R.z);
+      let wet = false;
+      for (let dz = -1; dz <= 1; dz++) { const top = this.groundTop(x, z0 + dz); if (top.water) wet = true; }
+      if (wet) {
+        if (!span) { span = { x0: x, x1: x, y: SEA_Y }; this.bridges.push(span); }
+        span.x1 = x;
+      } else span = null;
+      for (let dz = -1; dz <= 1; dz++) {
+        const z = z0 + dz, top = this.groundTop(x, z);
+        if (wet) continue;
+        if (!w.isLocked(x, top.y, z) && (w.get(x, top.y, z) === B.GRASS || w.get(x, top.y, z) === B.DIRT || w.get(x, top.y, z) === B.SAND)) w.set(x, top.y, z, B.PATH);
+        for (let h = 1; h <= 9; h++) { const id = w.get(x, top.y + h, z); if (id !== B.AIR && !w.isLocked(x, top.y + h, z) && (h <= 4 || id === B.LOG || id === B.LEAVES)) w.set(x, top.y + h, z, B.AIR); }     // (trees on the road are felled)
+      }
+    }
+    this.mendBridges();
+    this.roadOk = true;
+  }
+  seaY() { const w = this.game.world, R = this.route(); for (let x = R.x0; x <= R.x1; x++) { const top = this.groundTop(x, Math.floor(R.z)); if (top.water) return top.y + 1; } return 26; }
+  // the natural ground (trees and leaves left out); water: the top of the water
+  groundTop(x, z) {
+    const w = this.game.world;
+    for (let y = w.H - 2; y > 1; y--) {
+      const id = w.get(x, y, z);
+      if (id === B.AIR || id === B.LEAVES || id === B.LOG) continue;
+      return { y, water: id === B.WATER };
+    }
+    return { y: 1, water: false };
+  }
+  // (re)lay the bridges' planks and rails
+  mendBridges() {
+    const w = this.game.world, z0 = Math.floor(this.route().z);
+    for (const b of this.bridges || []) {
+      for (let x = b.x0 - 1; x <= b.x1 + 1; x++) for (let dz = -1; dz <= 1; dz++) {
+        if (w.get(x, b.y, z0 + dz) === B.AIR || w.get(x, b.y, z0 + dz) === B.WATER) w.set(x, b.y, z0 + dz, B.WOOD);
+        for (let h = 1; h <= 3; h++) if (w.get(x, b.y + h, z0 + dz) === B.WATER) w.set(x, b.y + h, z0 + dz, B.AIR);
+      }
+      for (let x = b.x0; x <= b.x1; x++) for (const dz of [-2, 2]) { if (w.get(x, b.y, z0 + dz) === B.AIR || w.get(x, b.y, z0 + dz) === B.WATER) w.set(x, b.y, z0 + dz, B.WOOD); if (w.get(x, b.y + 1, z0 + dz) === B.AIR) w.set(x, b.y + 1, z0 + dz, B.FENCE); }
+      b.broken = false;
+    }
+  }
+  // what the coach's wheels stand on at x (null: nothing, it falls)
+  coachGround(x) {
+    const w = this.game.world, z = Math.floor(this.route().z), X = Math.floor(x);
+    for (let y = w.H - 2; y > 1; y--) {
+      const id = w.get(X, y, z);
+      if (id === B.AIR || id === B.LEAVES || id === B.FENCE) continue;
+      if (id === B.WATER) return { y: y + 1, water: true };
+      return { y: y + 1, water: false };
+    }
+    return null;
+  }
+  // a dynamite blast (hidden.js): a bridge broken? the coach on it goes into the river
+  blasted(c) {
+    const R = this.route(), st = this.coach;
+    for (const b of this.bridges || []) if (c.hx >= b.x0 - 2 && c.hx <= b.x1 + 2 && Math.abs(c.hz - R.z) < 4) b.broken = true;
+    if (st && !st.wrecked && Math.hypot(st.x - c.x, R.z - c.z) < 5) this.wreckCoach();
+  }
+  wreckCoach() {
+    const g = this.game, st = this.coach;
+    if (!st || st.wrecked) return;
+    st.wrecked = true; st.held = true; st.robbing = true; st.fallV = 0;
+    for (const h of st.horses || []) { h.rider = null; h.owner = 'stable'; h.home = { x: h.pos.x, y: h.pos.y, z: h.pos.z }; }       // the team breaks loose
+    st.horses = [];
+    g.hud.alert(t('fr.coachWrecked'));
+    this.T.addBounty(30, 'robbery'); this.T.crime('robbery', { pos: g.player.pos.clone() });
+  }
+  // a Concord stagecoach: a rounded red body on leather braces, yellow wheels
+  // and running gear, the driver's box up front, the luggage on the roof
   buildCoach() {
     const g = this.game, grp = new THREE.Group();
-    const m = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const add = (w, h, d, c, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(c)); o.position.set(x, y, z); grp.add(o); return o; };
-    add(1.5, 1.3, 2.4, 0x6a2a1e, 0, 1.45, 0); add(1.6, 0.12, 2.6, 0x2a2018, 0, 2.15, 0);
-    add(1.2, 0.4, 0.5, 0x3a2a1c, 0, 2.0, -1.4);            // the driver's box
-    add(0.9, 0.5, 0.7, 0x4a3a20, 0, 2.45, 0.6);            // the strongbox and luggage on the roof
-    for (const [x, z] of [[-0.8, -0.9], [0.8, -0.9], [-0.8, 0.9], [0.8, 0.9]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.12, 12), m(0x2a1e14)); w.rotation.z = Math.PI / 2; w.position.set(x, 0.5, z); grp.add(w); }
-    for (const x of [-0.45, 0.45]) { add(0.5, 0.9, 1.6, 0x5a3a24, x, 1.3, -3.2); add(0.3, 0.5, 0.6, 0x5a3a24, x, 1.9, -4.1); for (const z of [-2.7, -3.7]) add(0.15, 0.85, 0.15, 0x4a2e1c, x, 0.43, z); }
-    add(0.4, 0.8, 0.4, 0x2a2a2e, -0.25, 2.6, -1.4); add(0.4, 0.8, 0.4, 0x5a4a32, 0.3, 2.6, -1.4);   // driver and guard
+    const mats = {}, m = (c) => mats[c] || (mats[c] = new THREE.MeshLambertMaterial({ color: c }));
+    const add = (w, h, d, c, x, y, z, p = grp) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(c)); o.position.set(x, y, z); p.add(o); return o; };
+    const RED = 0x7a2016, YEL = 0xc8a038, DARK = 0x2a1e14, GLASS = 0x2a3038, LEATHER = 0x4a3020;
+    // the body: wider in the middle, a curved bottom (stacked boxes), windows and doors
+    add(1.6, 1.0, 2.4, RED, 0, 1.75, 0); add(1.5, 0.25, 2.0, RED, 0, 1.15, 0); add(1.3, 0.15, 1.5, RED, 0, 0.98, 0);
+    add(1.7, 0.1, 2.6, DARK, 0, 2.3, 0);                              // the roof
+    for (const sx of [-0.81, 0.81]) { add(0.03, 0.45, 0.6, GLASS, sx, 1.95, -0.55); add(0.03, 0.45, 0.6, GLASS, sx, 1.95, 0.55); add(0.04, 0.06, 2.4, YEL, sx, 1.42, 0); add(0.04, 0.06, 2.4, YEL, sx, 2.24, 0); }
+    add(1.2, 0.5, 0.03, GLASS, 0, 1.95, -1.21);
+    // the luggage rack, trunks and the strongbox
+    for (const sx of [-0.8, 0.8]) add(0.05, 0.2, 2.4, DARK, sx, 2.45, 0);
+    add(0.7, 0.4, 0.6, 0x5a4026, -0.2, 2.55, 0.5); add(0.6, 0.35, 0.5, 0x3a3020, 0.3, 2.53, -0.2); add(0.45, 0.3, 0.35, 0x2a2a2a, 0.15, 2.5, 0.75);
+    // the rear boot (leather) and the driver's box with its footboard
+    add(1.3, 0.8, 0.6, LEATHER, 0, 1.4, 1.5);
+    add(1.4, 0.15, 0.7, DARK, 0, 2.35, -1.45); add(1.4, 0.5, 0.1, DARK, 0, 2.6, -1.1); add(1.2, 0.08, 0.5, DARK, 0, 1.75, -1.85); add(1.2, 0.55, 0.06, DARK, 0, 2.0, -2.1);
+    // the running gear: yellow axles and perch, leather thoroughbraces
+    add(0.15, 0.15, 3.6, YEL, 0, 0.75, -0.2); add(1.9, 0.12, 0.12, YEL, 0, 0.75, -1.25); add(1.9, 0.12, 0.12, YEL, 0, 0.85, 1.15);
+    for (const sx of [-0.55, 0.55]) add(0.08, 0.08, 2.6, LEATHER, sx, 1.0, 0);
+    // wheels: yellow spokes and hubs, dark iron tyres; big at the back
+    const wheel = (r, x, z) => {
+      const W = new THREE.Group(); W.position.set(x, r, z); grp.add(W);
+      const tyre = new THREE.Mesh(new THREE.TorusGeometry(r - 0.05, 0.06, 6, 18), m(DARK)); tyre.rotation.y = Math.PI / 2; W.add(tyre);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(r - 0.12, 0.04, 6, 18), m(YEL)); rim.rotation.y = Math.PI / 2; W.add(rim);
+      for (let k = 0; k < 6; k++) { const sp = add(0.05, r * 2 - 0.2, 0.05, YEL, 0, 0, 0, W); sp.rotation.x = k * Math.PI / 6; }
+      add(0.25, 0.18, 0.18, YEL, 0, 0, 0, W);
+      return W;
+    };
+    const wheels = [wheel(0.82, -0.98, 1.15), wheel(0.82, 0.98, 1.15), wheel(0.62, -0.95, -1.25), wheel(0.62, 0.95, -1.25)];
+    // the pole out to the team
+    add(0.1, 0.1, 3.6, DARK, 0, 0.85, -3.1);
+    // the driver (reins in hand) and the shotgun guard
+    const man = (x, coat, hat) => { add(0.42, 0.55, 0.35, coat, x, 2.68, -1.42); add(0.3, 0.3, 0.3, 0xc8a080, x, 3.12, -1.42); add(0.5, 0.06, 0.5, hat, x, 3.3, -1.42); add(0.3, 0.14, 0.3, hat, x, 3.38, -1.42); add(0.36, 0.2, 0.55, 0x2a2622, x, 2.45, -1.7); };
+    man(-0.32, 0x3a2c22, 0x2a2018); man(0.34, 0x5a4a32, 0x4a3a28);
+    add(0.06, 0.06, 1.1, 0x2a2a2a, 0.55, 2.85, -1.6).rotation.x = -0.5;          // the guard's shotgun
     g.scene.add(grp);
+    grp.userData.wheels = wheels;
     return grp;
   }
+  // the team: four of the game's own horses in harness, in front of the coach
+  coachHorses(st, on) {
+    const g = this.game, H = g.horses;
+    if (!on) { for (const h of st.horses || []) { h.drop(); H.list = H.list.filter((x) => x !== h); } st.horses = null; return; }
+    if (st.horses || st.wrecked) return;
+    st.horses = [];
+    for (let k = 0; k < 4; k++) { const h = H.add(st.x, st.y, this.route().z, 'coach', null, [0, 2, 1, 3][k]); h.rider = { coach: true }; h.slot = k; st.horses.push(h); }
+  }
   updateCoach(dt) {
-    const g = this.game, P = g.player.pos, R = this.route(), w = g.world, F = this.T.folk;
+    const g = this.game, P = g.player.pos, R = this.route(), F = this.T.folk;
+    if (!this.roadOk) this.buildRoad();
     const C = this.coachX();
     let st = this.coach;
     if (!st) st = this.coach = { x: C.x, held: false, mesh: null, robbed: -1 };
-    if (st.held) { /* stopped where it was held up */ } else st.x = C.x;
-    const y = (w.tops ? w.tops[Math.floor(st.x) + Math.floor(R.z) * w.W] : w.surfaceY(Math.floor(st.x), Math.floor(R.z)) - 1) + 1;
+    if (st.wrecked) {
+      // in the river: it lies on its side where it fell
+      if (st.mesh) { st.fallV = Math.min(8, (st.fallV || 0) + dt * 9); const gnd = this.coachGround(st.x); if (gnd && st.y > gnd.y - 1.2) st.y -= st.fallV * dt; st.mesh.position.set(st.x, st.y, R.z); st.mesh.rotation.z = Math.min(1.3, (st.mesh.rotation.z || 0) + dt * 1.5); }
+      if (this.hour() < 8 && this.ev.day !== st.wreckDay) { st.wreckDay = this.ev.day; }
+      return;
+    }
+    // the driver pulls up before a broken bridge
+    const next = C.moving ? st.x + C.dir * 3 : st.x;
+    const ahead = this.coachGround(next);
+    if (C.moving && ahead && ahead.water && !st.onBridge) st.waitBridge = true; else if (!C.moving || (ahead && !ahead.water)) st.waitBridge = false;
+    if (st.held || st.waitBridge) { /* stopped */ } else st.x = C.x;
+    const gnd = this.coachGround(st.x);
+    st.onBridge = (this.bridges || []).some((b) => st.x >= b.x0 - 1 && st.x <= b.x1 + 1);
+    if (gnd && gnd.water) { this.wreckCoach(); return; }              // the bridge gave way under it
+    const y = gnd ? gnd.y : st.y || 30;
     st.y = st.y == null ? y : st.y + (y - st.y) * Math.min(1, dt * 4);
     const near = Math.hypot(st.x - P.x, R.z - P.z) < 200;
     if (near && !st.mesh) st.mesh = this.buildCoach();
     else if (!near && st.mesh) { g.scene.remove(st.mesh); st.mesh = null; }
-    if (st.mesh) { st.mesh.position.set(st.x, st.y, R.z); st.mesh.rotation.y = C.dir > 0 ? -Math.PI / 2 : Math.PI / 2; }
-    if (st.held && this.hour() > 18) { st.held = false; if (st.guard) { F.dropRig(st.guard); F.extra = F.extra.filter((x) => x !== st.guard); st.guard = null; } }
+    this.coachHorses(st, near);
+    const moving = C.moving && !st.held && !st.waitBridge, dir = C.dir;
+    if (st.mesh) {
+      st.mesh.position.set(st.x, st.y, R.z); st.mesh.rotation.set(0, dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
+      if (moving) for (const W of st.mesh.userData.wheels) W.rotation.x -= dt * 4.2 * (W.position.y > 0.7 ? 0.75 : 1);
+    }
+    // the team: two pairs ahead of the coach
+    for (const h of st.horses || []) {
+      if (!h.alive) continue;
+      const row = h.slot >> 1, side = (h.slot & 1) ? 0.75 : -0.75;
+      const hx = st.x + dir * (4.2 + row * 2.7), hz = R.z + side * dir;
+      const hg = this.coachGround(hx);
+      h.pos.set(hx, hg ? hg.y : st.y, hz); h.yaw = dir > 0 ? -Math.PI / 2 : Math.PI / 2; h.speed = moving ? 4.4 : 0;
+    }
     // riding shotgun: the job pays when the coach reaches the station with you by it
     const J = this.coachJob;
     if (J) {
@@ -517,6 +678,8 @@ export class Frontier {
     if (E.rush && E.rushUntil <= g.time) { E.rush = false; g.hud.toast(t('fr.rushOver')); }
     this.payDay();
     this.ranchHands();
+    if (this.bridges && this.bridges.some((b) => b.broken)) { this.mendBridges(); }
+    if (this.coach && this.coach.wrecked) { this.coachHorses(this.coach, false); if (this.coach.mesh) this.game.scene.remove(this.coach.mesh); if (this.coach.guard) { this.T.folk.dropRig(this.coach.guard); this.T.folk.extra = this.T.folk.extra.filter((x) => x !== this.coach.guard); } this.coach = null; }      // a new coach on the line
     this.foalCheck();
     if (E.kind) return;
     // the autumn fair: the second day of autumn, once a year
@@ -948,7 +1111,7 @@ export class Frontier {
     const st = this.coachNear(p, 7);
     if (st) {
       const C = this.coachX();
-      if (st.held && st.robbing) out.push({ a: 'coachbox', label: t('ctx.coachBox'), run: () => this.robCoach() });
+      if ((st.held && st.robbing) || st.wrecked) out.push({ a: 'coachbox', label: t('ctx.coachBox'), run: () => this.robCoach() });
       else if (!C.moving && C.dir > 0 && this.hour() < 9 && !this.coachJob && this.hour() > 6) out.push({ a: 'shotgun', label: t('ctx.shotgun'), run: () => { this.coachJob = { day: this.day() }; g.hud.toast(t('fr.shotgunTaken')); } });
     }
     // a burning field: douse it
@@ -1019,12 +1182,13 @@ export class Frontier {
   toSave() {
     return {
       done: this.done, bank: this.bank, biz: this.biz, st: this.st, q: this.q, look: this.look, hands: this.hands, ev: this.ev, foals: this.foals,
-      raidT: this.raidT, hunterT: this.hunterT, camps: this.camps && this.camps.map(({ gang, x, y, z, beaten, seen }) => ({ gang, x, y, z, beaten, seen })), warT: this.warT, ambushT: this.ambushT, rustleNight: this.rustleNight, stolen: this.stolen,
+      roadOk: this.roadOk, bridges: this.bridges, raidT: this.raidT, hunterT: this.hunterT, camps: this.camps && this.camps.map(({ gang, x, y, z, beaten, seen }) => ({ gang, x, y, z, beaten, seen })), warT: this.warT, ambushT: this.ambushT, rustleNight: this.rustleNight, stolen: this.stolen,
     };
   }
   dispose() {
     const g = this.game;
     if (this.coach && this.coach.mesh) g.scene.remove(this.coach.mesh);
+    if (this.coach) this.coachHorses(this.coach, false);
     if (this.posters) g.scene.remove(this.posters);
     if (this.fire) g.scene.remove(this.fire.grp);
     if (this.contest) g.scene.remove(this.contest.grp || this.contest.flag);

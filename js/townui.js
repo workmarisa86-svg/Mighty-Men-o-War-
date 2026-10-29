@@ -6,6 +6,7 @@ import { hasTown } from './storage.js';
 import { M } from './modes.js';      // (Town Life's code is loaded once a town game starts)
 import { TRADES, GROUPS, KIT, COINS } from './trades.js';
 import { DESIGNS, DESIGN_IDS } from './houses.js';
+import { coords } from './hidden.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -263,8 +264,9 @@ export function installTownUI(UI) {
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend">${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
-    const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button></div>` + body, { wide: true, onBack: close });
+    const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
+    panel.querySelectorAll('[data-xy]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); T.coordMode = !T.coordMode; this.show('townmap', { from }); });
     panel.classList.add('mappanel');
     const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
     x.onclick = close; panel.appendChild(x);
@@ -327,6 +329,23 @@ export function installTownUI(UI) {
       const col = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
       c.fillStyle = col; c.beginPath(); c.arc(X, Z, 4.5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
       if (m.label) label(m.label, X, Z - 7 * dpr / zoom, 10);
+    }
+    // the coordinate grid (a Cartesian plane: X east, Y north, 0, 0 at the bottom-left corner)
+    if (T.coordMode) {
+      const step = zoom > 1 ? 16 : 32;
+      c.lineWidth = 1 * dpr / zoom; c.strokeStyle = 'rgba(255,255,255,0.28)';
+      c.font = `${9 * dpr / zoom}px Oswald, Arial`; c.fillStyle = '#fff';
+      for (let k = 0; k <= w.W; k += step) {
+        c.beginPath(); c.moveTo(k * sc, 0); c.lineTo(k * sc, w.D * sc); c.stroke();
+        c.beginPath(); c.moveTo(0, (w.D - k) * sc); c.lineTo(w.W * sc, (w.D - k) * sc); c.stroke();
+        if (k % (step * 2) === 0) { c.textAlign = 'center'; c.fillText(String(k), k * sc, (w.D - 3) * sc); c.textAlign = 'left'; c.fillText(String(k), 3 * sc, (w.D - k - 2) * sc); }
+      }
+      c.strokeStyle = 'rgba(255,230,120,0.9)'; c.lineWidth = 2 * dpr / zoom;
+      c.beginPath(); c.moveTo(0, w.D * sc); c.lineTo(w.W * sc, w.D * sc); c.moveTo(0, 0); c.lineTo(0, w.D * sc); c.stroke();
+      label('X →', (w.W - 14) * sc, (w.D - 8) * sc, 11); label('Y ↑', 12 * sc, 14 * sc, 11);
+      const me = coords(g.player.pos.x, g.player.pos.z, w);
+      label(t('tmap.youXY', me), g.player.pos.x * sc, (g.player.pos.z + 9) * sc, 10);
+      for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.cx, m.cz, w); label(`✕ (${C.x}, ${C.y})`, m.cx * sc, (m.cz + 4) * sc, 11); }
     }
     // whoever pays for your job: a gold ring
     const jt = T.jobTarget();
