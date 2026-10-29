@@ -4,8 +4,8 @@
 // town where smugglers' lanterns show at night. Each has a strongbox with
 // coins, goods, a note and sometimes a treasure map.
 //
-// A treasure map marks a circle on your town map; the chest lies somewhere
-// in it, 5 to 10 blocks under the ground. Dig it up for a fortune. Maps come
+// A treasure map marks the exact spot on your town map (X and Y); the chest
+// lies straight down under it, 5 to 10 blocks under the ground. Dig it up for a fortune. Maps come
 // from strongboxes, from outlaws' pockets, and from a shady stranger who
 // waits by the well at night.
 import * as THREE from 'three';
@@ -15,7 +15,6 @@ import { sfx } from './audio.js';
 
 const KIND_R = { cave: 10, mine: 10, cabin: 7, ghost: 22 };
 const MAP_PRICE = 60;
-const MAP_R = 14;                    // the circle drawn on the map
 
 export class Hidden {
   constructor(town, saved = {}) {
@@ -91,7 +90,7 @@ export class Hidden {
     g.app.openPanel('found', { title: t('hid.treasureTitle'), coins, items: [['gold', gold]], map: null, note: null, rich: true });
   }
   // a new treasure map: a chest buried 5 to 10 blocks deep somewhere out in
-  // the country, and a circle round it (not centred on it) on your map
+  // the country, marked exactly on your map (only the depth is left to find)
   newMap(from) {
     const g = this.game, w = g.world, V = this.town.village, r = Math.random;
     for (let k = 0; k < 200; k++) {
@@ -105,12 +104,11 @@ export class Hidden {
       if (w.get(x, top + 1, z) === B.WATER || this.places.some((p) => Math.hypot(p.x - x, p.z - z) < 30)) continue;
       const depth = 5 + Math.floor(r() * 6), y = top - depth;
       if (y < 4 || w.isLocked(x, y, z)) continue;
-      const off = r() * (MAP_R - 4), oa = r() * Math.PI * 2;
-      const m = { id: this.nextMap++, x, y, z, cx: x + Math.cos(oa) * off, cz: z + Math.sin(oa) * off, depth, from, found: false };
+      const m = { id: this.nextMap++, x, y, z, cx: x + 0.5, cz: z + 0.5, depth, from, found: false };
       w.set(x, y, z, B.SUPPLY); w.locked[w.idx(x, y, z)] = 1;
       this.maps.push(m);
-      const C = coords(m.cx, m.cz, w);
-      g.hud.bigMessage(t('hid.mapTitle'), t('hid.mapSubXY', { x: C.x, y: C.y, r: MAP_R }));
+      const C = coords(m.x, m.z, w);
+      g.hud.bigMessage(t('hid.mapTitle'), t('hid.mapSpot', C));
       sfx.done && sfx.done();
       return m;
     }
@@ -128,17 +126,26 @@ export class Hidden {
   blast(c) {
     const g = this.game, w = g.world, T = this.town, P = g.player.pos;
     T.boom(c.x, c.y, c.z);
-    let gold = 0;
+    const ore = {}, cells = [];
     // a ball about three blocks across: anything that can be broken goes (never what is locked)
     for (let dy = -1; dy <= 1; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
       if (dx * dx + dy * dy * 1.5 + dz * dz > 4.6) continue;
       const x = c.hx + dx, y = c.hy + dy, z = c.hz + dz, id = w.get(x, y, z);
       if (y < 2 || w.isLocked(x, y, z) || !blastable(id)) continue;
-      if (id === B.GOLD) gold++;
+      // iron, gold and charcoal blown loose go straight into your pack (not back into a filled crater)
+      if (ORE[id]) ore[ORE[id]] = (ore[ORE[id]] || 0) + 1;
+      else cells.push({ x, y, z, id });
       w.set(x, y, z, B.AIR);
     }
+    // remembered like a War crater, so it can be filled in again
+    if (cells.length > 1 && g.explosives) { g.explosives.craters.push({ cells, x: c.x, y: c.y, z: c.z, r: 3 }); if (g.explosives.craters.length > 40) g.explosives.craters.shift(); }
     T.frontier && T.frontier.blasted && T.frontier.blasted(c);       // (a stagecoach bridge blown?)
-    if (gold) { g.give('gold', gold); g.hud.dirtyHotbar = true; g.hud.toast(t('hid.goldOut', { n: gold }), 'pick'); }
+    const got = Object.entries(ore);
+    if (got.length) {
+      for (const [it, n] of got) g.give(it, n);
+      g.hud.dirtyHotbar = true;
+      g.hud.toast(t('hid.oreOut', { list: got.map(([it, n]) => `${n} ${t('item.' + it)}`).join(', ') }), 'pick');
+    }
     const pd = Math.hypot(P.x - c.x, P.y + 1 - c.y, P.z - c.z);
     if (pd < 3.5) g.damage(Math.round(40 * (1 - pd / 3.5)), 'blast', new THREE.Vector3(c.x, c.y, c.z));
     const p = this.place(c.place);
@@ -194,6 +201,9 @@ export class Hidden {
   options(p) {
     const out = [], v = this.stranger;
     if (v && v.alive && !(v.surrendered > 0) && Math.hypot(v.pos.x - p.x, v.pos.z - p.z) < 3) out.push({ a: 'stranger', label: t('ctx.stranger'), v, run: () => this.game.app.openPanel('stranger', { v }) });
+    // a crater close by (yours or anyone's): a button to fill it in, as in War
+    const E = this.game.explosives, cr = E && E.craters.length ? E.craterAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) : null;
+    if (cr) out.push({ a: 'fillcrater', label: t('use.fill'), run: () => { const n = E.fill(cr); if (n) { sfx.place(); this.game.hud.toast(t('use.filled', { n })); } } });
     return out;
   }
   // ---- the ghost town at night: lanterns and smugglers ---------------------------------------
@@ -268,7 +278,7 @@ export class Hidden {
   mapMarks() {
     const out = [];
     for (const p of this.places) if (this.seen.includes(p.id) || this.notes.some((n) => n.startsWith('note.') && p.kind === 'ghost' && n === 'note.cabin1')) out.push({ x: p.x, z: p.z, kind: 'place', place: p.kind, label: t('hid.name.' + p.kind) });
-    for (const m of this.maps) if (!m.found) out.push({ x: m.cx, z: m.cz, kind: 'treasure', r: MAP_R });
+    for (const m of this.maps) if (!m.found) out.push({ x: m.x + 0.5, z: m.z + 0.5, kind: 'treasure' });
     return out;
   }
   toSave() { return { seen: this.seen, opened: this.opened, maps: this.maps, notes: this.notes, strangerNight: this.strangerNight, caved: this.caved, nextMap: this.nextMap }; }
@@ -279,7 +289,9 @@ export class Hidden {
 // what dynamite can blow apart: anything solid that can be dug (never bedrock,
 // water, chests, or the headquarters' and town's locked blocks)
 const NO_BLAST = new Set([B.AIR, B.WATER, B.BEDROCK, B.SUPPLY, B.CAMPFIRE, B.FORT_WALL, B.FORT_DOOR, B.FORT_LAMP]);
+const ORE = { [B.IRON]: 'iron', [B.GOLD]: 'gold', [B.CHARCOAL]: 'charcoal' };
 function blastable(id) { return !!id && !NO_BLAST.has(id) && (SOLID[id] || id === B.LEAVES || id === B.LADDER || id === B.GLASS_BROKEN); }
 // the coordinates shown to you: X east, Y north (the map's bottom-left corner is 0, 0)
-export function coords(x, z, w) { return { x: Math.round(x), y: Math.round(w.D - 1 - z) }; }
+// the block column you stand in (or the chest is in): the same numbers for both
+export function coords(x, z, w) { return { x: Math.floor(x), y: w.D - 1 - Math.floor(z) }; }
 export { MAP_PRICE };

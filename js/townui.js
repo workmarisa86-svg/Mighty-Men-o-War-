@@ -325,7 +325,10 @@ export function installTownUI(UI) {
     for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks())) {
       const X = m.x * sc, Z = m.z * sc;
       c.lineWidth = 2 * dpr / zoom; c.strokeStyle = '#000';
-      if (m.kind === 'treasure') { c.setLineDash([4 * dpr / zoom, 3 * dpr / zoom]); c.strokeStyle = '#ffd040'; c.beginPath(); c.arc(X, Z, m.r * sc, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); label('✕ ' + t('tmap.treasure'), X, Z, 10); continue; }
+      if (m.kind === 'treasure') {      // the exact spot: a red cross (dig straight down there)
+        const k = 5 * dpr / zoom; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = '#000'; c.beginPath(); c.moveTo(X - k, Z - k); c.lineTo(X + k, Z + k); c.moveTo(X + k, Z - k); c.lineTo(X - k, Z + k); c.stroke();
+        c.lineWidth = 1.6 * dpr / zoom; c.strokeStyle = '#ff3a2a'; c.stroke(); label(t('tmap.treasure'), X, Z - k - 6 * dpr / zoom, 10); continue;
+      }
       const col = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
       c.fillStyle = col; c.beginPath(); c.arc(X, Z, 4.5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
       if (m.label) label(m.label, X, Z - 7 * dpr / zoom, 10);
@@ -345,7 +348,7 @@ export function installTownUI(UI) {
       label('X →', (w.W - 14) * sc, (w.D - 8) * sc, 11); label('Y ↑', 12 * sc, 14 * sc, 11);
       const me = coords(g.player.pos.x, g.player.pos.z, w);
       label(t('tmap.youXY', me), g.player.pos.x * sc, (g.player.pos.z + 9) * sc, 10);
-      for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.cx, m.cz, w); label(`✕ (${C.x}, ${C.y})`, m.cx * sc, (m.cz + 4) * sc, 11); }
+      for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.x, m.z, w); label(`(${C.x}, ${C.y})`, (m.x + 0.5) * sc, (m.z + 6) * sc, 11); }
     }
     // whoever pays for your job: a gold ring
     const jt = T.jobTarget();

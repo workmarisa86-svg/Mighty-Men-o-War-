@@ -436,10 +436,10 @@ const STR = {
     // ---- 2.0: hidden places and treasure
     'item.tmap': 'Treasure map', 'item.note': 'Note', 'tmap.treasure': 'treasure', 'tmap.b.bank': 'Bank', 'tmap.b.saloon': 'Saloon',
     'hid.empty': 'Empty strongbox', 'hid.emptyMsg': 'Nothing left in it.', 'hid.open': 'Open the strongbox', 'hid.openTreasure': 'Open the treasure chest!',
-    'hid.blast': 'Blast the rock', 'hid.blastAny': 'Blow it up', 'hid.lit': 'Fuse lit! Get back!', 'hid.goldOut': '+{n} gold from the blast',
+    'hid.blast': 'Blast the rock', 'hid.blastAny': 'Blow it up', 'hid.lit': 'Fuse lit! Get back!', 'hid.goldOut': '+{n} gold from the blast', 'hid.oreOut': 'From the blast: {list}',
     'hid.treasureTitle': 'Buried treasure!', 'hid.rich': 'You are rich! The chest is full of coins and gold bars.',
-    'hid.mapTitle': 'A treasure map!', 'hid.mapSub': 'A yellow circle on your town map: the chest is buried in it, 5 to 10 blocks down. Bring a shovel.',
-    'hid.aMap': 'A treasure map (marked on your town map)', 'hid.mapHow': 'Open the town map (pause menu or the minimap): the treasure is somewhere in the yellow circle, 5 to 10 blocks under the ground.',
+    'hid.mapTitle': 'A treasure map!', 'hid.mapSub': 'A red cross on your town map marks the exact spot: the chest is 5 to 10 blocks straight down. Bring a shovel.',
+    'hid.aMap': 'A treasure map (marked on your town map)', 'hid.mapHow': 'Open the town map (pause menu or the minimap): a red cross marks the exact spot; the treasure is 5 to 10 blocks straight down.',
     'hid.caveTitle': 'Cave-in!', 'hid.caveSub': 'The old timbers gave way and the roof came down. Dig your way out with the shovel.', 'hid.caveFar': 'A rumble from the mine: the roof came down.',
     'hid.creak': 'The old timbers creak over your head...',
     'hid.strangerName': 'A stranger', 'hid.strangerTitle': 'The stranger at the well', 'hid.strangerNoMore': 'No more maps tonight, friend.',
@@ -544,7 +544,7 @@ const STR = {
     'vw.pullUp': 'PULL UP!', 'vw.edge': 'TURNING BACK', 'vw.g.speed': 'AIRSPEED', 'vw.g.alt': 'ALTITUDE', 'vw.g.horizon': 'HORIZON', 'vw.g.ammo': 'AMMO', 'vw.g.damage': 'DAMAGE',
     'vw.won': 'Every wave beaten. Victory!', 'vw.tankLost': 'Your tank was knocked out.', 'vw.shotDown': 'You were shot down.', 'vw.crashed': 'You flew into the ground.',
     'tmap.coords': 'Coordinates', 'tmap.youXY': 'You: X {x}, Y {y}', 'fr.takingsTitle': 'Your businesses paid',
-    'hid.mapSubXY': 'The chest is buried within {r} blocks of X {x}, Y {y}, 5 to 10 blocks down. Open the town map and switch on Coordinates.', 'hid.mapAt': 'Treasure within {r} blocks of X {x}, Y {y}.',
+    'hid.mapSubXY': 'The chest is buried within {r} blocks of X {x}, Y {y}, 5 to 10 blocks down. Open the town map and switch on Coordinates.', 'hid.mapAt': 'Treasure within {r} blocks of X {x}, Y {y}.', 'hid.mapSpot': 'The chest is buried right under X {x}, Y {y}: stand there (your X and Y show at the top of the screen) and dig straight down, 5 to 10 blocks. The map marks the spot.', 'hid.mapSpotAt': 'Treasure buried right under X {x}, Y {y}: dig straight down.',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -982,10 +982,10 @@ const STR = {
     // ---- 2.0: lugares ocultos y tesoros
     'item.tmap': 'Mapa del tesoro', 'item.note': 'Nota', 'tmap.treasure': 'tesoro', 'tmap.b.bank': 'Banco', 'tmap.b.saloon': 'Saloon',
     'hid.empty': 'Cofre vacío', 'hid.emptyMsg': 'No queda nada dentro.', 'hid.open': 'Abrir el cofre', 'hid.openTreasure': '¡Abrir el cofre del tesoro!',
-    'hid.blast': 'Volar la roca', 'hid.blastAny': 'Volarlo', 'hid.lit': '¡Mecha encendida! ¡Atrás!', 'hid.goldOut': '+{n} de oro de la voladura',
+    'hid.blast': 'Volar la roca', 'hid.blastAny': 'Volarlo', 'hid.lit': '¡Mecha encendida! ¡Atrás!', 'hid.goldOut': '+{n} de oro de la voladura', 'hid.oreOut': 'De la voladura: {list}',
     'hid.treasureTitle': '¡Tesoro enterrado!', 'hid.rich': '¡Eres rico! El cofre está lleno de monedas y lingotes de oro.',
-    'hid.mapTitle': '¡Un mapa del tesoro!', 'hid.mapSub': 'Un círculo amarillo en tu mapa del pueblo: el cofre está enterrado dentro, de 5 a 10 bloques bajo tierra. Lleva una pala.',
-    'hid.aMap': 'Un mapa del tesoro (marcado en tu mapa del pueblo)', 'hid.mapHow': 'Abre el mapa del pueblo (menú de pausa o el minimapa): el tesoro está en algún lugar del círculo amarillo, de 5 a 10 bloques bajo tierra.',
+    'hid.mapTitle': '¡Un mapa del tesoro!', 'hid.mapSub': 'Una cruz roja en tu mapa del pueblo marca el sitio exacto: el cofre está de 5 a 10 bloques recto hacia abajo. Lleva una pala.',
+    'hid.aMap': 'Un mapa del tesoro (marcado en tu mapa del pueblo)', 'hid.mapHow': 'Abre el mapa del pueblo (menú de pausa o el minimapa): una cruz roja marca el sitio exacto; el tesoro está de 5 a 10 bloques recto hacia abajo.',
     'hid.caveTitle': '¡Derrumbe!', 'hid.caveSub': 'Las viejas vigas cedieron y el techo se vino abajo. Cava para salir con la pala.', 'hid.caveFar': 'Un estruendo en la mina: el techo se derrumbó.',
     'hid.creak': 'Las viejas vigas crujen sobre tu cabeza...',
     'hid.strangerName': 'Un forastero', 'hid.strangerTitle': 'El forastero del pozo', 'hid.strangerNoMore': 'No hay más mapas esta noche, amigo.',
@@ -1087,7 +1087,7 @@ const STR = {
     'vw.pullUp': '¡ARRIBA!', 'vw.edge': 'DANDO LA VUELTA', 'vw.g.speed': 'VELOCIDAD', 'vw.g.alt': 'ALTITUD', 'vw.g.horizon': 'HORIZONTE', 'vw.g.ammo': 'MUNICIÓN', 'vw.g.damage': 'DAÑOS',
     'vw.won': 'Todas las oleadas vencidas. ¡Victoria!', 'vw.tankLost': 'Han destruido tu tanque.', 'vw.shotDown': 'Te han derribado.', 'vw.crashed': 'Te has estrellado contra el suelo.',
     'tmap.coords': 'Coordenadas', 'tmap.youXY': 'Tú: X {x}, Y {y}', 'fr.takingsTitle': 'Tus negocios han pagado',
-    'hid.mapSubXY': 'El cofre está enterrado a menos de {r} bloques de X {x}, Y {y}, de 5 a 10 bloques bajo tierra. Abre el mapa del pueblo y activa Coordenadas.', 'hid.mapAt': 'Tesoro a menos de {r} bloques de X {x}, Y {y}.',
+    'hid.mapSubXY': 'El cofre está enterrado a menos de {r} bloques de X {x}, Y {y}, de 5 a 10 bloques bajo tierra. Abre el mapa del pueblo y activa Coordenadas.', 'hid.mapAt': 'Tesoro a menos de {r} bloques de X {x}, Y {y}.', 'hid.mapSpot': 'El cofre está enterrado justo debajo de X {x}, Y {y}: ponte ahí (tu X e Y salen arriba en la pantalla) y cava recto hacia abajo, de 5 a 10 bloques. El mapa marca el sitio.', 'hid.mapSpotAt': 'Tesoro enterrado justo debajo de X {x}, Y {y}: cava recto hacia abajo.',
   },
 };
 
