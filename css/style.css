@@ -812,3 +812,4 @@ body.vwar-on [data-btn=jump], body.vwar-on [data-btn=crouch], body.vwar-on [data
 .vw-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #ffb040; box-shadow: 0 0 3px #000; }
 .vw-dot.on { background: #7aff70; }
 body.vwar-on.vw-tank [data-btn=light] { display: inline-block !important; }
+#townbar .xy { color: #bfe8ff; }

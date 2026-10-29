@@ -49,10 +49,11 @@ export class Hidden {
       const m = this.maps.find((q) => !q.found && q.x === hit.x && q.y === hit.y && q.z === hit.z);
       if (m) return { a: 'treasure', label: t('hid.openTreasure'), run: () => this.openTreasure(m) };
     }
-    // dynamite against the rock in a mine or a cave: blast it (in a bad mine the roof comes down)
-    if (sel === 'dynamite' && (hit.id === B.STONE || hit.id === B.GOLD || hit.id === B.IRON || hit.id === B.RUBBLE) && !g.world.isLocked(hit.x, hit.y, hit.z)) {
-      const pl = this.places.find((q) => (q.kind === 'mine' || q.kind === 'cave') && this.near(q, hit, 30));
-      if (pl) return { a: 'blast', label: t('hid.blast'), run: () => this.lightRock(hit, pl) };
+    // dynamite against any block that can be broken (rock, earth, wood, a bridge,
+    // what you built): blast it. In a bad mine the roof comes down.
+    if (sel === 'dynamite' && blastable(hit.id) && !g.world.isLocked(hit.x, hit.y, hit.z)) {
+      const pl = this.places.find((q) => (q.kind === 'mine' || q.kind === 'cave') && this.near(q, hit, 30)) || null;
+      return { a: 'blast', label: t(pl ? 'hid.blast' : 'hid.blastAny'), run: () => this.lightRock(hit, pl) };
     }
     return null;
   }
@@ -108,7 +109,8 @@ export class Hidden {
       const m = { id: this.nextMap++, x, y, z, cx: x + Math.cos(oa) * off, cz: z + Math.sin(oa) * off, depth, from, found: false };
       w.set(x, y, z, B.SUPPLY); w.locked[w.idx(x, y, z)] = 1;
       this.maps.push(m);
-      g.hud.bigMessage(t('hid.mapTitle'), t('hid.mapSub'));
+      const C = coords(m.cx, m.cz, w);
+      g.hud.bigMessage(t('hid.mapTitle'), t('hid.mapSubXY', { x: C.x, y: C.y, r: MAP_R }));
       sfx.done && sfx.done();
       return m;
     }
@@ -120,19 +122,22 @@ export class Hidden {
     const g = this.game;
     if (!g.has('dynamite')) return;
     g.take('dynamite', 1); g.hud.dirtyHotbar = true;
-    this.town.charges.push({ rock: true, place: place.id, t: 3, hx: hit.x, hy: hit.y, hz: hit.z, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
+    this.town.charges.push({ rock: true, place: place ? place.id : null, t: 3, hx: hit.x, hy: hit.y, hz: hit.z, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
     g.hud.alert(t('hid.lit')); sfx.alert();
   }
   blast(c) {
     const g = this.game, w = g.world, T = this.town, P = g.player.pos;
     T.boom(c.x, c.y, c.z);
     let gold = 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    // a ball about three blocks across: anything that can be broken goes (never what is locked)
+    for (let dy = -1; dy <= 1; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      if (dx * dx + dy * dy * 1.5 + dz * dz > 4.6) continue;
       const x = c.hx + dx, y = c.hy + dy, z = c.hz + dz, id = w.get(x, y, z);
-      if (y < 2 || w.isLocked(x, y, z) || !(id === B.STONE || id === B.GOLD || id === B.IRON || id === B.RUBBLE || id === B.DIRT)) continue;
+      if (y < 2 || w.isLocked(x, y, z) || !blastable(id)) continue;
       if (id === B.GOLD) gold++;
       w.set(x, y, z, B.AIR);
     }
+    T.frontier && T.frontier.blasted && T.frontier.blasted(c);       // (a stagecoach bridge blown?)
     if (gold) { g.give('gold', gold); g.hud.dirtyHotbar = true; g.hud.toast(t('hid.goldOut', { n: gold }), 'pick'); }
     const pd = Math.hypot(P.x - c.x, P.y + 1 - c.y, P.z - c.z);
     if (pd < 3.5) g.damage(Math.round(40 * (1 - pd / 3.5)), 'blast', new THREE.Vector3(c.x, c.y, c.z));
@@ -271,4 +276,10 @@ export class Hidden {
     if (this.lamps) { this.game.scene.remove(this.lamps); this.lamps = null; }
   }
 }
+// what dynamite can blow apart: anything solid that can be dug (never bedrock,
+// water, chests, or the headquarters' and town's locked blocks)
+const NO_BLAST = new Set([B.AIR, B.WATER, B.BEDROCK, B.SUPPLY, B.CAMPFIRE, B.FORT_WALL, B.FORT_DOOR, B.FORT_LAMP]);
+function blastable(id) { return !!id && !NO_BLAST.has(id) && (SOLID[id] || id === B.LEAVES || id === B.LADDER || id === B.GLASS_BROKEN); }
+// the coordinates shown to you: X east, Y north (the map's bottom-left corner is 0, 0)
+export function coords(x, z, w) { return { x: Math.round(x), y: Math.round(w.D - 1 - z) }; }
 export { MAP_PRICE };

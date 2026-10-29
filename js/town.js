@@ -20,7 +20,7 @@ import { Duels } from './duel.js';
 import { Pens } from './pens.js';
 import { Trades } from './trades.js';
 import { Houses } from './houses.js';
-import { Hidden } from './hidden.js';
+import { Hidden, coords } from './hidden.js';
 import { Frontier } from './frontier.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
@@ -102,6 +102,7 @@ export class TownLife {
     this.trades = new Trades(this, saved.trades || {});
     this.houses = new Houses(this, saved.houses || {});
     this.hidden = new Hidden(this, saved.hidden || {});
+    this.coordMode = !!saved.coordMode;          // the map's coordinate grid (and your X, Y on screen)
     this.frontier = new Frontier(this, saved.frontier || {});
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
@@ -904,7 +905,7 @@ export class TownLife {
   }
 
   // ---- doors: households open their own doors; you knock -----------------------------
-  doorAt(x, y, z) { return this.village.buildings.find((b) => b.type === 'house' && b.doorCells && b.doorCells.some(([X, Y, Z]) => X === x && Y === y && Z === z)) || null; }
+  doorAt(x, y, z) { return this.village.buildings.find((b) => b.type === 'house' && !b.taken && b.doorCells && b.doorCells.some(([X, Y, Z]) => X === x && Y === y && Z === z)) || null; }
   knock(b) {
     const g = this.game, F = this.folk;
     sfx.thump(); setTimeout(() => sfx.thump(), 180);
@@ -989,7 +990,7 @@ export class TownLife {
     this.doorT = 0.25;
     const now = performance.now() / 1000;
     for (const b of this.village.buildings) {
-      if (b.type !== 'house' || !b.doorCells) continue;
+      if (b.type !== 'house' || !b.doorCells || b.taken) continue;      // (a house you took has your own plank door: houses.js)
       if (Math.hypot(b.inside.x - P.x, b.inside.z - P.z) > 90) continue;
       const near = (p, r = 2.4) => Math.hypot(p.x - b.door.x, p.z - b.door.z) < r || Math.hypot(p.x - b.doorIn.x, p.z - b.doorIn.z) < r;
       const broken = b.broken && b.broken > g.time;
@@ -1040,7 +1041,7 @@ export class TownLife {
       const [x, , z] = this.jailB.cell.door[1] || this.jailB.cell.door[0];
       if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 2.4) out.push({ a: 'pickgang', label: t('ctx.pickGang') });
     }
-    out.push(...this.hidden.options(p), ...this.frontier.options(p));
+    out.push(...this.houses.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
@@ -1207,7 +1208,8 @@ export class TownLife {
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
       (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '') +
       (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '') +
-      (this.frontier.hudText() ? `<span class="job">${this.frontier.hudText()}</span>` : '');
+      (this.frontier.hudText() ? `<span class="job">${this.frontier.hudText()}</span>` : '') +
+      (this.coordMode || this.hidden.maps.some((m) => !m.found) ? `<span class="xy">${t('tmap.youXY', coords(this.game.player.pos.x, this.game.player.pos.z, this.game.world))}</span>` : '');
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
@@ -1226,7 +1228,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), broken: this.broken,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), broken: this.broken, coordMode: this.coordMode,
       },
     };
   }

@@ -293,6 +293,27 @@ export class Houses {
     this.left = left; this.total = this.bpList.length;
     if (left === 0) this.finishBlueprint();
   }
+  // standing in or by the blueprint (3 blocks round it)
+  nearBp(p) {
+    if (!this.bp || !this.bpList || !this.bpList.length) return false;
+    let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+    for (const q of this.bpList) { x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); z0 = Math.min(z0, q.z); z1 = Math.max(z1, q.z); }
+    return p.x > x0 - 3 && p.x < x1 + 4 && p.z > z0 - 3 && p.z < z1 + 4;
+  }
+  options(p) {
+    if (!this.nearBp(p)) return [];
+    return [{ a: 'finishhouse', label: t('house.finish'), run: () => this.finishAsIs() }];
+  }
+  // happy with it as it stands: the house is done (missing blocks stay missing), so you can buy the next one
+  finishAsIs() {
+    const g = this.game;
+    if (!this.bp) return;
+    if (!this.sureT || Date.now() - this.sureT > 4000) { this.sureT = Date.now(); g.hud.toast(t('house.finishSure')); return; }
+    this.sureT = 0;
+    this.finishBlueprint();
+    g.hud.bigMessage(t('house.finishedTitle'), t('house.finishedSub'));
+    sfx.coins();
+  }
   finishBlueprint() {
     const g = this.game, bp = this.bp;
     const h = { id: 'h' + Date.now().toString(36), design: bp.design, x: bp.x, y: bp.y, z: bp.z, rot: bp.rot, lot: null };

@@ -5,7 +5,7 @@
 import { t } from './i18n.js';
 import { itemIcon } from './items.js';
 import { BIZ } from './frontier.js';
-import { MAP_PRICE } from './hidden.js';
+import { MAP_PRICE, coords } from './hidden.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -21,7 +21,7 @@ export function installFrontierUI(UI) {
       .concat(map ? [`<div class="shop-row"><img src="${itemIcon('tmap')}" alt=""><span>${t('hid.aMap')}</span><b></b></div>`] : []).join('');
     const body = `${rich ? `<p class="say">${t('hid.rich')}</p>` : ''}<div class="shop">${rows}</div>
       ${note ? `<div class="note-paper"><img src="${itemIcon('note')}" alt=""><p>${esc(t(note))}</p></div>` : ''}
-      ${map ? `<p class="muted small">${t('hid.mapHow')}</p>` : ''}`;
+      ${map ? `<p class="say">${t('hid.mapAt', { ...coords(map.cx, map.cz, this.app.game.world), r: 14 })}</p><p class="muted small">${t('hid.mapHow')}</p>` : ''}`;
     this.panel(title, body, { onBack: () => this.app.closePanel() });
   };
 
