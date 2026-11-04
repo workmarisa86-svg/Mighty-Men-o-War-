@@ -288,7 +288,7 @@ export class Hidden {
 }
 // what dynamite can blow apart: anything solid that can be dug (never bedrock,
 // water, chests, or the headquarters' and town's locked blocks)
-const NO_BLAST = new Set([B.AIR, B.WATER, B.BEDROCK, B.SUPPLY, B.CAMPFIRE, B.FORT_WALL, B.FORT_DOOR, B.FORT_LAMP]);
+const NO_BLAST = new Set([B.AIR, B.WATER, B.BEDROCK, B.SUPPLY, B.CHEST, B.CAMPFIRE, B.FORT_WALL, B.FORT_DOOR, B.FORT_LAMP]);
 const ORE = { [B.IRON]: 'iron', [B.GOLD]: 'gold', [B.CHARCOAL]: 'charcoal' };
 function blastable(id) { return !!id && !NO_BLAST.has(id) && (SOLID[id] || id === B.LEAVES || id === B.LADDER || id === B.GLASS_BROKEN); }
 // the coordinates shown to you: X east, Y north (the map's bottom-left corner is 0, 0)

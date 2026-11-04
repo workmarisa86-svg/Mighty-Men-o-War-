@@ -459,8 +459,8 @@ export class UI {
   }
 
   // Cabin storage chest: choose what to carry and what to leave behind.
-  r_chest() {
-    const g = this.app.game, C = g.cabin;
+  r_chest({ box } = {}) {
+    const g = this.app.game, C = box && g.town ? g.town.chestStore(box) : g.cabin;      // (a chest you bought and placed, or the house chest)
     const ids = Object.keys(ITEMS).filter((id) => !ITEMS[id].tool && !ITEMS[id].gear && !ITEMS[id].armor);
     const carry = ids.filter((id) => (g.inv.counts[id] || 0) > 0), kept = ids.filter((id) => (C.chest.counts[id] || 0) > 0);
     const row = (id, n, act) => `<div class="chest-row"><img src="${itemIcon(id)}" alt=""><span>${t('item.' + id)}</span><b>${n}</b>

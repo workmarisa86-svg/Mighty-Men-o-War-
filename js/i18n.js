@@ -545,6 +545,17 @@ const STR = {
     'vw.won': 'Every wave beaten. Victory!', 'vw.tankLost': 'Your tank was knocked out.', 'vw.shotDown': 'You were shot down.', 'vw.crashed': 'You flew into the ground.',
     'tmap.coords': 'Coordinates', 'tmap.youXY': 'You: X {x}, Y {y}', 'fr.takingsTitle': 'Your businesses paid',
     'hid.mapSubXY': 'The chest is buried within {r} blocks of X {x}, Y {y}, 5 to 10 blocks down. Open the town map and switch on Coordinates.', 'hid.mapAt': 'Treasure within {r} blocks of X {x}, Y {y}.', 'hid.mapSpot': 'The chest is buried right under X {x}, Y {y}: stand there (your X and Y show at the top of the screen) and dig straight down, 5 to 10 blocks. The map marks the spot.', 'hid.mapSpotAt': 'Treasure buried right under X {x}, Y {y}: dig straight down.',
+    // 2.5: robbers, chests, the law
+    'item.chest': 'Chest', 'say.helpRob': 'Hang on, I\'ve got you covered!', 'say.helpRobDone': 'Got him. Robbing folks in our town!',
+    'rob.coming': '{gang} riders are coming your way', 'rob.handsUp': 'Hands up! Your money, nice and easy.', 'rob.last': 'Don\'t try nothing. Last chance!',
+    'rob.thanks': 'Pleasure doing business.', 'rob.took': '{gang} took your {n} coins', 'rob.draw': 'He wants it the hard way!',
+    'rob.beaten': 'Robbers beaten', 'rob.beatenSub': '{gang} picked the wrong outlaw. Their pockets are yours to search.',
+    'rob.lostAll': 'Robbed', 'rob.lostAllSub': '{gang} left you for dead and took everything you carried ({n} coins and all your things). Kill them before they get away and you can take it back.',
+    'rob.raidComing': '{gang} are heading for your house!', 'rob.dynamite': 'Door\'s shut. Light the fuse!', 'rob.looted': '{gang} looted your house: {list}',
+    'rob.raidedTitle': 'Your house was robbed', 'rob.raidedSub': 'While you were away, {gang} blew your door and took: {list}.', 'rob.raidBeatenSub': '{gang} came for your house and paid for it.',
+    'rob.raidFight': '{gang} at your house: they\'ve seen you!', 'rob.nothing': 'nothing (your chests were empty)',
+    'law.windowFine': 'Disturbing the peace: the sheriff fines you {n} coins for the windows', 'law.windowJail': 'Disturbing the peace: {n} coins for the windows and you can\'t pay. The sheriff is coming to take you in for a night.',
+    'jail.coinsBack': '{n} coins (the money you stole, and your fine)',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1088,6 +1099,17 @@ const STR = {
     'vw.won': 'Todas las oleadas vencidas. ¡Victoria!', 'vw.tankLost': 'Han destruido tu tanque.', 'vw.shotDown': 'Te han derribado.', 'vw.crashed': 'Te has estrellado contra el suelo.',
     'tmap.coords': 'Coordenadas', 'tmap.youXY': 'Tú: X {x}, Y {y}', 'fr.takingsTitle': 'Tus negocios han pagado',
     'hid.mapSubXY': 'El cofre está enterrado a menos de {r} bloques de X {x}, Y {y}, de 5 a 10 bloques bajo tierra. Abre el mapa del pueblo y activa Coordenadas.', 'hid.mapAt': 'Tesoro a menos de {r} bloques de X {x}, Y {y}.', 'hid.mapSpot': 'El cofre está enterrado justo debajo de X {x}, Y {y}: ponte ahí (tu X e Y salen arriba en la pantalla) y cava recto hacia abajo, de 5 a 10 bloques. El mapa marca el sitio.', 'hid.mapSpotAt': 'Tesoro enterrado justo debajo de X {x}, Y {y}: cava recto hacia abajo.',
+    // 2.5: ladrones, baúles, la ley
+    'item.chest': 'Baúl', 'say.helpRob': '¡Aguanta, te cubro!', 'say.helpRobDone': 'Lo tengo. ¡Robar a la gente de nuestro pueblo!',
+    'rob.coming': 'Jinetes de {gang} vienen hacia ti', 'rob.handsUp': '¡Manos arriba! Tu dinero, despacito.', 'rob.last': 'Ni se te ocurra. ¡Última oportunidad!',
+    'rob.thanks': 'Un placer hacer negocios.', 'rob.took': '{gang} se llevaron tus {n} monedas', 'rob.draw': '¡Lo quiere por las malas!',
+    'rob.beaten': 'Ladrones derrotados', 'rob.beatenSub': '{gang} eligieron al forajido equivocado. Sus bolsillos son tuyos.',
+    'rob.lostAll': 'Robado', 'rob.lostAllSub': '{gang} te dieron por muerto y se llevaron todo lo que llevabas ({n} monedas y todas tus cosas). Mátalos antes de que escapen y podrás recuperarlo.',
+    'rob.raidComing': '¡{gang} van hacia tu casa!', 'rob.dynamite': 'La puerta está cerrada. ¡Enciende la mecha!', 'rob.looted': '{gang} saquearon tu casa: {list}',
+    'rob.raidedTitle': 'Han robado tu casa', 'rob.raidedSub': 'Mientras no estabas, {gang} volaron tu puerta y se llevaron: {list}.', 'rob.raidBeatenSub': '{gang} vinieron a por tu casa y lo pagaron caro.',
+    'rob.raidFight': '{gang} en tu casa: ¡te han visto!', 'rob.nothing': 'nada (tus baúles estaban vacíos)',
+    'law.windowFine': 'Alterar el orden: el sheriff te multa con {n} monedas por las ventanas', 'law.windowJail': 'Alterar el orden: {n} monedas por las ventanas y no puedes pagar. El sheriff viene a encerrarte una noche.',
+    'jail.coinsBack': '{n} monedas (el dinero que robaste y tu multa)',
   },
 };
 

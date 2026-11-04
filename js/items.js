@@ -42,6 +42,7 @@ export const ITEMS = {
   gate: { block: B.GATE, tiles: ['gate', 'gate'] },
   door: { block: B.DOOR, tiles: ['pdoor', 'pdoor'] },
   ladder: { block: B.LADDER, tiles: ['ladder', 'ladder'] },
+  chest: { block: B.CHEST, tiles: ['supply_top', 'supply'] },     // keeps things where you put it down
   seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
   wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
