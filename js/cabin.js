@@ -7,7 +7,8 @@ export class Cabin {
   constructor(game, saved) {
     this.game = game;
     this.site = game.world.sites.find((s) => s.type === 'cabin') || null;
-    this.chest = saved && saved.chest ? saved.chest : { counts: {} };
+    // (saved as the chest itself, { counts }; older code looked for saved.chest and so always started empty)
+    this.chest = saved && saved.counts ? saved : saved && saved.chest ? saved.chest : { counts: {} };
     if (!this.site || !this.site.bed) { this.site = null; return; }
     // the bed: a low wooden frame, a straw mattress and a grey blanket
     const b = this.site.bed;

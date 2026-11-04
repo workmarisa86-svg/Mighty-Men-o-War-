@@ -342,7 +342,10 @@ export class Frontier {
       if (!left.length) {
         // the camp is broken: their loot is yours
         c.beaten = g.time; c.men = null;
-        const pay = 90 + Math.floor(Math.random() * 90);
+        let pay = 90 + Math.floor(Math.random() * 90);
+        // what they stole from you (robbers.js) is in their tents: it is yours again
+        const S = c.stash;
+        if (S) { pay += S.coins || 0; for (const [id, n] of Object.entries(S.items || {})) if (n > 0) g.give(id, n, true); g.hud.dirtyHotbar = true; if (Object.keys(S.items || {}).length) g.hud.toast(t('rob.gotBack'), 'pick'); c.stash = null; }
         T.money += pay; this.st.rivalsBeaten++; this.st.campsBroken = (this.st.campsBroken || 0) + 1;
         T.trades.rep(T.trades.trade === 'outlaw' ? 'outlaws' : 'law', 6);
         g.hud.bigMessage(t('fr.campWon', { gang: t('fr.gangs.' + c.gang) }), t('fr.campWonSub', { n: pay }));
@@ -1182,7 +1185,7 @@ export class Frontier {
   toSave() {
     return {
       done: this.done, bank: this.bank, biz: this.biz, st: this.st, q: this.q, look: this.look, hands: this.hands, ev: this.ev, foals: this.foals,
-      roadOk: this.roadOk, bridges: this.bridges, raidT: this.raidT, hunterT: this.hunterT, camps: this.camps && this.camps.map(({ gang, x, y, z, beaten, seen }) => ({ gang, x, y, z, beaten, seen })), warT: this.warT, ambushT: this.ambushT, rustleNight: this.rustleNight, stolen: this.stolen,
+      roadOk: this.roadOk, bridges: this.bridges, raidT: this.raidT, hunterT: this.hunterT, camps: this.camps && this.camps.map(({ gang, x, y, z, beaten, seen, stash }) => ({ gang, x, y, z, beaten, seen, stash })), warT: this.warT, ambushT: this.ambushT, rustleNight: this.rustleNight, stolen: this.stolen,
     };
   }
   dispose() {

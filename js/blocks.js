@@ -82,7 +82,7 @@ def(B.MEDICAL, { name: 'medical', tiles: { top: 'med_top', side: 'med_side', bot
 def(B.ARMORY, { name: 'armory', tiles: { top: 'planks', side: 'rack', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.4, 0.32, 0.22] });
 def(B.MAPTABLE, { name: 'maptable', tiles: { top: 'map_top', side: 'planks', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.6, 0.55, 0.42] });
 def(B.HDOOR, { name: 'hdoor', tiles: { top: 'planks', side: 'door', bottom: 'planks' }, hard: Infinity, color: [0.42, 0.3, 0.2] });
-def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'wood', color: [0.42, 0.32, 0.2] });
+def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'ladder', color: [0.42, 0.32, 0.2] });     // (dug up: the ladder comes back)
 def(B.CHEST, { name: 'chest', tiles: { top: 'supply_top', side: 'supply', bottom: 'planks' }, hard: 1.2, drop: 'chest', color: [0.45, 0.4, 0.28] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 

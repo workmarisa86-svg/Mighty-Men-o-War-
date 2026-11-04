@@ -44,7 +44,7 @@ export class Hidden {
     if (!hit) return null;
     if (hit.id === B.SUPPLY) {
       const p = this.places.find((q) => q.chest && q.chest.x === hit.x && q.chest.y === hit.y && q.chest.z === hit.z);
-      if (p) return this.opened.includes(p.id) ? { a: 'empty', label: t('hid.empty'), run: () => g.hud.toast(t('hid.emptyMsg')) } : { a: 'strongbox', label: t('hid.open'), run: () => this.openBox(p) };
+      if (p) return this.opened.includes(p.id) ? { a: 'takebox', label: t('hid.takeBox'), run: () => this.takeBox(p) } : { a: 'strongbox', label: t('hid.open'), run: () => this.openBox(p) };
       const m = this.maps.find((q) => !q.found && q.x === hit.x && q.y === hit.y && q.z === hit.z);
       if (m) return { a: 'treasure', label: t('hid.openTreasure'), run: () => this.openTreasure(m) };
     }
@@ -76,6 +76,14 @@ export class Hidden {
     g.hud.dirtyHotbar = true; sfx.coins();
     T.frontier && T.frontier.event('box', p);
     g.app.openPanel('found', { title: t('hid.box.' + p.kind), coins: C.coins, items: C.items, map, note: C.note });
+  }
+  // an emptied strongbox: carry it off, it is a chest of your own now
+  takeBox(p) {
+    const g = this.game, w = g.world, c = p.chest;
+    if (w.get(c.x, c.y, c.z) !== B.SUPPLY) return;
+    w.locked[w.idx(c.x, c.y, c.z)] = 0; w.set(c.x, c.y, c.z, B.AIR);
+    g.give('chest', 1); g.hud.dirtyHotbar = true;
+    g.hud.toast(t('hid.tookBox'), 'pick'); sfx.place();
   }
   openTreasure(m) {
     const g = this.game, T = this.town, w = g.world;
