@@ -22,6 +22,7 @@ import { Trades } from './trades.js';
 import { Houses } from './houses.js';
 import { Hidden, coords } from './hidden.js';
 import { Frontier } from './frontier.js';
+import { Robbers } from './robbers.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
@@ -32,14 +33,16 @@ export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 export const SHOPS = {
   general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
     // building materials, ready made (crafting them yourself is cheaper)
-    wood: 2, stone: 2, brick: 3, glass: 3, thatch: 2, charcoal: 2, fence: 2, gate: 6, door: 9, ladder: 3 },
+    wood: 2, stone: 2, brick: 3, glass: 3, thatch: 2, charcoal: 2, fence: 2, gate: 6, door: 9, ladder: 3, chest: 12 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
   butcher: { sells: { meat_cooked: 6, meat_raw: 4, fish_cooked: 6 }, buys: { meat_raw: 3, meat_cooked: 4, fish: 3, big_fish: 12, fish_cooked: 5 } },
   hunting: { sells: { rod: 6, knife: 10, trap: 9, revolver: 45, shotgun: 55, lever: 80, dynamite: 12 }, buys: { hide: 7, bear_hide: 65, wolf_hide: 18, meat_raw: 2 } },
   stable: { sells: { horse: 60 }, buys: { wheat: 3 } },
   market: { sells: { chicken: 12, piglet: 22, calf: 40, egg: 3, milk: 5, bread: 4, seed_wheat: 2 }, buys: { egg: 2, milk: 4, wheat: 3, carrot: 3, cabbage: 4, bread: 2, fish: 3, big_fish: 10 } },
 };
-const BOUNTY = { assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40, escape: 50 };
+const PANE = 15;               // what a broken window costs you (the sheriff's fine)
+const BIG_FINE = 150;          // a body found: jail and this fine on top
+const BOUNTY = { windows: 10, assault: 20, murder: 100, theft: 10, livestock: 30, resist: 30, holdup: 40, robbery: 60, breakin: 35, horsetheft: 40, escape: 50 };
 const PICK_TIME = 6;                  // seconds to pick the cell's lock
 const HELD = ['revolver', 'lever', 'shotgun', 'rifle', 'pistol', 'knife', 'dynamite'];   // what the sheriff locks away when you are jailed
 const JOBS = [
@@ -104,6 +107,10 @@ export class TownLife {
     this.hidden = new Hidden(this, saved.hidden || {});
     this.coordMode = !!saved.coordMode;          // the map's coordinate grid (and your X, Y on screen)
     this.frontier = new Frontier(this, saved.frontier || {});
+    this.robbers = new Robbers(this, saved.robbers || {});
+    this.chests = saved.chests || {};              // chests you bought and placed: "x,y,z" -> { counts }
+    this.robbed = saved.robbed || {};              // coins taken from townspeople (person index -> coins)
+    this.fineDue = saved.fineDue || 0;             // a fine the sheriff collects when he catches you
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
@@ -283,6 +290,7 @@ export class TownLife {
     this.lastCrime = g.time;
     // the posse is the law: if they see it, it counts at once
     if (this.posse && this.posse.members.some((m) => m.alive && (m === victim || this.folk.sees(m, 45)))) {
+      if (kind === 'windows') { this.windowFine(amount); return; }
       if (dead && dead.body) dead.body.known = true;
       this.addBounty(amount, kind);
       this.posse.lastSeen = P.clone(); this.posse.seenT = 0;
@@ -297,6 +305,7 @@ export class TownLife {
     if (sheriff) { this.folk.say(sheriff, 'say.sheriffSaw', null, 'warn'); this.reported(sheriff, { kind, amount, pos: P.clone() }); return; }
     const w = seen[0];
     w.reportTo = { kind, amount, pos: P.clone() };
+    if (kind === 'windows') this.paneRep = w.reportTo;
     w.route = []; w.scaredT = 0;
     this.witnesses = this.witnesses.filter((x) => x !== w).concat(w);
     this.folk.say(w, 'say.witness', null, 'warn');
@@ -305,6 +314,7 @@ export class TownLife {
   }
   reported(v, c) {
     const g = this.game;
+    if (c.kind === 'windows') { this.witnesses = this.witnesses.filter((x) => x !== v); if (this.paneRep === c) this.paneRep = null; this.windowFine(c.amount); return; }
     if (c.gang && c.gang.alive && !c.gang.jailed) this.trades.arrest(c.gang);     // one of your gang was seen: the sheriff rounds him up
     this.witnesses = this.witnesses.filter((x) => x !== v);
     this.addBounty(c.amount, c.kind);
@@ -318,6 +328,7 @@ export class TownLife {
     const g = this.game, home = this.village.buildings[bd.h];
     if (bd.known) { if (!asleep) this.folk.say(v, 'say.foundBody', { name: victim.name }, 'warn'); return; }
     bd.known = true;
+    this.fineDue += BIG_FINE;                                 // and when they catch you, a large fine
     const c = { kind: 'murder', amount: BOUNTY.murder, pos: g.player.pos.clone().set(home.door.x, home.door.y, home.door.z) };
     if (asleep) { this.found = (this.found || 0) + 1; this.reported(v, c); return; }
     this.folk.say(v, 'say.foundBody', { name: victim.name }, 'warn');
@@ -325,6 +336,41 @@ export class TownLife {
     this.witnesses = this.witnesses.filter((x) => x !== v).concat(v);
     g.hud.alert(t('law.bodyFound', { name: v.name, victim: victim.name }));
     sfx.alert();
+  }
+  // broken windows: the sheriff fines you for the panes (taken from your
+  // money). Can't pay: he comes to take you in for a night.
+  windowFine(n) {
+    const g = this.game;
+    this.paneSeen = true;
+    if (this.money >= n) {
+      this.money -= n; this.addHonor(-2); this.trades.rep('law', -1);
+      g.hud.alert(t('law.windowFine', { n })); sfx.warn();
+      return;
+    }
+    g.hud.alert(t('law.windowJail', { n })); sfx.warn();
+    this.addBounty(n, 'windows');
+    this.formPosse(g.player.pos.clone());
+  }
+  // stolen coins the law takes back: from people still alive (they told the
+  // sheriff), or dead ones whose body was found; plus any fine
+  owed() {
+    const F = this.folk;
+    let n = this.fineDue;
+    for (const [i, c] of Object.entries(this.robbed)) { const v = F.list[+i], bd = F.bodies[i]; if ((v && v.alive && !v.away) || (bd && (bd.known || bd.found))) n += c; }
+    return n;
+  }
+  payDue() { return this.bounty + this.owed(); }
+  // the law settles up: the stolen coins (and the fine) go, from your pocket and then the bank
+  settleOwed() {
+    const F = this.folk;
+    let n = this.owed();
+    for (const [i] of Object.entries(this.robbed)) { const v = F.list[+i], bd = F.bodies[i]; if ((v && v.alive && !v.away) || (bd && (bd.known || bd.found))) delete this.robbed[i]; }
+    this.fineDue = 0;
+    const total = n;
+    const a = Math.min(this.money, n); this.money -= a; n -= a;
+    const bank = this.frontier && this.frontier.bank;
+    if (n > 0 && bank) { const b = Math.min(bank.balance, n); bank.balance -= b; n -= b; }
+    return total - n;
   }
   addBounty(n, kind) {
     n = Math.round(n * this.trades.bountyK());              // the law's opinion of you
@@ -468,8 +514,9 @@ export class TownLife {
     const leader = P.members.find((m) => m.alive);
     if (choice === 'surrender') { g.app.closePanel(); this.jail(); return; }
     if (choice === 'pay') {
-      if (this.money < this.bounty) { g.hud.toast(t('law.cantPay', { n: this.bounty })); sfx.error(); return 'stay'; }
-      this.money -= this.bounty; this.bounty = 0; this.addHonor(-2);
+      const due = this.payDue();
+      if (this.money < due) { g.hud.toast(t('law.cantPay', { n: due })); sfx.error(); return 'stay'; }
+      this.settleOwed(); this.money -= this.bounty; this.bounty = 0; this.addHonor(-2);
       if (leader) this.folk.say(leader, 'say.paid');
       P.questioning = false; g.app.closePanel(); this.disband('law.cleared'); sfx.coins(); return;
     }
@@ -499,6 +546,8 @@ export class TownLife {
   jail() {
     const g = this.game, p = g.player, C = this.jailB && this.jailB.cell;
     const lost = [];
+    const back = this.settleOwed();
+    if (back > 0) lost.push(t('jail.coinsBack', { n: back }));
     for (const [id, n] of Object.entries(this.stolen)) { const k = Math.min(n, g.count(id)); if (k > 0) { g.take(id, k); lost.push(t('item.' + id)); } }
     this.stolen = {};
     if (g.has('scuba')) { g.inv.counts.scuba = 0; lost.push(t('item.scuba')); }
@@ -524,7 +573,13 @@ export class TownLife {
     const g = this.game, w = g.world;
     if (w.get(x, y, z) !== B.GLASS) return;
     w.set(x, y, z, B.GLASS_BROKEN);
-    if (w.isLocked(x, y, z)) this.broken.push({ x, y, z, at: g.time + 0.5 });
+    if (w.isLocked(x, y, z)) {
+      this.broken.push({ x, y, z, at: g.time + 0.5 });
+      // someone else's window (the town's, a family's): disturbing the peace, if anyone saw or heard it
+      if ((this.paneAt ?? -1) > g.time - 0.004) { if (this.paneRep) this.paneRep.amount += PANE; else if (this.paneSeen) this.windowFine(PANE); }     // (a volley of panes is one report)
+      else { this.paneRep = null; this.paneSeen = false; this.crime('windows', { value: PANE }); }
+      this.paneAt = g.time;
+    }
     this.hearShot(new THREE.Vector3(x, y, z));
   }
   mendWindows() {
@@ -668,6 +723,7 @@ export class TownLife {
     const g = this.game, p = g.player, H = this.hospital;
     if (cause === 'starve') { p.hunger = 60; g.hungerStage = 0; }
     if (this.fishing) this.fishing.reelIn();
+    this.robbers.playerDied();                     // killed by robbers: they take everything you carry
     const wanted = this.bounty > 0 || !!(this.posse && this.posse.hostile);
     if (this.posse) this.disband(wanted ? 'law.taken' : 'law.gaveUp');
     p.health = 100; g.breath = 20; p.vel.set(0, 0, 0);
@@ -738,6 +794,7 @@ export class TownLife {
   // surrendered person: Loot; a horse: Ride; a house door: Knock (or, with
   // dynamite in hand, Blow it open)
   aimTarget(hit, eye, dir) {
+    if (hit && hit.id === B.CHEST) return { a: 'chest', label: t('use.chest'), run: () => this.game.app.openPanel('chest', { box: hit.x + ',' + hit.y + ',' + hit.z }) };
     const ho = this.houses.aimTarget(hit);                   // doors, setting down a blueprint (houses.js)
     if (ho) return ho;
     const hd = this.hidden.aimTarget(hit);                   // strongboxes, buried treasure, blasting rock (hidden.js)
@@ -806,7 +863,10 @@ export class TownLife {
   }
   takeLoot(v, item) {
     const g = this.game;
-    if (item.id === 'coins') { this.money += v.money; v.money = 0; }
+    if (item.id === 'coins') {
+      if (!v.extra && v.i != null && v.money > 0) this.robbed[v.i] = (this.robbed[v.i] || 0) + v.money;     // the law may take it back
+      this.money += v.money; v.money = 0;
+    }
     else if (item.id === 'tmap') { v.goods = (v.goods || []).filter((x) => x !== 'tmap'); this.hidden.newMap('loot'); }
     else if (item.id === 'horse') { item.horse.owner = 'player'; item.horse.rider = null; v.lastHorse = null; g.hud.toast(t('horse.claimed'), 'pick'); }
     else {
@@ -1016,10 +1076,11 @@ export class TownLife {
     const g = this.game, p = g.player.pos, out = [];
     const v = this.folk.nearest(p, 3.4, (x) => !x.posse && !x.reportTo && !x.sleeping);     // (nobody does business in their sleep)
     // the shopkeeper counts even when a customer stands closer (that hid the Shop button)
-    const keeper = this.folk.nearest(p, 3.6, (x) => x.role === 'keeper' && !x.surrendered);
+    // (only in the shop: a keeper on the way home, or at home, does no business)
+    const keeper = this.folk.nearest(p, 3.6, (x) => x.role === 'keeper' && !x.surrendered && this.atShop(x));
     if (keeper && keeper !== v) out.push({ a: 'shop', label: t(keeper.shop === 'land' ? 'ctx.land' : 'ctx.shop'), v: keeper });
     if (v) {
-      if (v.role === 'keeper') out.push({ a: 'shop', label: t(v.shop === 'land' ? 'ctx.land' : 'ctx.shop'), v });
+      if (v.role === 'keeper' && this.atShop(v)) out.push({ a: 'shop', label: t(v.shop === 'land' ? 'ctx.land' : 'ctx.shop'), v });
       if (v.role === 'sheriff') out.push({ a: 'sheriff', label: t('ctx.sheriff'), v });
       const f = this.job;
       if (f && ((f.giver === v.i && !f.courier) || (f.courier && f.to === v.i))) out.push({ a: 'job', label: t(f.courier ? 'ctx.deliver' : 'ctx.handOver'), v });
@@ -1046,6 +1107,14 @@ export class TownLife {
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
     return out;
+  }
+  // a shopkeeper standing in their own shop (behind the counter, or in the market stall)
+  atShop(v) {
+    const b = v.work;
+    if (!b) return false;
+    const k = b.keeper || b.inside || b.door;
+    if (k && Math.hypot(v.pos.x - k.x, v.pos.z - k.z) < 3.5) return true;
+    return b.x0 != null && v.pos.x > b.x0 && v.pos.x < b.x1 + 1 && v.pos.z > b.z0 && v.pos.z < b.z1 + 1 && Math.abs(v.pos.y - (b.door ? b.door.y : v.pos.y)) < 3;
   }
   doAction(a) {
     const g = this.game, o = this.ctx.find((x) => x.a === a);
@@ -1098,6 +1167,7 @@ export class TownLife {
     this.houses.update(dt);
     this.hidden.update(dt);
     this.frontier.update(dt);
+    this.robbers.update(dt);
     if (this.chooseLater && !g.overlay && !g.dying && (this.chooseT -= dt) <= 0) { this.chooseLater = false; g.app.openPanel('trades', { mode: 'choose' }); }
     this.signs.update(dt);
     if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
@@ -1213,6 +1283,23 @@ export class TownLife {
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
+  // a chest you bought: its own store (the same panel as the house chest)
+  chestStore(key) {
+    const g = this.game, c = this.chests[key] || (this.chests[key] = { counts: {} });
+    return {
+      chest: c,
+      store(id, n) { const have = g.inv.counts[id] || 0; n = Math.min(n, have); if (n <= 0) return; g.inv.counts[id] = have - n; c.counts[id] = (c.counts[id] || 0) + n; g.hud.dirtyHotbar = true; },
+      takeOut(id, n) { const have = c.counts[id] || 0; n = Math.min(n, have); if (n <= 0) return; c.counts[id] = have - n; if (!c.counts[id]) delete c.counts[id]; g.give(id, n, true); },
+    };
+  }
+  // dug up: what was in it comes with it
+  chestBroken(x, y, z) {
+    const g = this.game, key = x + ',' + y + ',' + z, c = this.chests[key];
+    if (!c) return;
+    for (const [id, n] of Object.entries(c.counts)) if (n > 0) g.give(id, n, true);
+    delete this.chests[key];
+    g.hud.dirtyHotbar = true;
+  }
   hearShot(pos) { for (const v of this.folk.list) if (v.alive && !v.posse && v.pos.distanceTo(pos) < 40) v.scaredT = 10; }
   // things to mark on the radar and the screen: witnesses on their way to report
   marks() { return this.witnesses.filter((w) => w.alive && w.reportTo); }
@@ -1228,7 +1315,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), broken: this.broken, coordMode: this.coordMode,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
       },
     };
   }

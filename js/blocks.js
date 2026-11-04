@@ -19,6 +19,8 @@ export const B = {
   DOOR: 46, DOOR_OPEN: 47,
   // Town Life: a window shot or knifed out (shards in the frame; dig it out and put new glass in)
   GLASS_BROKEN: 48,
+  // Town Life: a wooden chest you buy and place; it keeps things (town.js)
+  CHEST: 49,
 };
 
 export const BLOCKS = [];
@@ -81,6 +83,7 @@ def(B.ARMORY, { name: 'armory', tiles: { top: 'planks', side: 'rack', bottom: 'p
 def(B.MAPTABLE, { name: 'maptable', tiles: { top: 'map_top', side: 'planks', bottom: 'planks' }, hard: Infinity, fort: true, color: [0.6, 0.55, 0.42] });
 def(B.HDOOR, { name: 'hdoor', tiles: { top: 'planks', side: 'door', bottom: 'planks' }, hard: Infinity, color: [0.42, 0.3, 0.2] });
 def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'wood', color: [0.42, 0.32, 0.2] });
+def(B.CHEST, { name: 'chest', tiles: { top: 'supply_top', side: 'supply', bottom: 'planks' }, hard: 1.2, drop: 'chest', color: [0.45, 0.4, 0.28] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 
 // Quick lookup tables for hot loops (mesher, physics).

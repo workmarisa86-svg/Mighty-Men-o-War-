@@ -672,6 +672,7 @@ export class Game {
     const id = w.get(x, y, z);
     const def = BLOCKS[id];
     if (id === B.LOG) { this.fellTree(x, y, z); return; }
+    if (id === B.CHEST && this.town) this.town.chestBroken(x, y, z);      // what was in it comes with it
     if (this.town && def.crop) { this.harvestCrop(x, y, z, def); return; }
     if (id === B.ICE) { w.set(x, y, z, B.WATER); sfx.breakBlock('stone'); this.particles.burst(x + 0.5, y + 0.8, z + 0.5, def.color, 10, 3, 0.6); return; }
     // still water: a block dug out from under water fills in place, nothing flows

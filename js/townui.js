@@ -89,7 +89,7 @@ export function installTownUI(UI) {
       <p class="say">“${esc(t('law.questionLine', { n: T.bounty }))}”</p>
       <div class="menu">
         <button class="btn primary" data-q="surrender">${t('law.surrender')}</button>
-        <button class="btn" data-q="pay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
+        <button class="btn" data-q="pay" ${T.money >= T.payDue() ? '' : 'disabled'}>${t('law.pay', { n: T.payDue() })}</button>
         <button class="btn" data-q="talk" ${Pz && Pz.talked ? 'disabled' : ''}>${t('law.talk')}</button>
         <button class="btn ghost" data-q="run">${t('law.run')}</button>
         <button class="btn ghost danger" data-q="fight">${t('law.fight')}</button>
@@ -104,7 +104,7 @@ export function installTownUI(UI) {
     const body = `<div class="who"><b>${esc(v.name)}</b><span class="muted small">${t('law.sheriff')}</span></div>
       <p class="say">“${esc(T.bounty ? t('law.sheriffWanted', { n: T.bounty }) : t('law.sheriffClean'))}”</p>
       <div class="menu">
-        ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.bounty ? '' : 'disabled'}>${t('law.pay', { n: T.bounty })}</button>
+        ${T.bounty ? `<button class="btn primary" id="spay" ${T.money >= T.payDue() ? '' : 'disabled'}>${t('law.pay', { n: T.payDue() })}</button>
         <button class="btn" id="sturn">${t('law.turnIn')}</button>` : ''}
         ${T.held && !T.held.forfeit && !T.jailed ? `<button class="btn primary" id="sguns">${t('law.gunsBack')}</button>` : ''}
         <button class="btn" id="sjob">${t('ctx.job')}</button>
@@ -115,7 +115,7 @@ export function installTownUI(UI) {
     const $ = (s) => this.root.querySelector(s);
     $('#sboard').onclick = () => this.show('bounties', { v });
     $('#strade').onclick = () => this.show('trades', { mode: 'change', v });
-    if ($('#spay')) $('#spay').onclick = () => { T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
+    if ($('#spay')) $('#spay').onclick = () => { if (T.money < T.payDue()) return; T.settleOwed(); T.money -= T.bounty; T.bounty = 0; T.addHonor(2); T.disband('law.cleared'); this.app.closePanel(); };
     if ($('#sturn')) $('#sturn').onclick = () => { this.app.closePanel(); T.jail(); };
     $('#sjob').onclick = () => { this.app.closePanel(); T.askJob(v); };
     if ($('#sguns')) $('#sguns').onclick = () => { T.returnGuns(); this.app.closePanel(); };

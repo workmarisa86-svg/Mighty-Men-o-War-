@@ -450,6 +450,7 @@ export class Townsfolk {
       else if (v.surrendered > 0) this.surrenderBehaviour(v, dt);
       else if (v.posse) T.posseBehaviour(v, dt, d);
       else if (v.fight) this.fightBehaviour(v, dt, d);
+      else if (v.huntMan) this.manFightBehaviour(v, dt);
       else if (v.huntAnimal) this.animalFightBehaviour(v, dt);
       else if (v.duel) this.duelBehaviour(v, dt);
       else if (v.reportTo) this.reportBehaviour(v, dt);
@@ -666,6 +667,26 @@ export class Townsfolk {
     const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, A.x, A.y, A.z); pos.setXYZ(1, Bp.x, Bp.y, Bp.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere(); tr.l.visible = true; tr.t = 0.07;
     if (Math.random() < Math.max(0.3, 0.75 - d / 60)) g.animals.hurt(a, gun === 'shotgun' ? Math.max(15, 45 - d) : gun === 'lever' ? 40 : 30);
+  }
+  // helping you against robbers (robbers.js): run up, draw, and shoot once it's a fight
+  manFightBehaviour(v, dt) {
+    const g = this.game, o = v.huntMan;
+    if (!o || !o.alive || o.away || o.surrendered > 0) { v.huntMan = null; this.armed(v, null); if (o && !o.alive) this.say(v, 'say.helpRobDone'); return; }
+    const gun = this.bestGun(v); if (v.armed !== gun) this.armed(v, gun);
+    const d = Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z);
+    if (d > 16) this.goDirect(v, { x: o.pos.x, y: o.pos.y, z: o.pos.z }, RUN, dt, 14); else v.speed = 0;
+    v.yaw = Math.atan2(-(o.pos.x - v.pos.x), -(o.pos.z - v.pos.z));
+    v.cool -= dt;
+    if (!o.fight || v.cool > 0 || d > 40 || (gun === 'shotgun' && d > 28)) return;
+    v.cool = 1.4 + Math.random() * 0.9; v.fired = true;
+    sfx.shot(gun === 'revolver' ? 'revolver' : gun === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.15, 1 - g.player.pos.distanceTo(v.pos) / 60));
+    const A = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z), Bp = new THREE.Vector3(o.pos.x, o.pos.y + 1.2, o.pos.z);
+    const dir = Bp.clone().sub(A), L = dir.length(); dir.divideScalar(L);
+    const block = g.world.raycast(A.x, A.y, A.z, dir.x, dir.y, dir.z, L - 0.4, false, 'bullet');
+    const end = block ? A.clone().addScaledVector(dir, block.dist) : Bp;
+    const tr = this.tracers[this.trI++ % this.tracers.length], pos = tr.l.geometry.attributes.position;
+    pos.setXYZ(0, A.x, A.y, A.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere(); tr.l.visible = true; tr.t = 0.07;
+    if (!block && Math.random() < Math.max(0.2, 0.7 - d / 55)) this.hurt(o, gun === 'shotgun' ? Math.max(10, 40 - d) : gun === 'lever' ? 26 : 18);
   }
   // a brawl (your gang's chaos): watch it from a ring round the fighters, cheering
   watchBehaviour(v, dt) {

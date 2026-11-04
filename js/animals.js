@@ -483,6 +483,16 @@ export class Animals {
     if (a.stuckT > 0.4) { a.stuckT = 0; a.detourA = (this.r() < 0.5 ? 1 : -1) * (Math.PI / 2 + this.r() * 0.6); a.detourT = 1 + this.r(); }
     return false;
   }
+  // nothing solid between the animal and a point (a closed door, a wall, a window):
+  // no bite or pounce through it
+  clearTo(a, x, z, y = a.pos.y) {
+    const w = this.game.world, dx = x - a.pos.x, dz = z - a.pos.z, n = Math.ceil(Math.hypot(dx, dz) * 3) + 1;
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, bx = Math.floor(a.pos.x + dx * k), bz = Math.floor(a.pos.z + dz * k);
+      for (const h of [0.35, 1.0]) if (SOLID[w.get(bx, Math.floor(Math.min(a.pos.y, y) + h), bz)]) return false;
+    }
+    return true;
+  }
   fallHurt(a, v) { a.hp -= (v - 12) * 6; if (a.hp <= 0) { a.state = 'dead'; a.dead = 0; } }
   // the head turns smoothly toward a heading
   face(a, want, dt, k = 6) {
@@ -702,7 +712,7 @@ export class Animals {
       if (!A.hit) {
         A.hit = true;
         const facing = (fx * dx + fz * dz) / (dd || 1), reach = wolf ? 1.9 : 2.8, P = g.player;
-        if (dd < reach && facing > 0.35 && Math.abs(P.pos.y - a.pos.y) < 2.2 && !g.dead && !g.dying) {
+        if (dd < reach && facing > 0.35 && Math.abs(P.pos.y - a.pos.y) < 2.2 && !g.dead && !g.dying && this.clearTo(a, P.pos.x, P.pos.z, P.pos.y)) {
           const dmg = wolf ? 7 : claw ? 17 : 13;
           if (claw) sfx.claw(); else sfx.bite(wolf ? 0.7 : 1);
           g.damage(dmg * (g.animalDmgMul || 1), wolf ? 'wolf' : 'bear', a.pos, { heavy: !wolf, bleed: true });
@@ -828,9 +838,9 @@ export class Animals {
         // rush in from its own side, curving round to come at you from there
         const side = Math.min(1, Math.max(0, (dd - 2) / 6));
         tx = pl.x + Math.cos(ang) * 2.2 * side; tz = pl.z + Math.sin(ang) * 2.2 * side; sp = a.swimming ? 2.4 : 7.6;
-        if (dd < 1.75 && a.cool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 2) { this.face(a, Math.atan2(-dx, -dz), 1); this.startAttack(a, 'bite'); return true; }
+        if (dd < 1.75 && a.cool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 2 && this.clearTo(a, pl.x, pl.z, pl.y)) { this.face(a, Math.atan2(-dx, -dz), 1); this.startAttack(a, 'bite'); return true; }
         // from a few metres out it may launch itself at you: a pounce
-        if (dd > 3 && dd < 6.5 && a.pounceCool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 1.5 && this.r() < dt * 2.5) return this.startLeap(a, dx, dz, dd);
+        if (dd > 3 && dd < 6.5 && a.pounceCool <= 0 && !a.swimming && Math.abs(pl.y - a.pos.y) < 1.5 && this.r() < dt * 2.5 && this.clearTo(a, pl.x, pl.z, pl.y)) return this.startLeap(a, dx, dz, dd);
       }
     }
     const ex = tx - a.pos.x, ez = tz - a.pos.z, ed = Math.hypot(ex, ez);
@@ -860,7 +870,10 @@ export class Animals {
     const L = a.leap, g = this.game, P = g.player;
     L.t += dt;
     const k = Math.min(1, L.t / L.dur);
-    a.pos.x = L.fx + (L.tx - L.fx) * k; a.pos.z = L.fz + (L.tz - L.fz) * k;
+    const nx = L.fx + (L.tx - L.fx) * k, nz = L.fz + (L.tz - L.fz) * k;
+    // a wall or a shut door in the way: it bounces off and drops back (never through)
+    if (!this.clearTo(a, nx, nz, L.fy)) { a.leap = null; a.body.rotation.x = 0; a.vy = 0; a.retreat = 1.2; a.cool = 0.6; sfx.swish(); return true; }
+    a.pos.x = nx; a.pos.z = nz;
     a.pos.y = L.fy + (L.ty - L.fy) * k + Math.sin(k * Math.PI) * 1.1;
     a.body.rotation.x = 0.5 - k * 0.9; a.head.rotation.x = -0.2; a.jaw.rotation.x = 0.7;
     a.legs.forEach((l, i) => { l.rotation.x = i < 2 ? -1.2 : 1.0; });
