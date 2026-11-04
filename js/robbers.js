@@ -1,4 +1,5 @@
-// Town Life (2.5): rival outlaws come after an Outlaw.
+// Town Life (2.5): rival outlaws come after you (an Outlaw most often, but
+// any trade can be held up or have the house ransacked).
 //
 // A stick-up: three men of a rival gang walk up with their guns out and want
 // your money. Nothing on screen asks you what to do. Stand your ground and
@@ -40,16 +41,17 @@ export class Robbers {
     this.tick -= dt;
     if (this.tick > 0) return;
     this.tick = 2;
-    if (!this.outlaw() || T.jailed || g.dead || g.dying || T.posse || g.overlay || this.hold || this.raid) return;
+    if (T.jailed || g.dead || g.dying || T.posse || g.overlay || this.hold || this.raid) return;
     const F = T.frontier;
     if (F && (F.ambush || F.raid || F.war)) return;
     const site = this.home(), P = g.player.pos;
     const atHome = site && Math.hypot(P.x - (site.x + 0.5), P.z - (site.z + 0.5)) < site.r + 2;
-    if (g.time > this.raidT) { this.raidT = g.time + 2 + Math.random() * 1.5; this.startRaid(); return; }
+    const k = this.outlaw() ? 1 : 1.6;                         // (an Outlaw has more enemies)
+    if (g.time > this.raidT) { this.raidT = g.time + (2 + Math.random() * 1.5) * k; this.startRaid(); return; }
     if (g.time > this.holdT && !atHome) {
       const V = T.village;
       if (Math.hypot(P.x - V.cx, P.z - V.cz) < 45) return;     // (not in the middle of town)
-      this.holdT = g.time + 1 + Math.random(); this.startHold();
+      this.holdT = g.time + (1 + Math.random()) * k; this.startHold();
     }
   }
 
@@ -107,7 +109,7 @@ export class Robbers {
       if (H.t > GIVE_UP_S / 2 && !H.warned) { H.warned = true; F.say(lead, 'rob.last', null, 'warn'); }
       if (H.t > GIVE_UP_S) {
         // you stood still and let them: your money goes into his pocket
-        const n = T.money; T.money = 0; lead.money += n;
+        const n = T.money; T.money = 0; lead.money += n; this.took(H, n);
         F.say(lead, 'rob.thanks');
         g.hud.alert(t('rob.took', { n, gang: t('fr.gangs.' + H.gang) })); sfx.coins();
         this.leave();
@@ -116,7 +118,7 @@ export class Robbers {
       this.callHelp();
       if (g.time > H.until) this.leave();
     } else if (H.phase === 'leave') {
-      if (up.every((m) => Math.hypot(m.pos.x - P.x, m.pos.z - P.z) > 100)) { for (const m of up) { F.dropRig(m); m.away = true; m.alive = false; } this.hold = null; }
+      if (up.every((m) => Math.hypot(m.pos.x - P.x, m.pos.z - P.z) > 100)) { for (const m of up) { F.dropRig(m); m.away = true; m.alive = false; } this.stash(H); this.hold = null; }
     }
   }
   leave() {
@@ -151,12 +153,15 @@ export class Robbers {
     if (!H || !H.men) return;
     const lead = H.men.find((m) => m.alive) || H.men[0];
     const n = T.money; T.money = 0; lead.money += n;
+    const got = {};
     for (const id of Object.keys(g.inv.counts)) {
       if (!g.inv.counts[id] || (ITEMS[id] && ITEMS[id].gear)) continue;
+      got[id] = g.inv.counts[id];
       if (lead.goods.length < 60) for (let k = 0; k < Math.min(5, g.inv.counts[id]); k++) lead.goods.push(id);
       g.inv.counts[id] = 0;
     }
     g.hud.dirtyHotbar = true;
+    this.took(H, n, got);
     this.lostAll = { n, gang: H.gang };
     if (this.hold) this.leave(); else this.raidLeave();
   }
@@ -274,6 +279,7 @@ export class Robbers {
       if (!site) return;
       for (const c of R.cells) if (DOORS.has(w.get(c.x, c.y, c.z))) w.set(c.x, c.y, c.z, B.AIR);
       const got = this.lootHome(site, null);
+      this.stash({ gang: R.gang, took: { coins: 0, items: got } });
       g.hud.bigMessage(t('rob.raidedTitle'), t('rob.raidedSub', { gang: t('fr.gangs.' + R.gang), list: this.list(got) }));
       return;
     }
@@ -298,6 +304,7 @@ export class Robbers {
       const ch = R.site.chest;
       if (Math.hypot(lead.pos.x - ch.x - 0.5, lead.pos.z - ch.z - 0.5) < 2.5 || R.t > 40) {
         const got = this.lootHome(R.site, lead);
+        this.took(R, 0, got);
         g.hud.alert(t('rob.looted', { gang: t('fr.gangs.' + R.gang), list: this.list(got) }));
         this.raidLeave();
       }
@@ -305,7 +312,7 @@ export class Robbers {
       this.callHelp();
       if (g.time > R.until) this.raidLeave();
     } else if (R.phase === 'leave') {
-      if (up.every((m) => Math.hypot(m.pos.x - P.x, m.pos.z - P.z) > 100)) { for (const m of up) { F.dropRig(m); m.away = true; m.alive = false; } this.raid = null; }
+      if (up.every((m) => Math.hypot(m.pos.x - P.x, m.pos.z - P.z) > 100)) { for (const m of up) { F.dropRig(m); m.away = true; m.alive = false; } this.stash(R); this.raid = null; }
     }
   }
   raidLeave() {
@@ -324,6 +331,21 @@ export class Robbers {
     }
     g.hud.alert(t('rob.raidFight', { gang: t('fr.gangs.' + R.gang) })); sfx.alert();
     this.callHelp();
+  }
+  // what this lot has taken from you so far
+  took(H, coins, items = {}) {
+    const k = H.took || (H.took = { coins: 0, items: {} });
+    k.coins += coins;
+    for (const [id, n] of Object.entries(items)) k.items[id] = (k.items[id] || 0) + n;
+  }
+  // they got away: it all goes to their camp, where you can take it back (frontier.js)
+  stash(H) {
+    const Fr = this.T.frontier, c = Fr && (Fr.camps || []).find((q) => q.gang === H.gang);
+    if (!c || !H.took) return;
+    const S = c.stash || (c.stash = { coins: 0, items: {} });
+    S.coins += H.took.coins;
+    for (const [id, n] of Object.entries(H.took.items)) S.items[id] = (S.items[id] || 0) + n;
+    if (H.took.coins || Object.keys(H.took.items).length) this.game.hud.toast(t('rob.toCamp', { gang: t('fr.gangs.' + H.gang) }));
   }
   list(got) {
     const e = Object.entries(got);

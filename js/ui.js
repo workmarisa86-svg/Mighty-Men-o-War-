@@ -468,9 +468,11 @@ export class UI {
     const body = `<p class="muted small">${t('chest.hint')}</p><div class="chest">
       <div><p class="label">${t('chest.carry')}</p>${carry.map((id) => row(id, g.inv.counts[id], 'in')).join('') || `<p class="muted">—</p>`}</div>
       <div><p class="label">${t('chest.stored')}</p>${kept.map((id) => row(id, C.chest.counts[id], 'out')).join('') || `<p class="muted">—</p>`}</div></div>`;
-    const panel = this.panel(t('chest.title'), body, { wide: true, onBack: () => this.app.closePanel() });
+    // (saved straight away: what you leave in a chest is there next time, whatever happens)
+    const panel = this.panel(t('chest.title'), body, { wide: true, onBack: () => { this.app.closePanel(); this.app.saveGame(true); } });
     panel.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => {
       if (b.dataset.a === 'in') C.store(b.dataset.id, +b.dataset.n); else C.takeOut(b.dataset.id, +b.dataset.n);
+      this.app.saveGame(true);
       this.rerender();
     });
   }

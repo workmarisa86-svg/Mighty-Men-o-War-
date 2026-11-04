@@ -556,6 +556,7 @@ const STR = {
     'rob.raidFight': '{gang} at your house: they\'ve seen you!', 'rob.nothing': 'nothing (your chests were empty)',
     'law.windowFine': 'Disturbing the peace: the sheriff fines you {n} coins for the windows', 'law.windowJail': 'Disturbing the peace: {n} coins for the windows and you can\'t pay. The sheriff is coming to take you in for a night.',
     'jail.coinsBack': '{n} coins (the money you stole, and your fine)',
+    'rob.toCamp': '{gang} got away with your things: it is all at their camp now. Break the camp to take it back.', 'rob.gotBack': 'You found what they stole from you in their tents', 'hid.takeBox': 'Take the chest', 'hid.tookBox': 'You took the chest: place it anywhere to keep things in it',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1110,6 +1111,7 @@ const STR = {
     'rob.raidFight': '{gang} en tu casa: ¡te han visto!', 'rob.nothing': 'nada (tus baúles estaban vacíos)',
     'law.windowFine': 'Alterar el orden: el sheriff te multa con {n} monedas por las ventanas', 'law.windowJail': 'Alterar el orden: {n} monedas por las ventanas y no puedes pagar. El sheriff viene a encerrarte una noche.',
     'jail.coinsBack': '{n} monedas (el dinero que robaste y tu multa)',
+    'rob.toCamp': '{gang} escaparon con tus cosas: ahora está todo en su campamento. Acaba con el campamento para recuperarlo.', 'rob.gotBack': 'Encontraste en sus tiendas lo que te robaron', 'hid.takeBox': 'Llevarte el baúl', 'hid.tookBox': 'Te llevaste el baúl: ponlo donde quieras para guardar cosas',
   },
 };
 
