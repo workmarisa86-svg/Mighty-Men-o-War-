@@ -156,6 +156,7 @@ export class Hidden {
     }
     const pd = Math.hypot(P.x - c.x, P.y + 1 - c.y, P.z - c.z);
     if (pd < 3.5) g.damage(Math.round(40 * (1 - pd / 3.5)), 'blast', new THREE.Vector3(c.x, c.y, c.z));
+    T.blastHurt(c.x, c.y, c.z);                                  // and anyone (or any animal) close by
     const p = this.place(c.place);
     // the unsafe mine: the old timbers give way and the roof comes down
     if (p && p.kind === 'mine' && (p.unsafe || Math.random() < 0.15)) this.caveIn(p, c);
@@ -210,7 +211,9 @@ export class Hidden {
     const out = [], v = this.stranger;
     if (v && v.alive && !(v.surrendered > 0) && Math.hypot(v.pos.x - p.x, v.pos.z - p.z) < 3) out.push({ a: 'stranger', label: t('ctx.stranger'), v, run: () => this.game.app.openPanel('stranger', { v }) });
     // a crater close by (yours or anyone's): a button to fill it in, as in War
-    const E = this.game.explosives, cr = E && E.craters.length ? E.craterAt(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) : null;
+    const E = this.game.explosives, w = this.game.world;
+    const cr = E && E.craters.length ? E.craters.slice().reverse().find((c) => Math.hypot(p.x - c.x, p.z - c.z) < c.r + 3 && Math.abs(p.y - c.y) < 5
+      && c.cells.some((q) => { const b = w.get(q.x, q.y, q.z); return b === B.AIR || b === B.WATER; })) : null;     // (anywhere in or round the crater)
     if (cr) out.push({ a: 'fillcrater', label: t('use.fill'), run: () => { const n = E.fill(cr); if (n) { sfx.place(); this.game.hud.toast(t('use.filled', { n })); } } });
     return out;
   }

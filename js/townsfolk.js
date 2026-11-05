@@ -291,7 +291,8 @@ export class Townsfolk {
       const p = v.replans < 3 ? findPath(this.game.world, v.pos, v.route[0], 1500, false) : null;
       if (p && p.length && v.replans < 3) v.route = p.concat(v.route.slice(1));
       // last resort: slip on to the next point (just outside the door, say)
-      if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(); if (nx) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
+      // (never into your home from outside: a shut door keeps everyone out)
+      if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(), H = this.game.cabin; if (nx && !(H && H.site && H.covers(nx.x, nx.z, 0.5) && !H.covers(v.pos.x, v.pos.z, 0.5))) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
     }
     return false;
   }
@@ -435,7 +436,9 @@ export class Townsfolk {
         // away after a while) or BODY_DAYS pass unnoticed; elsewhere it is
         // taken away soon
         const bd = v.body;
-        if (bd ? (bd.found ? g.time > bd.found + 0.03 : g.time > bd.t + BODY_DAYS) : v.deadT > 40) {
+        // (a robber with your things on him stays a good while, until you have searched him)
+        const keep = v.robber && !v.looted && (v.money > 0 || (v.goods && v.goods.length)) ? 900 : 40;
+        if (bd ? (bd.found ? g.time > bd.found + 0.03 : g.time > bd.t + BODY_DAYS) : v.deadT > keep) {
           v.away = true; this.dropRig(v);
           if (bd) delete this.bodies[v.i];
           v.body = null;

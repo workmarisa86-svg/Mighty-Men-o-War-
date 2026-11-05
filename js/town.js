@@ -108,7 +108,8 @@ export class TownLife {
     this.coordMode = !!saved.coordMode;          // the map's coordinate grid (and your X, Y on screen)
     this.frontier = new Frontier(this, saved.frontier || {});
     this.robbers = new Robbers(this, saved.robbers || {});
-    this.chests = saved.chests || {};              // chests you bought and placed: "x,y,z" -> { counts }
+    this.chests = saved.chests || {};
+    if (saved.craters && g.explosives) g.explosives.craters = saved.craters;     // (Fill still works after you reopen the game)              // chests you bought and placed: "x,y,z" -> { counts }
     this.robbed = saved.robbed || {};              // coins taken from townspeople (person index -> coins)
     this.fineDue = saved.fineDue || 0;             // a fine the sheriff collects when he catches you
     // a new story (or an older town without one) starts with the choice of a trade
@@ -254,8 +255,9 @@ export class TownLife {
   }
   // the arrow turns with you toward that person (name and distance under it)
   jobArrow() {
+    // (2.6: no arrow on screen; the town map marks the job with a yellow cross and its X, Y)
     const el = this.arrowEl, g = this.game, v = this.jobTarget(), p = g.player;
-    if (!v || g.paused) { if (!el.hidden) el.hidden = true; return; }
+    if (!v || g.paused || !this.jobArrowOn) { if (!el.hidden) el.hidden = true; return; }
     const dx = v.pos.x - p.pos.x, dz = v.pos.z - p.pos.z, d = Math.hypot(dx, dz);
     if (d < 3) { if (!el.hidden) el.hidden = true; return; }
     const rel = Math.atan2(-dx, -dz) - p.yaw;
@@ -263,6 +265,13 @@ export class TownLife {
     el.firstChild.style.transform = `rotate(${(-rel - Math.PI / 2).toFixed(3)}rad)`;
     const txt = t('job.arrow', { name: v.name, m: Math.round(d) });
     if (txt !== this.arrowTxt) { this.arrowTxt = txt; el.lastChild.textContent = txt; }
+  }
+  // where the job's person is: X, Y (as on the map's grid)
+  jobXY() {
+    const v = this.jobTarget();
+    if (!v) return '';
+    const C = coords(v.pos.x, v.pos.z, this.game.world);
+    return ` · X ${C.x}, Y ${C.y}`;
   }
   acceptJob(offer) { this.job = offer; this.game.hud.toast(t('job.accepted')); }
   payJob(v, f) {
@@ -767,7 +776,12 @@ export class TownLife {
     if (P) {
       if (Math.hypot(P.lastSeen.x - c.x, P.lastSeen.z - c.z) < 40) {
         atDoor = true;
-        P.members.filter((m) => m.alive).forEach((m, k) => { m.pos.set(c.door.x + Math.cos(k * 1.3) * 3, c.door.y, c.door.z + Math.sin(k * 1.3) * 3); m.route = []; });
+        // outside your home, round it (never inside: the door stays shut)
+        const S = g.cabin && g.cabin.site ? g.cabin.site : c, R = (S.r || 3) + 4;
+        P.members.filter((m) => m.alive).forEach((m, k) => {
+          const a = k * 1.3, x = S.x + 0.5 + Math.cos(a) * R, z = S.z + 0.5 + Math.sin(a) * R, y = F.ground(x, z, S.y + 4);
+          m.pos.set(x, y ?? S.y, z); m.route = [];
+        });
         P.lastSeen.copy(g.player.pos); P.seenT = 0; P.arrived = true; P.checked = false;
       } else this.disband('law.gaveUp');
     }
@@ -814,7 +828,7 @@ export class TownLife {
       if (v.dist < 3.4 && (u.surrendered > 0 || !u.alive) && !u.looted) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: u }) };
     }
     // a dead body nearby (lying low, the ray passes over it)
-    const body = F.list.find((u) => !u.alive && !u.away && !u.looted && Math.hypot(u.pos.x - p.pos.x, u.pos.z - p.pos.z) < 2.4);
+    const body = F.list.concat(F.extra).find((u) => !u.alive && !u.away && !u.looted && !u.gang && Math.hypot(u.pos.x - p.pos.x, u.pos.z - p.pos.z) < 2.4);
     if (body && p.pitch < -0.35) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: body }) };
     if (p.riding) return { a: 'dismount', label: t('use.dismount'), run: () => g.horses.dismount() };
     const hr = g.horses.raycast(eye, dir, 3.6);
@@ -856,6 +870,7 @@ export class TownLife {
     if (v.money > 0) out.push({ id: 'coins', n: v.money });
     for (const gname of v.guns || []) out.push({ id: gname, n: 1 });
     for (const f of v.goods || []) out.push({ id: f, n: 1 });
+    for (const [id, n] of Object.entries(v.bag || {})) if (n > 0) out.push({ id, n, bag: true });     // (a robber's saddlebag: what he took from you)
     if (v.status === 'mansion' && !v.goldTaken) out.push({ id: 'gold', n: 1 });
     const h = v.horse || v.lastHorse;
     if (h && h.alive && h.owner !== 'player') out.push({ id: 'horse', n: 1, horse: h });
@@ -867,6 +882,7 @@ export class TownLife {
       if (!v.extra && v.i != null && v.money > 0) this.robbed[v.i] = (this.robbed[v.i] || 0) + v.money;     // the law may take it back
       this.money += v.money; v.money = 0;
     }
+    else if (item.bag) { g.give(item.id, item.n, true); delete v.bag[item.id]; }
     else if (item.id === 'tmap') { v.goods = (v.goods || []).filter((x) => x !== 'tmap'); this.hidden.newMap('loot'); }
     else if (item.id === 'horse') { item.horse.owner = 'player'; item.horse.rider = null; v.lastHorse = null; g.hud.toast(t('horse.claimed'), 'pick'); }
     else {
@@ -999,6 +1015,26 @@ export class TownLife {
     this.charges.push({ cell: true, t: 3, x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5 });
     g.hud.alert(t('door.lit')); sfx.alert();
   }
+  // a dynamite blast hurts everyone close by: townsfolk, outlaws, animals (a
+  // kill or a wound by your dynamite is your crime, as with a gun)
+  blastHurt(x, y, z, R = 4.5, mine = true) {
+    const g = this.game, F = this.folk;
+    for (const v of F.list.concat(F.extra)) {
+      if (!v.alive || v.away || (!mine && v.robber)) continue;      // (robbers stand clear of their own fuse)
+      const d = Math.hypot(v.pos.x - x, v.pos.y + 1 - y, v.pos.z - z);
+      if (d > R) continue;
+      const killed = F.hurt(v, Math.round(10 + 90 * (1 - d / R)));
+      if (!killed && v.onHurt) v.onHurt(v);
+      if (!mine) continue;
+      if (!v.extra && !v.posse) this.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v, dead: killed ? v : null });
+      else if (v.posse && killed) this.crime('murder', { dead: v });
+    }
+    for (const a of g.animals.list) {
+      if (a.state === 'dead') continue;
+      const d = Math.hypot(a.pos.x - x, a.pos.y + 0.5 - y, a.pos.z - z);
+      if (d < R) g.animals.hurt(a, Math.round(20 + 100 * (1 - d / R)));
+    }
+  }
   // the blast takes only the door (and its frame): never the walls or the ground
   blowDoor(c) {
     const g = this.game, F = this.folk, b = c.b, w = g.world;
@@ -1010,6 +1046,7 @@ export class TownLife {
       g.shake = Math.max(g.shake, 0.5);
       const pd = Math.hypot(g.player.pos.x - c.x, g.player.pos.z - c.z);
       if (pd < 3) g.damage(Math.round(30 * (1 - pd / 3)), 'blast');
+      this.blastHurt(c.x, c.y, c.z);
       this.hearShot(new THREE.Vector3(c.x, c.y, c.z));
       return;
     }
@@ -1033,7 +1070,7 @@ export class TownLife {
     g.shake = Math.max(g.shake, 0.5);
     const pd = Math.hypot(g.player.pos.x - c.x, g.player.pos.z - c.z);
     if (pd < 3) g.damage(Math.round(30 * (1 - pd / 3)), 'blast');
-    for (const o of F.list) if (o.alive && Math.hypot(o.pos.x - c.x, o.pos.z - c.z) < 3) F.hurt(o, 45);
+    this.blastHurt(c.x, c.y, c.z);
     this.hearShot(new THREE.Vector3(c.x, c.y, c.z));
     // breaking in is a crime; the men of the house may fight back
     const hi = this.village.buildings.indexOf(b);
@@ -1101,6 +1138,14 @@ export class TownLife {
     if (this.jailB && this.jailB.cell && this.trades.jailedMen().length && !this.pickGang) {
       const [x, , z] = this.jailB.cell.door[1] || this.jailB.cell.door[0];
       if (Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 2.4) out.push({ a: 'pickgang', label: t('ctx.pickGang') });
+    }
+    // a body at your feet (an outlaw who robbed you, say): a button to search it (phones too)
+    const corpse = this.folk.list.concat(this.folk.extra).find((u) => !u.alive && !u.away && !u.looted && !u.gang && Math.hypot(u.pos.x - p.x, u.pos.z - p.z) < 2.6 && Math.abs(u.pos.y - p.y) < 2.5 && this.lootList(u).length);
+    if (corpse) out.push({ a: 'search', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: corpse }) });
+    // your guns in the sheriff's gun cabinet: take them yourself in his office (no need to find him)
+    if (this.held && !this.held.forfeit && !this.jailed) {
+      const hall = this.village.buildings.find((b) => b.type === 'hall');
+      if (hall && p.x > hall.x0 && p.x < hall.x1 + 1 && p.z > hall.z0 && p.z < hall.z1 + 1 && Math.abs(p.y - hall.door.y) < 3) out.push({ a: 'guns', label: t('law.gunsBack'), run: () => this.returnGuns() });
     }
     out.push(...this.houses.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
@@ -1276,7 +1321,7 @@ export class TownLife {
       `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
-      (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}</span>` : '') +
+      (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}${this.jobXY()}</span>` : '') +
       (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '') +
       (this.frontier.hudText() ? `<span class="job">${this.frontier.hudText()}</span>` : '') +
       (this.coordMode || this.hidden.maps.some((m) => !m.found) ? `<span class="xy">${t('tmap.youXY', coords(this.game.player.pos.x, this.game.player.pos.z, this.game.world))}</span>` : '');
@@ -1315,7 +1360,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
       },
     };
   }
