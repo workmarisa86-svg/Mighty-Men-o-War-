@@ -262,11 +262,12 @@ export function installTownUI(UI) {
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
-      <div class="legend">${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}<span><i class="you"></i>${t('map.you')}</span></div>`;
+      <div class="legend">${T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
     const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
-    panel.querySelectorAll('[data-xy]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); T.coordMode = !T.coordMode; this.show('townmap', { from }); });
+    const flip = (e) => { e.stopPropagation(); e.preventDefault(); if (performance.now() - (this.xyAt || 0) < 400) return; this.xyAt = performance.now(); T.coordMode = !T.coordMode; this.show('townmap', { from }); };
+    panel.querySelectorAll('[data-xy]').forEach((b) => { b.onclick = flip; b.addEventListener('pointerup', flip); b.addEventListener('touchend', flip, { passive: false }); });
     panel.classList.add('mappanel');
     const x = document.createElement('button'); x.className = 'btn icon-close'; x.setAttribute('aria-label', t('map.close')); x.textContent = '✕';
     x.onclick = close; panel.appendChild(x);
@@ -278,7 +279,7 @@ export function installTownUI(UI) {
     cv.width = cv.height = S * dpr; cv.style.width = cv.style.height = S + 'px';
     const c = cv.getContext('2d');
     c.imageSmoothingEnabled = false;
-    c.drawImage(this.terrainImage(g), 0, 0, S * dpr, S * dpr);
+    c.drawImage(this.terrainImage(g, T.coordMode), 0, 0, S * dpr, S * dpr);
     const sc = S * dpr / Math.max(w.W, w.D);
     const box = (b, col) => {
       c.fillStyle = col; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr;
@@ -286,52 +287,58 @@ export function installTownUI(UI) {
       c.strokeRect(b.x0 * sc, b.z0 * sc, (b.x1 - b.x0 + 1) * sc, (b.z1 - b.z0 + 1) * sc);
     };
     const zoom = this.townZoom ? 3.4 : 1;
-    if (zoom > 1) { c.setTransform(zoom, 0, 0, zoom, -(V.cx * sc) * (zoom - 1), -(V.cz * sc) * (zoom - 1)); c.drawImage(this.terrainImage(g), 0, 0, S * dpr, S * dpr); }
-    for (const b of V.buildings) box(b, b.type === 'house' ? C.home : b.type === 'hall' || b.type === 'jail' ? C.law : C.shop);
-    const cot = T.cottage;
-    box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
-    // labels: in the whole view the town center is one label and homes show
-    // their kind; the closer view names every building with its icon
-    const ICON = { bank: '💰', saloon: '🍺', land: '📜', general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
+    if (zoom > 1) { c.setTransform(zoom, 0, 0, zoom, -(V.cx * sc) * (zoom - 1), -(V.cz * sc) * (zoom - 1)); c.drawImage(this.terrainImage(g, T.coordMode), 0, 0, S * dpr, S * dpr); }
     const label = (txt, x, y, size = 11) => { c.font = `${size * dpr / zoom}px Oswald, Arial`; c.textAlign = 'center'; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.strokeText(txt, x, y); c.fillStyle = '#f0e8cc'; c.fillText(txt, x, y); };
-    if (zoom > 1) {
-      for (const b of V.buildings) if (b.type !== 'house') label((ICON[b.type] || '') + ' ' + t('tmap.b.' + b.type), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 0.8) * sc, 10);
-    } else {
-      label(t('tmap.center'), V.cx * sc, (V.cz - 20) * sc);
-      for (const b of V.buildings) if (b.type === 'house') label(t('tmap.h.' + (b.status || 'house')), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 1) * sc, 9);
-    }
-    label(t('tmap.cottage'), cot.x * sc, (cot.z - 5) * sc);
-    for (const v of T.folk.list) {
-      if (!v.alive || v.away || (!v.posse && Math.hypot(v.pos.x - g.player.pos.x, v.pos.z - g.player.pos.z) > 120)) continue;
-      c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
-      c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
-    }
-    // lots for sale, your houses, a blueprint
-    for (const m of T.houses.mapMarks()) {
-      const X = m.x * sc, Z = m.z * sc, r = 4.5 * dpr / zoom;
-      c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
-      c.fillStyle = m.kind === 'home' ? '#f0e090' : m.kind === 'lot' ? '#a0dc78' : m.kind === 'blueprint' ? '#8ad0ff' : '#c8b080';
-      c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2);
-      if (m.kind !== 'lot') label(t('tmap.' + m.kind), X, Z - r - 4 * dpr / zoom, 10);
-    }
-    // your traps (gold: something is caught) and the wanted men's cabins
-    for (const m of T.trades.mapMarks()) {
-      const X = m.x * sc, Z = m.z * sc, r = (m.kind === 'wanted' ? 6 : 4) * dpr / zoom;
-      c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
-      if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2); label('✕ ' + m.name, X, Z - r - 4 * dpr / zoom, 10); }
-      else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(X, Z, r, 0, Math.PI * 2); c.fill(); c.stroke(); }
-    }
-    // hidden places you have found, treasure circles, the stagecoach, raids, fires
-    for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks())) {
-      const X = m.x * sc, Z = m.z * sc;
-      c.lineWidth = 2 * dpr / zoom; c.strokeStyle = '#000';
-      if (m.kind === 'treasure') {      // the exact spot: a red cross (dig straight down there)
-        const k = 5 * dpr / zoom; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = '#000'; c.beginPath(); c.moveTo(X - k, Z - k); c.lineTo(X + k, Z + k); c.moveTo(X + k, Z - k); c.lineTo(X - k, Z + k); c.stroke();
-        c.lineWidth = 1.6 * dpr / zoom; c.strokeStyle = '#ff3a2a'; c.stroke(); label(t('tmap.treasure'), X, Z - k - 6 * dpr / zoom, 10); continue;
+    const cross = (X, Z, col, k = 5 * dpr / zoom) => { c.lineWidth = 3.4 * dpr / zoom; c.strokeStyle = '#000'; c.beginPath(); c.moveTo(X - k, Z - k); c.lineTo(X + k, Z + k); c.moveTo(X + k, Z - k); c.lineTo(X - k, Z + k); c.stroke(); c.lineWidth = 1.8 * dpr / zoom; c.strokeStyle = col; c.stroke(); };
+    // Coordinates: a plain map (land and rivers, the grid, the treasure, your job, you)
+    if (!T.coordMode) {
+      for (const b of V.buildings) box(b, b.type === 'house' ? C.home : b.type === 'hall' || b.type === 'jail' ? C.law : C.shop);
+      const cot = T.cottage;
+      box({ x0: cot.x - 3, z0: cot.z - 3, x1: cot.x + 3, z1: cot.z + 3 }, C.cottage);
+      // labels: in the whole view the town center is one label and homes show
+      // their kind; the closer view names every building with its icon
+      const ICON = { bank: '💰', saloon: '🍺', land: '📜', general: '🛒', butcher: '🥩', hunting: '🎯', market: '🧺', hall: '⭐', jail: '🔒', stable: '🐎', house: '🏠' };
+      if (zoom > 1) {
+        for (const b of V.buildings) if (b.type !== 'house') label((ICON[b.type] || '') + ' ' + t('tmap.b.' + b.type), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 0.8) * sc, 10);
+      } else {
+        label(t('tmap.center'), V.cx * sc, (V.cz - 20) * sc);
+        for (const b of V.buildings) if (b.type === 'house') label(t('tmap.h.' + (b.status || 'house')), (b.x0 + b.x1 + 1) / 2 * sc, (b.z0 - 1) * sc, 9);
       }
-      const col = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
-      c.fillStyle = col; c.beginPath(); c.arc(X, Z, 4.5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
-      if (m.label) label(m.label, X, Z - 7 * dpr / zoom, 10);
+      label(t('tmap.cottage'), cot.x * sc, (cot.z - 5) * sc);
+      for (const v of T.folk.list) {
+        if (!v.alive || v.away || (!v.posse && Math.hypot(v.pos.x - g.player.pos.x, v.pos.z - g.player.pos.z) > 120)) continue;
+        c.fillStyle = v.posse ? C.posse : C.people; c.strokeStyle = '#000'; c.lineWidth = 1 * dpr;
+        c.beginPath(); c.arc(v.pos.x * sc, v.pos.z * sc, 3 * dpr, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
+      // lots for sale, your houses, a blueprint
+      for (const m of T.houses.mapMarks()) {
+        const X = m.x * sc, Z = m.z * sc, r = 4.5 * dpr / zoom;
+        c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
+        c.fillStyle = m.kind === 'home' ? '#f0e090' : m.kind === 'lot' ? '#a0dc78' : m.kind === 'blueprint' ? '#8ad0ff' : '#c8b080';
+        c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2);
+        if (m.kind !== 'lot') label(t('tmap.' + m.kind), X, Z - r - 4 * dpr / zoom, 10);
+      }
+      // your traps (gold: something is caught) and the wanted men's cabins
+      for (const m of T.trades.mapMarks()) {
+        const X = m.x * sc, Z = m.z * sc, r = (m.kind === 'wanted' ? 6 : 4) * dpr / zoom;
+        c.lineWidth = 1.5 * dpr / zoom; c.strokeStyle = '#000';
+        if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(X - r, Z - r, r * 2, r * 2); c.strokeRect(X - r, Z - r, r * 2, r * 2); label('✕ ' + m.name, X, Z - r - 4 * dpr / zoom, 10); }
+        else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(X, Z, r, 0, Math.PI * 2); c.fill(); c.stroke(); }
+      }
+      // hidden places you have found, treasure circles, the stagecoach, raids, fires
+      for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks())) {
+        const X = m.x * sc, Z = m.z * sc;
+        c.lineWidth = 2 * dpr / zoom; c.strokeStyle = '#000';
+        if (m.kind === 'treasure') {      // the exact spot: a red cross (dig straight down there)
+          const k = 5 * dpr / zoom; c.lineWidth = 3 * dpr / zoom; c.strokeStyle = '#000'; c.beginPath(); c.moveTo(X - k, Z - k); c.lineTo(X + k, Z + k); c.moveTo(X + k, Z - k); c.lineTo(X - k, Z + k); c.stroke();
+          c.lineWidth = 1.6 * dpr / zoom; c.strokeStyle = '#ff3a2a'; c.stroke(); label(t('tmap.treasure'), X, Z - k - 6 * dpr / zoom, 10); continue;
+        }
+        const col = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
+        c.fillStyle = col; c.beginPath(); c.arc(X, Z, 4.5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
+        if (m.label) label(m.label, X, Z - 7 * dpr / zoom, 10);
+      }
+    } else {
+      for (const m of T.hidden.maps) if (!m.found) { cross((m.x + 0.5) * sc, (m.z + 0.5) * sc, '#ff3a2a', 8 * dpr / zoom); label(t('tmap.treasure'), (m.x + 0.5) * sc, (m.z + 0.5) * sc - 12 * dpr / zoom, 10); }
     }
     // the coordinate grid (a Cartesian plane: X east, Y north, 0, 0 at the bottom-left corner)
     if (T.coordMode) {
@@ -348,11 +355,11 @@ export function installTownUI(UI) {
       label('X →', (w.W - 14) * sc, (w.D - 8) * sc, 11); label('Y ↑', 12 * sc, 14 * sc, 11);
       const me = coords(g.player.pos.x, g.player.pos.z, w);
       label(t('tmap.youXY', me), g.player.pos.x * sc, (g.player.pos.z + 9) * sc, 10);
-      for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.x, m.z, w); label(`(${C.x}, ${C.y})`, (m.x + 0.5) * sc, (m.z + 6) * sc, 11); }
+      for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.x, m.z, w); label(`(${C.x}, ${C.y})`, (m.x + 0.5) * sc, (m.z + 0.5) * sc + 20 * dpr / zoom, 11); }
     }
-    // whoever pays for your job: a gold ring
+    // whoever your job is for: a yellow cross, with its X and Y
     const jt = T.jobTarget();
-    if (jt) { c.strokeStyle = '#ffd060'; c.lineWidth = 3 * dpr / zoom; c.beginPath(); c.arc(jt.pos.x * sc, jt.pos.z * sc, 9 * dpr / zoom, 0, Math.PI * 2); c.stroke(); label(jt.name, jt.pos.x * sc, jt.pos.z * sc - 12 * dpr / zoom, 10); }
+    if (jt) { const C2 = coords(jt.pos.x, jt.pos.z, w); cross(jt.pos.x * sc, jt.pos.z * sc, '#ffd040', 7 * dpr / zoom); label(`${jt.name} (${C2.x}, ${C2.y})`, jt.pos.x * sc, jt.pos.z * sc - 12 * dpr / zoom, 10); }
     const p = g.player;
     c.save(); c.translate(p.pos.x * sc, p.pos.z * sc); c.rotate(-p.yaw);
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr; const r = 8 * dpr;

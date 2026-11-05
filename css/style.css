@@ -813,3 +813,9 @@ body.vwar-on [data-btn=jump], body.vwar-on [data-btn=crouch], body.vwar-on [data
 .vw-dot.on { background: #7aff70; }
 body.vwar-on.vw-tank [data-btn=light] { display: inline-block !important; }
 #townbar .xy { color: #bfe8ff; }
+
+/* 2.6 phones: the middle of the screen stays clear. Shop, Gang orders and the
+   aim prompt (Hold up, Fill the crater, ...) sit low, just over the health and food bars */
+body.touchui #townctx { bottom: 84px; }
+body.touchui #aimprompt { top: auto; bottom: 128px; }
+@media (max-height: 420px) { body.touchui #townctx { bottom: 80px; } body.touchui #aimprompt { bottom: 122px; } }

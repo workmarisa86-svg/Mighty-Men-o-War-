@@ -557,8 +557,10 @@ export class UI {
   }
   // terrain shading for the maps, made once per world visit (paths and
   // fields show too)
-  terrainImage(g) {
-    if (g.mapImage) return g.mapImage;
+  // plain: only land and water (Town Life's coordinate map: no roads, no buildings)
+  terrainImage(g, plain = false) {
+    if (plain && g.mapImagePlain) return g.mapImagePlain;
+    if (!plain && g.mapImage) return g.mapImage;
     const w = g.world;
     const img = document.createElement('canvas'); img.width = w.W; img.height = w.D;
     const x2 = img.getContext('2d'), id = x2.createImageData(w.W, w.D);
@@ -566,12 +568,14 @@ export class UI {
       const y = w.surfaceY(x, z), b = w.get(x, y, z), k = (x + z * w.W) * 4;
       let r, gg, bb;
       if (b === 10 || b === 25 || y < SEA) { r = 52; gg = 70; bb = 78; }
+      else if (plain) { r = 128; gg = 116; bb = 78; }
       else if (b === 29) { r = 150; gg = 128; bb = 88; }
       else if (b === 28 || (b >= 31 && b <= 38)) { r = 112; gg = 88; bb = 52; }
       else { const h = Math.min(1, (y - SEA) / 18); r = 86 + h * 50; gg = 82 + h * 40; bb = 56 + h * 30; if (b === 6 || b === 4) { r -= 22; gg -= 8; bb -= 20; } }
       id.data[k] = r; id.data[k + 1] = gg; id.data[k + 2] = bb; id.data[k + 3] = 255;
     }
     x2.putImageData(id, 0, 0);
+    if (plain) return (g.mapImagePlain = img);
     return (g.mapImage = img);
   }
 
