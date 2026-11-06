@@ -23,15 +23,19 @@ import { Houses } from './houses.js';
 import { Hidden, coords } from './hidden.js';
 import { Frontier } from './frontier.js';
 import { Robbers } from './robbers.js';
+import { bedMesh } from './cabin.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
+
+// something in the way of a bed (crops, leaves and water are not)
+function solidAt(w, x, y, z) { const id = w.get(x, y, z); return id !== B.AIR && id !== B.LEAVES && id !== B.WATER && !(id >= 31 && id <= 38); }
 
 export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
 // what each shop sells and buys (base prices in coins)
 export const SHOPS = {
-  general: { sells: { seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
+  general: { sells: { bed: 20, seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
     // building materials, ready made (crafting them yourself is cheaper)
     wood: 2, stone: 2, brick: 3, glass: 3, thatch: 2, charcoal: 2, fence: 2, gate: 6, door: 9, ladder: 3, chest: 12 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
@@ -109,6 +113,7 @@ export class TownLife {
     this.frontier = new Frontier(this, saved.frontier || {});
     this.robbers = new Robbers(this, saved.robbers || {});
     this.chests = saved.chests || {};
+    this.beds = (saved.beds || []).map((b) => this.showBed(b));     // beds you bought and put down
     if (saved.craters && g.explosives) g.explosives.craters = saved.craters;     // (Fill still works after you reopen the game)              // chests you bought and placed: "x,y,z" -> { counts }
     this.robbed = saved.robbed || {};              // coins taken from townspeople (person index -> coins)
     this.fineDue = saved.fineDue || 0;             // a fine the sheriff collects when he catches you
@@ -1147,10 +1152,17 @@ export class TownLife {
       const hall = this.village.buildings.find((b) => b.type === 'hall');
       if (hall && p.x > hall.x0 && p.x < hall.x1 + 1 && p.z > hall.z0 && p.z < hall.z1 + 1 && Math.abs(p.y - hall.door.y) < 3) out.push({ a: 'guns', label: t('law.gunsBack'), run: () => this.returnGuns() });
     }
+    // the sheriff's office: the trade register (change your trade there, sheriff or no sheriff)
+    {
+      const hall = this.village.buildings.find((b) => b.type === 'hall');
+      if (hall && !this.jailed && p.x > hall.x0 && p.x < hall.x1 + 1 && p.z > hall.z0 && p.z < hall.z1 + 1 && Math.abs(p.y - hall.door.y) < 3) out.push({ a: 'trade', label: t('trade.changeTitle'), run: () => g.app.openPanel('trades', { mode: 'change', v: null }) });
+    }
     out.push(...this.houses.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
-    if (Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) out.push({ a: 'sleep', label: t('ctx.sleep') });
+    const mine = this.beds.find((q) => Math.hypot(q.x - p.x, q.z - p.z) < 2.2 && Math.abs(q.y - p.y) < 2);
+    if ((Math.hypot(bed.x - p.x, bed.z - p.z) < 2.4 && Math.abs(bed.y - p.y) < 2) || mine) out.push({ a: 'sleep', label: t('ctx.sleep') });
+    if (mine) out.push({ a: 'takebed', label: t('bed.take'), run: () => this.takeBed(mine) });
     return out;
   }
   // a shopkeeper standing in their own shop (behind the counter, or in the market stall)
@@ -1328,6 +1340,33 @@ export class TownLife {
     if (html !== this.barHtml) { this.barHtml = html; this.bar.innerHTML = html; }
   }
   // gunfire scares townspeople
+  // ---- beds you bought: put one down on the floor (lengthwise the way you face) ----
+  showBed(b) {
+    const m = bedMesh();
+    m.position.set(b.x, b.y, b.z); m.rotation.y = b.yaw || 0;
+    this.game.scene.add(m);
+    return Object.assign(b, { mesh: m });
+  }
+  placeBed(hit) {
+    const g = this.game, w = g.world;
+    if (!hit || hit.ny !== 1 || hit.id === B.WATER) { g.hud.toast(t('bed.where')); sfx.error(); return; }
+    if (!g.has('bed')) return;
+    const x = hit.x, y = hit.y + 1, z = hit.z, yaw = Math.round(g.player.yaw / (Math.PI / 2)) * (Math.PI / 2);
+    // room for it: two blocks long, clear above
+    const fx = Math.round(-Math.sin(yaw)), fz = Math.round(-Math.cos(yaw));
+    for (const [cx, cz] of [[x, z], [x + fx, z + fz]]) if (solidAt(w, cx, y, cz) || solidAt(w, cx, y + 1, cz)) { g.hud.toast(t('bed.where')); sfx.error(); return; }
+    if (this.beds.some((q) => Math.hypot(q.x - (x + 0.5), q.z - (z + 0.5)) < 1.5 && Math.abs(q.y - y) < 1)) { g.hud.toast(t('bed.where')); sfx.error(); return; }
+    g.take('bed', 1); g.hud.dirtyHotbar = true;
+    this.beds.push(this.showBed({ x: x + 0.5 + fx * 0.5, y, z: z + 0.5 + fz * 0.5, yaw }));
+    g.hud.toast(t('bed.placed'), 'pick'); sfx.place();
+    g.app.saveGame(true);
+  }
+  takeBed(b) {
+    const g = this.game;
+    if (b.mesh) { g.scene.remove(b.mesh); b.mesh = null; }
+    this.beds = this.beds.filter((q) => q !== b);
+    g.give('bed', 1); g.hud.dirtyHotbar = true; sfx.place();
+  }
   // a chest you bought: its own store (the same panel as the house chest)
   chestStore(key) {
     const g = this.game, c = this.chests[key] || (this.chests[key] = { counts: {} });
@@ -1360,7 +1399,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, beds: this.beds.map(({ x, y, z, yaw }) => ({ x, y, z, yaw })), craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
       },
     };
   }

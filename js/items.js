@@ -42,7 +42,8 @@ export const ITEMS = {
   gate: { block: B.GATE, tiles: ['gate', 'gate'] },
   door: { block: B.DOOR, tiles: ['pdoor', 'pdoor'] },
   ladder: { block: B.LADDER, tiles: ['ladder', 'ladder'] },
-  chest: { block: B.CHEST, tiles: ['supply_top', 'supply'] },     // keeps things where you put it down
+  chest: { block: B.CHEST, tiles: ['supply_top', 'supply'] },
+  bed: { place: 'bed' },                      // Town Life: buy one, put it down anywhere, sleep in it     // keeps things where you put it down
   seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
   wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },
@@ -248,6 +249,12 @@ const ICON_DRAW = {
       c.fillStyle = '#8a6c48'; c.fillRect(5, y, 2, 5); c.fillRect(41, y, 2, 5);
     }
     c.fillStyle = '#b8a27a'; c.fillRect(12, 10, 3, 32); c.fillRect(33, 10, 3, 32);
+  },
+  bed(c) {
+    c.fillStyle = '#4a3420'; c.fillRect(6, 14, 5, 26); c.fillRect(6, 34, 36, 5); c.fillRect(37, 26, 5, 14);
+    c.fillStyle = '#b8a878'; c.fillRect(11, 26, 26, 8);
+    c.fillStyle = '#5e6258'; c.fillRect(20, 24, 17, 10);
+    c.fillStyle = '#e0d8c0'; c.fillRect(12, 22, 8, 5);
   },
   watchtower(c) {
     c.fillStyle = '#5c452e';
