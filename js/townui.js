@@ -210,7 +210,7 @@ export function installTownUI(UI) {
     }
     const body = `<p class="muted">${t(mode === 'choose' ? 'trade.chooseNote' : 'trade.changeNote', { n: Tr.changeFee() })}</p>
       <div class="trade-cards">${TRADES.map(card).join('')}</div>`;
-    const panel = this.panel(t(mode === 'choose' ? 'trade.chooseTitle' : 'trade.changeTitle'), body, mode === 'choose' ? { wide: true, back: false } : { wide: true, onBack: () => this.show('sheriff', { v }) });
+    const panel = this.panel(t(mode === 'choose' ? 'trade.chooseTitle' : 'trade.changeTitle'), body, mode === 'choose' ? { wide: true, back: false } : { wide: true, onBack: () => (v ? this.show('sheriff', { v }) : this.app.closePanel()) });
     panel.classList.add('trade-panel');
     panel.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => {
       const id = b.dataset.t;

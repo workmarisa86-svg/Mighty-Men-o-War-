@@ -3,6 +3,19 @@
 // soldiers never set foot inside.
 import * as THREE from 'three';
 
+// a bed: a low wooden frame, a straw mattress and a grey blanket (Town Life's bought beds use it too)
+export function bedMesh() {
+  const g = new THREE.Group();
+  const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+  const box = (w, h, d, c, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.set(x, y, z); g.add(m); };
+  box(0.95, 0.28, 1.9, 0x5a3e26, 0, 0.14, 0);
+  box(0.85, 0.12, 1.8, 0xb8a878, 0, 0.34, 0);
+  box(0.88, 0.06, 1.25, 0x5e6258, 0, 0.42, 0.28);
+  box(0.5, 0.1, 0.3, 0xe0d8c0, 0, 0.44, -0.65);
+  box(0.95, 0.55, 0.08, 0x4a3420, 0, 0.3, -0.95);
+  return g;
+}
+
 export class Cabin {
   constructor(game, saved) {
     this.game = game;
@@ -10,16 +23,8 @@ export class Cabin {
     // (saved as the chest itself, { counts }; older code looked for saved.chest and so always started empty)
     this.chest = saved && saved.counts ? saved : saved && saved.chest ? saved.chest : { counts: {} };
     if (!this.site || !this.site.bed) { this.site = null; return; }
-    // the bed: a low wooden frame, a straw mattress and a grey blanket
     const b = this.site.bed;
-    const g = new THREE.Group();
-    const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const box = (w, h, d, c, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(c)); m.position.set(x, y, z); g.add(m); };
-    box(0.95, 0.28, 1.9, 0x5a3e26, 0, 0.14, 0);
-    box(0.85, 0.12, 1.8, 0xb8a878, 0, 0.34, 0);
-    box(0.88, 0.06, 1.25, 0x5e6258, 0, 0.42, 0.28);
-    box(0.5, 0.1, 0.3, 0xe0d8c0, 0, 0.44, -0.65);
-    box(0.95, 0.55, 0.08, 0x4a3420, 0, 0.3, -0.95);
+    const g = bedMesh();
     g.position.set(b.x, b.y, b.z);
     game.scene.add(g);
     this.mesh = g;

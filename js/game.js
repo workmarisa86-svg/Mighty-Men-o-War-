@@ -775,6 +775,7 @@ export class Game {
     if (this.town && this.townUse(item, def, eye, dir)) return;
     const hit = this.surfaceAim(eye, dir) || this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, REACH);
     if (def.place === 'watchtower') { this.placeWatchtower(hit); return; }
+    if (def.place === 'bed') { if (this.town) this.town.placeBed(hit); return; }
 
     if (def.place === 'raft') {
       if (!this.has('raft')) { this.hud.toast(t('hud.cantPlace', { item: t('item.raft') })); sfx.error(); return; }
