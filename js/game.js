@@ -672,7 +672,8 @@ export class Game {
     const id = w.get(x, y, z);
     const def = BLOCKS[id];
     if (id === B.LOG) { this.fellTree(x, y, z); return; }
-    if (id === B.CHEST && this.town) this.town.chestBroken(x, y, z);      // what was in it comes with it
+    if (id === B.CHEST && this.town) this.town.chestBroken(x, y, z);
+    if (this.town && this.town.extras) this.town.extras.onBreak(x, y, z, id);      // what was in it comes with it
     if (this.town && def.crop) { this.harvestCrop(x, y, z, def); return; }
     if (id === B.ICE) { w.set(x, y, z, B.WATER); sfx.breakBlock('stone'); this.particles.burst(x + 0.5, y + 0.8, z + 0.5, def.color, 10, 3, 0.6); return; }
     // still water: a block dug out from under water fills in place, nothing flows
@@ -800,6 +801,7 @@ export class Game {
     if (this.blockOverlapsBodies(x, y, z)) return;
     if (this.forts.protectedCell(x, y, z)) { this.hud.toast(t('fort.noBuild')); sfx.error(); return; }
     this.world.set(x, y, z, def.block);
+    if (this.town && this.town.extras) this.town.extras.onPlace(x, y, z, def.block);
     // a door is two blocks high
     if (def.block === B.DOOR && this.world.get(x, y + 1, z) === B.AIR) this.world.set(x, y + 1, z, B.DOOR);
     if (this.campaign) this.campaign.noteBuilt(def.block);

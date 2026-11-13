@@ -558,6 +558,15 @@ const STR = {
     'jail.coinsBack': '{n} coins (the money you stole, and your fine)',
     'item.bed': 'Bed', 'bed.where': 'Put a bed down on a clear floor (it takes two blocks, lengthwise the way you face)', 'bed.placed': 'Bed put down: sleep in it any time', 'bed.take': 'Pick up the bed',
     'rob.toCamp': '{gang} got away with your things: it is all at their camp now. Break the camp to take it back.', 'rob.gotBack': 'You found what they stole from you in their tents', 'hid.takeBox': 'Take the chest', 'hid.tookBox': 'You took the chest: place it anywhere to keep things in it',
+    // 2.7: the ranch, the railroad, home defence
+    'item.bell': 'Alarm bell', 'item.loophole': 'Gun slit',
+    'ext.hire': 'Hire as a farmhand ({n} a day)', 'ext.fire': 'Let him go', 'ext.hired': '{name} works your ranch now ({n} coins a day)', 'ext.handYes': 'Glad of the work, boss.', 'ext.handBye': 'Well, so long then.',
+    'ext.guardHire': 'Hire a bodyguard ({n} a day)', 'ext.guardOff': 'Let your bodyguard go', 'ext.guardName': 'Your bodyguard', 'ext.guardHired': 'A bodyguard rides with you now ({n} coins a day)', 'ext.guardDown': 'Your bodyguard is dead', 'ext.guardQuits': 'Your bodyguard won\'t fight the law: he quits',
+    'ext.noMoney': 'You need {n} coins', 'ext.bell': 'An alarm bell is ringing!', 'ext.dogBuy': 'Buy a guard dog ({n})', 'ext.dogBought': 'A guard dog: he lives at your home and barks at robbers and wolves', 'ext.dogBarks': 'Your dog is barking at home!', 'ext.dogDead': 'Your dog was killed',
+    'ext.payTitle': 'Pay day', 'ext.paySub': 'Ranch takings {takings}, rent {rent}, wages {wages}: {net} coins.', 'ext.cantPay': 'You couldn\'t pay the wages: your hands and your bodyguard have quit.',
+    'ext.rent': 'Rent out ({n} a day)', 'ext.unrent': 'Stop renting', 'ext.isRented': 'rented out, {n} a day', 'ext.rented': 'Rented out: {n} coins a day, paid every evening',
+    'ext.gos.bounty': 'They say there\'s {n} on your head...', 'ext.gos.good': 'Folks say you\'re a decent sort.', 'ext.gos.bad': 'Mothers keep their sons in when you pass.', 'ext.gos.rivals': '{n} gangs you\'ve whipped, they say!', 'ext.gos.treasure': 'Heard you dug up a fortune!', 'ext.gos.rich': 'Richest soul in the county, they reckon.', 'ext.gos.train': 'Did you hear? The express was robbed!', 'ext.gos.ranch': 'Your ranch keeps {n} men in work.', 'ext.gos.jail': 'Seen the inside of the jail {n} times, that one.', 'ext.gos.new': 'New in these parts, ain\'t you?',
+    'train.name': 'Train', 'train.tower': 'Water tower', 'train.holdup': 'Hold up the train', 'train.rob': 'Rob the express car', 'train.guard': 'Express guard', 'train.held': 'The express guards climb down, guns out!', 'train.guards': 'The guards are still fighting', 'train.empty': 'The express car is empty', 'train.robbed': 'The express robbed!', 'train.robbedSub': '{n} coins from the express car. Every lawman in the county will be after you.',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1114,6 +1123,15 @@ const STR = {
     'jail.coinsBack': '{n} monedas (el dinero que robaste y tu multa)',
     'item.bed': 'Cama', 'bed.where': 'Pon la cama sobre un suelo despejado (ocupa dos bloques, a lo largo hacia donde miras)', 'bed.placed': 'Cama puesta: duerme en ella cuando quieras', 'bed.take': 'Recoger la cama',
     'rob.toCamp': '{gang} escaparon con tus cosas: ahora está todo en su campamento. Acaba con el campamento para recuperarlo.', 'rob.gotBack': 'Encontraste en sus tiendas lo que te robaron', 'hid.takeBox': 'Llevarte el baúl', 'hid.tookBox': 'Te llevaste el baúl: ponlo donde quieras para guardar cosas',
+    // 2.7: el rancho, el ferrocarril, defender tu casa
+    'item.bell': 'Campana de alarma', 'item.loophole': 'Aspillera',
+    'ext.hire': 'Contratar como peón ({n} al día)', 'ext.fire': 'Despedirlo', 'ext.hired': '{name} trabaja tu rancho ({n} monedas al día)', 'ext.handYes': 'Gracias por el trabajo, jefe.', 'ext.handBye': 'Bueno, hasta otra.',
+    'ext.guardHire': 'Contratar un guardaespaldas ({n} al día)', 'ext.guardOff': 'Despedir al guardaespaldas', 'ext.guardName': 'Tu guardaespaldas', 'ext.guardHired': 'Un guardaespaldas va contigo ({n} monedas al día)', 'ext.guardDown': 'Tu guardaespaldas ha muerto', 'ext.guardQuits': 'Tu guardaespaldas no pelea contra la ley: se va',
+    'ext.noMoney': 'Necesitas {n} monedas', 'ext.bell': '¡Suena una campana de alarma!', 'ext.dogBuy': 'Comprar un perro guardián ({n})', 'ext.dogBought': 'Un perro guardián: vive en tu casa y ladra a ladrones y lobos', 'ext.dogBarks': '¡Tu perro está ladrando en casa!', 'ext.dogDead': 'Han matado a tu perro',
+    'ext.payTitle': 'Día de paga', 'ext.paySub': 'Ganancias del rancho {takings}, alquiler {rent}, sueldos {wages}: {net} monedas.', 'ext.cantPay': 'No pudiste pagar los sueldos: tus peones y tu guardaespaldas se han ido.',
+    'ext.rent': 'Alquilar ({n} al día)', 'ext.unrent': 'Dejar de alquilar', 'ext.isRented': 'alquilada, {n} al día', 'ext.rented': 'Alquilada: {n} monedas al día, cobradas cada tarde',
+    'ext.gos.bounty': 'Dicen que dan {n} por tu cabeza...', 'ext.gos.good': 'La gente dice que eres de fiar.', 'ext.gos.bad': 'Las madres esconden a sus hijos cuando pasas.', 'ext.gos.rivals': '¡Dicen que has vencido a {n} bandas!', 'ext.gos.treasure': '¡Oí que desenterraste una fortuna!', 'ext.gos.rich': 'Dicen que eres el más rico del condado.', 'ext.gos.train': '¿Te enteraste? ¡Robaron el expreso!', 'ext.gos.ranch': 'Tu rancho da trabajo a {n} hombres.', 'ext.gos.jail': 'Ese ha estado en la cárcel {n} veces.', 'ext.gos.new': 'Eres nuevo por aquí, ¿verdad?',
+    'train.name': 'Tren', 'train.tower': 'Depósito de agua', 'train.holdup': 'Asaltar el tren', 'train.rob': 'Robar el vagón expreso', 'train.guard': 'Guardia del expreso', 'train.held': '¡Los guardias del expreso bajan con las armas fuera!', 'train.guards': 'Los guardias siguen peleando', 'train.empty': 'El vagón expreso está vacío', 'train.robbed': '¡Robado el expreso!', 'train.robbedSub': '{n} monedas del vagón expreso. Todos los agentes del condado irán a por ti.',
   },
 };
 

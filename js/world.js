@@ -87,7 +87,7 @@ export class World {
       const isWater = id === B.WATER;
       const blocks = isWater ? (hitWater && !startWater)
         : mode === 'dig' ? id !== B.AIR
-          : mode === 'bullet' ? SOLID[id] === 1
+          : mode === 'bullet' ? SOLID[id] === 1 && id !== B.LOOPHOLE
             : (SOLID[id] === 1 || id === B.LEAVES);
       if (blocks) {
         return { x, y, z, id, nx, ny, nz, dist: t };

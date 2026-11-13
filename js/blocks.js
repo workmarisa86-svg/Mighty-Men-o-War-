@@ -21,6 +21,8 @@ export const B = {
   GLASS_BROKEN: 48,
   // Town Life: a wooden chest you buy and place; it keeps things (town.js)
   CHEST: 49,
+  // Town Life: an alarm bell (rings at robbers, outlaws, wolves) and a gun slit (bullets pass, nobody walks through)
+  BELL: 50, LOOPHOLE: 51,
 };
 
 export const BLOCKS = [];
@@ -84,6 +86,8 @@ def(B.MAPTABLE, { name: 'maptable', tiles: { top: 'map_top', side: 'planks', bot
 def(B.HDOOR, { name: 'hdoor', tiles: { top: 'planks', side: 'door', bottom: 'planks' }, hard: Infinity, color: [0.42, 0.3, 0.2] });
 def(B.LADDER, { name: 'ladder', opaque: false, render: 'glass', climb: true, tiles: { top: 'ladder_top', side: 'ladder', bottom: 'ladder_top' }, hard: 0.8, drop: 'ladder', color: [0.42, 0.32, 0.2] });     // (dug up: the ladder comes back)
 def(B.CHEST, { name: 'chest', tiles: { top: 'supply_top', side: 'supply', bottom: 'planks' }, hard: 1.2, drop: 'chest', color: [0.45, 0.4, 0.28] });
+def(B.BELL, { name: 'bell', tiles: { top: 'iron', side: 'iron', bottom: 'planks' }, hard: 1.2, drop: 'bell', color: [0.75, 0.6, 0.3] });
+def(B.LOOPHOLE, { name: 'loophole', opaque: false, render: 'glass', tiles: { top: 'planks', side: 'fence', bottom: 'planks' }, hard: 1.5, drop: 'loophole', color: [0.45, 0.34, 0.2] });
 def(B.BEDROCK, { name: 'bedrock', tiles: { top: 'bedrock', side: 'bedrock', bottom: 'bedrock' }, hard: Infinity, color: [0.13, 0.13, 0.13] });
 
 // Quick lookup tables for hot loops (mesher, physics).

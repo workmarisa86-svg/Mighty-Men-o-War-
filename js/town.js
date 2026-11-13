@@ -24,6 +24,8 @@ import { Hidden, coords } from './hidden.js';
 import { Frontier } from './frontier.js';
 import { Robbers } from './robbers.js';
 import { bedMesh } from './cabin.js';
+import { Extras } from './extras.js';
+import { Train } from './train.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
@@ -35,7 +37,7 @@ export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
 // what each shop sells and buys (base prices in coins)
 export const SHOPS = {
-  general: { sells: { bed: 20, seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
+  general: { sells: { bed: 20, bell: 15, loophole: 4, seed_wheat: 2, seed_carrot: 3, seed_cabbage: 3, bucket: 8, bread: 4, flint: 5, medkit: 15, handcuffs: 14,
     // building materials, ready made (crafting them yourself is cheaper)
     wood: 2, stone: 2, brick: 3, glass: 3, thatch: 2, charcoal: 2, fence: 2, gate: 6, door: 9, ladder: 3, chest: 12 },
     buys: { wheat: 3, carrot: 3, cabbage: 4, egg: 2, milk: 4, wood: 1, stone: 1, clay: 1, sand: 1, brick: 2, glass: 2, charcoal: 1, thatch: 1, iron: 4, gold: 45 } },
@@ -112,6 +114,8 @@ export class TownLife {
     this.coordMode = !!saved.coordMode;          // the map's coordinate grid (and your X, Y on screen)
     this.frontier = new Frontier(this, saved.frontier || {});
     this.robbers = new Robbers(this, saved.robbers || {});
+    this.extras = new Extras(this, saved.extras || {});
+    this.train = new Train(this, saved.train || {});
     this.chests = saved.chests || {};
     this.beds = (saved.beds || []).map((b) => this.showBed(b));     // beds you bought and put down
     if (saved.craters && g.explosives) g.explosives.craters = saved.craters;     // (Fill still works after you reopen the game)              // chests you bought and placed: "x,y,z" -> { counts }
@@ -818,7 +822,7 @@ export class TownLife {
     if (ho) return ho;
     const hd = this.hidden.aimTarget(hit);                   // strongboxes, buried treasure, blasting rock (hidden.js)
     if (hd) return hd;
-    { const sel0 = this.game.selected(), W0 = WEAPONS[sel0]; const fa = this.frontier.aimTarget(hit, eye, dir, W0 && !W0.melee && !W0.throw); if (fa) return fa; }   // the stagecoach
+    { const sel0 = this.game.selected(), W0 = WEAPONS[sel0]; const fa = this.frontier.aimTarget(hit, eye, dir, W0 && !W0.melee && !W0.throw); if (fa) return fa; const ta = this.train.aimTarget(eye, dir, W0 && !W0.melee && !W0.throw); if (ta) return ta; }   // the stagecoach
     const tr = this.trades.aimTarget(hit, eye, dir);       // traps, handcuffs (trades.js)
     if (tr) return tr;
     const g = this.game, F = this.folk, p = g.player, sel = g.selected();
@@ -1157,7 +1161,7 @@ export class TownLife {
       const hall = this.village.buildings.find((b) => b.type === 'hall');
       if (hall && !this.jailed && p.x > hall.x0 && p.x < hall.x1 + 1 && p.z > hall.z0 && p.z < hall.z1 + 1 && Math.abs(p.y - hall.door.y) < 3) out.push({ a: 'trade', label: t('trade.changeTitle'), run: () => g.app.openPanel('trades', { mode: 'change', v: null }) });
     }
-    out.push(...this.houses.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
+    out.push(...this.houses.options(p), ...this.extras.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     const mine = this.beds.find((q) => Math.hypot(q.x - p.x, q.z - p.z) < 2.2 && Math.abs(q.y - p.y) < 2);
@@ -1225,6 +1229,8 @@ export class TownLife {
     this.hidden.update(dt);
     this.frontier.update(dt);
     this.robbers.update(dt);
+    this.extras.update(dt);
+    this.train.update(dt);
     if (this.chooseLater && !g.overlay && !g.dying && (this.chooseT -= dt) <= 0) { this.chooseLater = false; g.app.openPanel('trades', { mode: 'choose' }); }
     this.signs.update(dt);
     if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
@@ -1399,7 +1405,7 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), chests: this.chests, beds: this.beds.map(({ x, y, z, yaw }) => ({ x, y, z, yaw })), craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), extras: this.extras.toSave(), train: this.train.toSave(), chests: this.chests, beds: this.beds.map(({ x, y, z, yaw }) => ({ x, y, z, yaw })), craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
       },
     };
   }
