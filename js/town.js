@@ -466,7 +466,7 @@ export class TownLife {
     if (!P.arrived && Math.hypot(P.lastSeen.x - v.pos.x, P.lastSeen.z - v.pos.z) < 8) P.arrived = true;
     if (idx === 0 && !P.checked) {
       if (F.goDirect(v, P.lastSeen, (v.horse ? 1.9 : 1) * (d > 60 ? 5 : 4), dt, 1.2)) P.checked = true;
-      if (v.far && v.route.length) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
+      if (v.far && v.route.length && !v.route[0].direct) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
       return;
     }
     v.searchT = (v.searchT || 0) - dt;
@@ -477,7 +477,7 @@ export class TownLife {
       v.route = [];
     }
     F.goDirect(v, v.search, (v.horse ? 1.9 : 1) * (d > 60 ? 5 : 3.4), dt, 1.2);
-    if (v.far && v.route.length) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
+    if (v.far && v.route.length && !v.route[0].direct) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
   }
   goHostile() {
     const P = this.posse;

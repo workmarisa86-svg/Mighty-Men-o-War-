@@ -8,6 +8,7 @@
 // Headquarters rooms (only in one your side holds): medical cabinet -> heal,
 // weapon rack -> armory, war-map table -> world map; the basement hatch ->
 // climb down.
+import { ITEMS } from './items.js';
 import { B } from './blocks.js';
 import { BODY } from './config.js';
 import { t } from './i18n.js';
@@ -71,7 +72,9 @@ export class AimUse {
       if (html !== this.html) { this.html = html; this.el.innerHTML = html; this.el.hidden = !html; }
     }
     if (!playing || !this.target) return false;
-    if (input.hit('KeyE') || input.thit('tap') || input.mouse.rightPressed) { this.use(); return true; }
+    // (right-click with a block in hand at a crater places the block: Fill is E or the prompt)
+    const blockInHand = this.target.a === 'fill' && ITEMS[g.selected()] && ITEMS[g.selected()].block != null;
+    if (input.hit('KeyE') || input.thit('tap') || (input.mouse.rightPressed && !blockInHand)) { this.use(); return true; }
     return false;
   }
   use() {
