@@ -144,7 +144,7 @@ export function installTownUI(UI) {
     mine.push(`<div class="shop-row"><span><b>${t('land.yourHome')}</b> ${cur ? t('house.' + cur.design) : t('land.cottage')}</span><b></b><span></span></div>`);
     if (cur && !Hs.cottageSold) mine.push(`<div class="shop-row"><span>${t('land.cottage')}${Hs.cottageTaken ? ' · <span class="muted">' + t('land.taken') + '</span>' : ''}</span><b>${Math.round(60 * T.trades.priceK('house', false))}</b><button class="btn small" data-sellc="1" ${Hs.cottageTaken ? 'disabled' : ''}>${t('shop.sell')}</button></div>`);
     for (const h of Hs.homes) if (h.id !== Hs.homeId && h.taken == null) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b>${Math.round(DESIGNS[h.design].value * T.trades.priceK('house', false))}</b><button class="btn small" data-sell="${h.id}">${t('shop.sell')}</button></div>`);
-    for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}</span><b></b><button class="btn small" data-move="${h.id}">${t('land.moveIn')}</button></div>`);
+    for (const h of Hs.homes) if (h.id !== Hs.homeId) mine.push(`<div class="shop-row"><span>${t('house.' + h.design)}${h.rented ? ' · <span class="muted">' + t('ext.isRented', { n: T.extras.rentOf(h) }) + '</span>' : ''}</span><b></b>${h.rented ? `<button class="btn small" data-unrent="${h.id}">${t('ext.unrent')}</button>` : `<button class="btn small" data-move="${h.id}">${t('land.moveIn')}</button>${h.taken == null ? `<button class="btn small" data-rent="${h.id}">${t('ext.rent', { n: T.extras.rentOf(h) })}</button>` : ''}`}</div>`);
     if (Hs.bp) mine.push(`<div class="shop-row"><span>${t('land.bpOn', { house: t('house.' + Hs.bp.design), n: (Hs.total || 0) - (Hs.left || 0), total: Hs.total || 0 })}</span><b></b><button class="btn small ghost" data-cancel="1">${t('land.cancelBp')}</button></div>`);
     const cards = DESIGN_IDS.map((id) => {
       const D = DESIGNS[id], why = Hs.allowed(id), pb = Hs.price(id), ps = Hs.price(id, true), P = D.plan();
@@ -162,6 +162,8 @@ export function installTownUI(UI) {
       <div class="trade-cards">${cards}</div>`;
     const panel = this.panel(t('shop.land'), body, { wide: true, onBack: () => this.app.closePanel() });
     panel.querySelectorAll('[data-built]').forEach((b) => b.onclick = () => this.show('land', { v, design: b.dataset.built }));
+    panel.querySelectorAll('[data-rent]').forEach((b) => b.onclick = () => { T.extras.rentOut(Hs.homes.find((h) => h.id === b.dataset.rent)); this.show('land', { v }); });
+    panel.querySelectorAll('[data-unrent]').forEach((b) => b.onclick = () => { T.extras.stopRent(Hs.homes.find((h) => h.id === b.dataset.unrent)); this.show('land', { v }); });
     panel.querySelectorAll('[data-supplies]').forEach((b) => b.onclick = () => { if (Hs.buySupplies(b.dataset.supplies)) this.app.closePanel(); });
     panel.querySelectorAll('[data-sell]').forEach((b) => b.onclick = () => { Hs.sellHome(Hs.homes.find((h) => h.id === b.dataset.sell)); this.show('land', { v }); });
     panel.querySelectorAll('[data-move]').forEach((b) => b.onclick = () => { Hs.moveInto(Hs.homes.find((h) => h.id === b.dataset.move)); this.show('land', { v }); });
@@ -326,7 +328,7 @@ export function installTownUI(UI) {
         else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(X, Z, r, 0, Math.PI * 2); c.fill(); c.stroke(); }
       }
       // hidden places you have found, treasure circles, the stagecoach, raids, fires
-      for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks())) {
+      for (const m of T.hidden.mapMarks().concat(T.frontier.mapMarks(), T.train.mapMarks())) {
         const X = m.x * sc, Z = m.z * sc;
         c.lineWidth = 2 * dpr / zoom; c.strokeStyle = '#000';
         if (m.kind === 'treasure') {      // the exact spot: a red cross (dig straight down there)

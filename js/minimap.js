@@ -127,11 +127,11 @@ export class Minimap {
         c.fillStyle = { place: '#c8a070', coach: '#8a3a2a', station: '#8a7a6a', raid: '#e04030', fire: '#ff8020', quest: '#e070c0' }[m.kind] || '#ccc';
         c.beginPath(); c.arc(x, y, 3.5, 0, Math.PI * 2); c.fill(); c.stroke();
       }
-      const marks = g.town.marks();
+      const marks = g.town.marks(), storm = g.town.extras && g.town.extras.storm();
       for (const v of g.town.folk.extra.length ? g.town.folk.list.concat(g.town.folk.extra) : g.town.folk.list) {
         if (!v.alive || v.away) continue;
         const [x, y, d] = toRadar(v.pos.x, v.pos.z);
-        if (d > RADAR_RANGE) continue;
+        if (d > RADAR_RANGE || (storm && d > 22)) continue;               // (a storm: only the close ones show)
         const wit = marks.includes(v);
         if (wit && Math.floor(this.t * 4) % 2) continue;
         c.fillStyle = v.posse || (v.outlaw && !v.cuffed) ? OWNER_COLORS.enemy : wit ? '#ffd040' : v.gang ? '#d89a4a' : '#7ac860'; c.strokeStyle = 'rgba(0,0,0,0.75)'; c.lineWidth = 1;

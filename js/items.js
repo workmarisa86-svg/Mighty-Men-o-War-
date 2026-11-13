@@ -43,7 +43,9 @@ export const ITEMS = {
   door: { block: B.DOOR, tiles: ['pdoor', 'pdoor'] },
   ladder: { block: B.LADDER, tiles: ['ladder', 'ladder'] },
   chest: { block: B.CHEST, tiles: ['supply_top', 'supply'] },
-  bed: { place: 'bed' },                      // Town Life: buy one, put it down anywhere, sleep in it     // keeps things where you put it down
+  bed: { place: 'bed' },
+  bell: { block: B.BELL, tiles: ['iron', 'iron'] },            // rings when robbers, outlaws or wolves come close
+  loophole: { block: B.LOOPHOLE, tiles: ['fence', 'fence'] },  // a gun slit: shoot through it, nobody gets through                      // Town Life: buy one, put it down anywhere, sleep in it     // keeps things where you put it down
   seed_wheat: { seed: 'wheat' }, seed_carrot: { seed: 'carrot' }, seed_cabbage: { seed: 'cabbage' },
   wheat: {}, carrot: { food: 10 }, cabbage: { food: 12 },
   bread: { food: 35 }, egg: { food: 8 }, milk: { food: 14 },

@@ -44,7 +44,7 @@ export class Robbers {
   heat() {
     const T = this.T, bank = T.frontier && T.frontier.bank ? T.frontier.bank.balance : 0;
     const rich = Math.min(2, (T.money + bank) / 1500), name = Math.min(1.5, Math.max(0, T.trades.reps.outlaws || 0) / 40);
-    return (this.outlaw() ? 1 : 0.6) * (1 + rich + name);
+    return (this.outlaw() ? 1 : 0.6) * (1 + rich + name) * (T.snowing() ? 1.35 : 1);      // (in the snow they follow your tracks)
   }
   // one gang, or two teaming up when you are a big enough prize
   pickGangs() {

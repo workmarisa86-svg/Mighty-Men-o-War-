@@ -868,14 +868,23 @@ export class Frontier {
     const c = cv.getContext('2d');
     c.fillStyle = '#e4d4a8'; c.fillRect(0, 0, 128, 160); c.strokeStyle = '#6a5030'; c.lineWidth = 4; c.strokeRect(2, 2, 124, 156);
     c.fillStyle = '#2a1c10'; c.textAlign = 'center'; c.font = 'bold 26px Georgia, serif'; c.fillText(t('fr.posterWanted'), 64, 32);
-    c.fillStyle = '#5a4a3a'; c.fillRect(34, 42, 60, 62); c.fillStyle = '#c8a888'; c.fillRect(46, 52, 36, 40); c.fillStyle = '#2a1c10'; c.fillRect(40, 44, 48, 12);
+    // your face, drawn by the sheriff from what witnesses told him: hat, eyes, moustache, the scowl
+    c.fillStyle = '#d8c49a'; c.fillRect(34, 40, 60, 66);
+    c.fillStyle = '#c8a888'; c.fillRect(46, 54, 36, 40);
+    c.fillStyle = '#2a1c10'; c.fillRect(36, 46, 56, 9); c.fillRect(44, 38, 40, 10);                  // the hat
+    c.fillRect(53, 66, 6, 4); c.fillRect(69, 66, 6, 4); c.fillRect(52, 63, 8, 2); c.fillRect(68, 63, 8, 2);   // eyes and brows
+    c.fillRect(56, 80, 16, 4); c.fillRect(54, 83, 4, 4); c.fillRect(70, 83, 4, 4);                  // moustache
+    c.fillStyle = '#7a5a40'; c.fillRect(62, 70, 4, 8); c.fillRect(58, 89, 12, 2);
     c.fillStyle = '#2a1c10'; c.font = 'bold 15px Georgia, serif'; c.fillText(t('fr.posterDead'), 64, 124); c.font = 'bold 20px Georgia, serif'; c.fillText('$' + T.bounty, 64, 148);
     const tex = new THREE.CanvasTexture(cv);
     this.posters = new THREE.Group();
-    for (const type of ['hall', 'stable', 'general', 'saloon']) {
+    // the bigger the bounty, the more posters (and the bigger they are)
+    const where = T.bounty >= 200 ? ['hall', 'stable', 'general', 'saloon', 'butcher', 'hunting', 'bank', 'land', 'market'] : ['hall', 'stable', 'general', 'saloon'];
+    const k = Math.min(1.8, 1 + T.bounty / 500);
+    for (const type of where) {
       const b = T.village.buildings.find((x) => x.type === type);
       if (!b || !b.sign) continue;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1), new THREE.MeshBasicMaterial({ map: tex }));
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.8 * k, 1 * k), new THREE.MeshBasicMaterial({ map: tex }));
       const f = b.sign.face;
       m.position.set(b.sign.x + f[0] * 0.01 + (f[1] ? 2 : 0), b.y ?? (b.sign.y - 1.9), b.sign.z + f[1] * 0.01 + (f[0] ? 2 : 0));
       m.position.y = b.sign.y - 1.9;

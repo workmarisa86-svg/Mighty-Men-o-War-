@@ -29,6 +29,7 @@ export const TYPES = {
   deer: { hp: 55, meat: 2, hide: 'hide', hides: 1, walk: 1.2, flee: 7.2, group: [2, 4], sense: 1.4, half: 0.45, height: 1.45 },
   bear: { hp: 320, meat: 6, hide: 'bear_hide', hides: 1, walk: 0.9, flee: 6.2, group: [1, 1], sense: 1.1, half: 0.7, height: 1.4, fierce: true, swim: true, sink: 0.85 },
   wolf: { hp: 70, meat: 2, hide: 'wolf_hide', hides: 1, walk: 1.4, flee: 7.6, group: [4, 6], sense: 1.5, half: 0.32, height: 0.85, pack: true, swim: true, sink: 0.5 },
+  dog: { hp: 60, meat: 1, walk: 1.5, flee: 6, group: [1, 1], sense: 1.6, half: 0.3, height: 0.75 },     // Town Life: your guard dog
   chicken: { hp: 8, meat: 1, walk: 0.7, flee: 3.2, group: [3, 5], sense: 0.8, half: 0.22, height: 0.5 },
 };
 // Town Life seasons: how likely each new wild group is (bears rare in summer,
@@ -186,7 +187,7 @@ function makeChicken(r) {
   for (const s of [-1, 1]) { const l = leg(0.03, 0.2, 0xe0a030, s * 0.06, 0.2, 0); legs.push(l); g.add(l); }
   return { g, legs, wings };
 }
-const MAKERS = { pig: makePig, cow: makeCow, bird: makeBird, deer: makeDeer, bear: makeBear, chicken: makeChicken, wolf: makeWolf };
+const MAKERS = { pig: makePig, cow: makeCow, bird: makeBird, deer: makeDeer, bear: makeBear, chicken: makeChicken, wolf: makeWolf, dog: () => makeWolf(() => 0.99) };     // (a dog: a brown, wolf-built hound)
 
 export class Animals {
   constructor(game) {
