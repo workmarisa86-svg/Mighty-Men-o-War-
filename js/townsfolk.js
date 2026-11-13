@@ -292,9 +292,34 @@ export class Townsfolk {
       if (p && p.length && v.replans < 3) v.route = p.concat(v.route.slice(1));
       // last resort: slip on to the next point (just outside the door, say)
       // (never into your home from outside: a shut door keeps everyone out)
-      if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(), H = this.game.cabin; if (nx && !(H && H.site && H.covers(nx.x, nx.z, 0.5) && !H.covers(v.pos.x, v.pos.z, 0.5))) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
+      // (only along a real path, a few steps at most: never through the walls of your house or fort)
+      if (v.replans >= 3 || !this.visible(v)) { const nx = v.route.shift(), H = this.game.cabin; if (nx && this.canSlip(v, nx) && !(H && H.site && H.covers(nx.x, nx.z, 0.5) && !H.covers(v.pos.x, v.pos.z, 0.5))) v.pos.set(nx.x, nx.y, nx.z); v.replans = 0; }
     }
     return false;
+  }
+  // may he be moved on to this point of his way? (a short hop with nothing solid in between)
+  canSlip(v, q) {
+    if (q.direct || Math.hypot(q.x - v.pos.x, q.z - v.pos.z) > 4 || Math.abs(q.y - v.pos.y) > 2.5) return false;
+    const w = this.game.world, n = 8;
+    for (let k = 1; k <= n; k++) {
+      const x = v.pos.x + (q.x - v.pos.x) * k / n, z = v.pos.z + (q.z - v.pos.z) * k / n, y = v.pos.y + (q.y - v.pos.y) * k / n;
+      if (SOLID[w.get(Math.floor(x), Math.floor(y + 0.5), Math.floor(z))] && SOLID[w.get(Math.floor(x), Math.floor(y + 1.5), Math.floor(z))]) return false;
+    }
+    return true;
+  }
+  // people never hang in the air: a dug-out or blown-away floor and down they come
+  settle(v, dt) {
+    if (v.horse || v.seat || v.sitting || v.sleeping || v.leap) return;
+    const w = this.game.world, bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z), y = v.pos.y;
+    const at = w.get(bx, Math.floor(y + 0.05), bz);
+    if (at === B.WATER || at === B.LADDER) { v.vy = 0; return; }
+    if (SOLID[w.get(bx, Math.floor(y - 0.05), bz)] && y - Math.floor(y) < 0.1) { v.vy = 0; return; }     // standing on something
+    let fy = null;
+    for (let yy = Math.floor(y - 0.05); yy > 0; yy--) { const b = w.get(bx, yy, bz); if (SOLID[b] || b === B.WATER) { fy = yy + 1; break; } }
+    if (fy == null || fy > y + 0.01) { v.vy = 0; return; }
+    v.vy = Math.min(30, (v.vy || 0) + 22 * dt);
+    v.pos.y = Math.max(fy, y - v.vy * dt);
+    if (v.pos.y <= fy) { v.vy = 0; v.route = []; }
   }
   // chase or approach something away from the roads (A*, refreshed now and then)
   goDirect(v, target, speed, dt, near = 1.2) {
@@ -302,7 +327,8 @@ export class Townsfolk {
     if (v.planT <= 0 || !v.route.length) {
       v.planT = 2.5 + Math.random();
       const d = Math.hypot(target.x - v.pos.x, target.z - v.pos.z);
-      v.route = d < 8 ? [{ x: target.x, y: target.y, z: target.z }] : (findPath(this.game.world, v.pos, target, 2200, true) || [{ x: target.x, y: target.y, z: target.z }]);
+      // (no path: a straight line, marked so nobody is ever slipped along it through walls)
+      v.route = d < 8 ? [{ x: target.x, y: target.y, z: target.z, direct: true }] : (findPath(this.game.world, v.pos, target, 2200, true) || [{ x: target.x, y: target.y, z: target.z, direct: true }]);
       v.place = null;
     }
     if (Math.hypot(target.x - v.pos.x, target.z - v.pos.z) < near) { v.speed = 0; return true; }
@@ -460,6 +486,7 @@ export class Townsfolk {
       else if (v.watching) this.watchBehaviour(v, dt);
       else this.dailyBehaviour(v, dt, d);
       if (v.horse) v.horse.carry(v);
+      else this.settle(v, dt);
       // greetings when the player comes close
       if (!v.extra && !v.posse && !v.reportTo && !v.fight && !v.surrendered && !v.sleeping && d < 4.5 && v.greetT <= 0 && !g.overlay && v.scaredT <= 0) {
         v.greetT = 70 + Math.random() * 40; v.faceT = 3;
@@ -534,9 +561,9 @@ export class Townsfolk {
     const g = this.game, hall = this.village.buildings.find((b) => b.type === 'hall');
     const sheriff = this.list.find((s) => s.role === 'sheriff' && s.alive);
     const goal = sheriff && !sheriff.posse ? sheriff.pos : hall.door;
-    if (!v.route.length || (v.planT = (v.planT || 0) - dt) <= 0) { v.planT = 3; v.route = findPath(g.world, v.pos, goal, 2500, true) || [{ x: goal.x, y: goal.y, z: goal.z }]; }
+    if (!v.route.length || (v.planT = (v.planT || 0) - dt) <= 0) { v.planT = 3; v.route = findPath(g.world, v.pos, goal, 2500, true) || [{ x: goal.x, y: goal.y, z: goal.z, direct: true }]; }
     this.walk(v, dt, RUN);
-    if (v.far && v.route.length) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
+    if (v.far && v.route.length && !v.route[0].direct) { v.actT = (v.actT || 0) - dt; if (v.actT <= 0) { v.actT = 2; const q = v.route.shift(); v.pos.set(q.x, q.y, q.z); } }
     if (Math.hypot(goal.x - v.pos.x, goal.z - v.pos.z) < 2.5) {
       const c = v.reportTo; v.reportTo = null; v.route = [];
       g.town.reported(v, c);
