@@ -125,7 +125,7 @@ export class TownLife {
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
-    if (g.cfg.siege) { this.chooseLater = false; this.siege = new Siege(this); }      // Siege mode (siege.js): waves every evening
+    if (g.cfg.siege) { this.chooseLater = false; this.money = 0; this.emptyForSiege(); this.siege = new Siege(this); }      // Siege mode (siege.js): an empty land, waves every evening
     g.player.spurs = true;                         // a frontier town: spurs on your boots
     // nothing modern in Town Life: any modern gun becomes its period counterpart
     const inv = g.inv;
@@ -879,7 +879,7 @@ export class TownLife {
   // a body or someone who gave up: their money, guns, food, valuables, horse
   lootList(v) {
     const out = [];
-    if (v.money > 0) out.push({ id: 'coins', n: v.money });
+    if (v.money > 0 && !this.siege) out.push({ id: 'coins', n: v.money });
     for (const gname of v.guns || []) out.push({ id: gname, n: 1 });
     for (const f of v.goods || []) out.push({ id: f, n: 1 });
     for (const [id, n] of Object.entries(v.bag || {})) if (n > 0) out.push({ id, n, bag: true });     // (a robber's saddlebag: what he took from you)
@@ -1220,11 +1220,27 @@ export class TownLife {
   }
 
   // ---- per frame -------------------------------------------------------------------
+  // Siege: the land is empty (towngen.js wiped it): no townsfolk, furniture,
+  // signs, horses or animals; you stand in the middle of it, from nothing
+  emptyForSiege() {
+    const g = this.game, F = this.folk;
+    for (const v of F.list) { v.alive = false; v.away = true; F.dead[v.i] = 1e12; F.dropRig(v); }
+    for (const m of [this.furniture && this.furniture.mesh, this.furniture && this.furniture.embers, this.signs && this.signs.group, g.cabin && g.cabin.mesh]) if (m) m.visible = false;
+    if (this.furniture) this.furniture.solids = [];
+    if (this.doctor) { const r = this.doctor.root || this.doctor.group || this.doctor.mesh; if (r) r.visible = false; }
+    if (g.horses) { for (const h of g.horses.list) h.drop(); g.horses.list = []; }
+    // the wild animals stay (hunt them: you have no other food); the town's and your livestock go with the pens
+    if (g.animals) for (const a of g.animals.list.slice()) if (a.owner) g.animals.remove(a);
+    for (const a of this.extraMeshes || []) a.visible = false;
+    const s = g.world.spawn; g.player.pos.set(s.x, s.y, s.z); g.player.vel.set(0, 0, 0);
+    this.coordMode = true;                                     // (the map: land, water and the grid)
+  }
   update(dt) {
     const g = this.game;
     this.applySeason();
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
     if (g.paused) return;
+    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.updateDoors(dt); this.ambience(dt); if ((this.barT = (this.barT || 0) - dt) <= 0) { this.barT = 0.25; this.updateBar(); } return; }    // (the rest of town life is off)
     this.folk.update(dt);
     this.duels.update(dt);
     this.pens.update(dt);
@@ -1338,8 +1354,8 @@ export class TownLife {
     if (s !== 'winter' && g.weather.rain < 0.2 && Math.random() < 0.05) sfx.dust(0.7 + Math.random() * 0.5);   // a dusty gust down the street
   }
   updateBar() {
-    const html = `<span class="coins">${this.money}</span>` +
-      `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
+    const html = (this.siege ? '' : `<span class="coins">${this.money}</span>`) +        // (no money in a Siege: nothing to buy)
+      (this.siege ? '' : `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>`) +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
       (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}${this.jobXY()}</span>` : '') +

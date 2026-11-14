@@ -69,7 +69,7 @@ export class Game {
 
     // world
     this.world = new World(this.cfg);
-    if (this.townMode) M.generateTown(this.world); else generate(this.world);
+    if (this.townMode) { M.generateTown(this.world); if (this.cfg.siege && M.wipeForSiege) M.wipeForSiege(this.world); } else generate(this.world);
     this.season = () => (this.town ? this.town.season : 'summer');
     this.world.applyEdits(save.edits);
     this.world.onSet = (x, y, z, old, id) => {

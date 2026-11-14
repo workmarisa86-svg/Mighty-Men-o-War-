@@ -8,7 +8,7 @@ let townP = null, warP = null;
 
 export function loadTown() {
   return townP || (townP = Promise.all([import('./town.js'), import('./towngen.js'), import('./horses.js')])
-    .then(([town, gen, horses]) => Object.assign(M, { TownLife: town.TownLife, SHOPS: town.SHOPS, generateTown: gen.generateTown, Horses: horses.Horses, town: true }))
+    .then(([town, gen, horses]) => Object.assign(M, { TownLife: town.TownLife, SHOPS: town.SHOPS, generateTown: gen.generateTown, wipeForSiege: gen.wipeForSiege, Horses: horses.Horses, town: true }))
     .catch((e) => { townP = null; throw e; }));
 }
 export function loadWar() {

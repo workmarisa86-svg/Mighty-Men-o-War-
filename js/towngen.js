@@ -228,6 +228,7 @@ export function generateTown(world) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (Math.abs(tops[x + dx + (z + dz) * W] - top) > 1) flat = false;
     if (!flat || world.get(x, top + 1, z) !== B.AIR) continue;
     plantOak(world, x, top + 1, z, mulberry32(Math.floor(hash2(x, z, seed + 77) * 1e9)));
+    (world.oaks || (world.oaks = [])).push([x, top + 1, z]);          // (a Siege plants them again on the empty land)
   }
 
   // hidden places out in the hills (their own random numbers: nothing else moves)
@@ -236,6 +237,26 @@ export function generateTown(world) {
   world.sites.push({ type: 'cabin', x: cottage.x, y: cottage.y, z: cottage.z, r: cottage.r, bed: cottage.bed, chest: cottage.chest, fire: cottage.fire, door: cottage.door, pen: cottage.pen, garden: cottage.garden });
   world.sites.push(village);
   world.spawn = { x: cottage.x + 0.5, y: cottage.y, z: cottage.z + 0.5 };
+}
+
+// Siege: the same land with no town. Everything built on it goes (the town, the
+// homes, the cottage, roads, fences, the mines' timbers); the ground, the water
+// and the trees stay, and nothing is locked. You start in the middle, from nothing.
+const NATURAL = new Set([B.GRASS, B.DIRT, B.SAND, B.STONE, B.CLAY, B.MUD, B.ICE, B.BEDROCK, B.WATER, B.IRON, B.GOLD, B.CHARCOAL]);
+export function wipeForSiege(world) {
+  const W = world.W, D = world.D, H = world.H, tops = world.tops, data = world.data;
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const top = tops[x + z * W];
+    for (let y = top + 1; y < H; y++) { const i = world.idx(x, y, z); if (data[i] !== B.WATER) data[i] = B.AIR; }
+    const i = world.idx(x, top, z);
+    if (!NATURAL.has(data[i])) data[i] = top < SEA ? B.SAND : B.GRASS;      // (floors, paths, farmland: back to grass)
+    for (let y = 1; y < top; y++) { const j = world.idx(x, y, z); if (data[j] !== B.AIR && !NATURAL.has(data[j])) data[j] = B.STONE; }   // (old mine timbers, cellars, strongboxes)
+  }
+  world.locked.fill(0);
+  // the woods, as they grew (the same trees, from the same seeds)
+  for (const [x, y, z] of world.oaks || []) if (world.get(x, y, z) === B.AIR && world.get(x, y - 1, z) === B.GRASS) plantOak(world, x, y, z, mulberry32(Math.floor(hash2(x, z, world.cfg.seed + 77) * 1e9)));
+  const cx = Math.floor(W / 2), cz = Math.floor(D / 2);
+  world.spawn = { x: cx + 0.5, y: tops[cx + cz * W] + 1, z: cz + 0.5 };
 }
 
 const smooth = (t) => t * t * (3 - 2 * t);
