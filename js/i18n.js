@@ -567,6 +567,11 @@ const STR = {
     'ext.rent': 'Rent out ({n} a day)', 'ext.unrent': 'Stop renting', 'ext.isRented': 'rented out, {n} a day', 'ext.rented': 'Rented out: {n} coins a day, paid every evening',
     'ext.gos.bounty': 'They say there\'s {n} on your head...', 'ext.gos.good': 'Folks say you\'re a decent sort.', 'ext.gos.bad': 'Mothers keep their sons in when you pass.', 'ext.gos.rivals': '{n} gangs you\'ve whipped, they say!', 'ext.gos.treasure': 'Heard you dug up a fortune!', 'ext.gos.rich': 'Richest soul in the county, they reckon.', 'ext.gos.train': 'Did you hear? The express was robbed!', 'ext.gos.ranch': 'Your ranch keeps {n} men in work.', 'ext.gos.jail': 'Seen the inside of the jail {n} times, that one.', 'ext.gos.new': 'New in these parts, ain\'t you?',
     'train.name': 'Train', 'train.tower': 'Water tower', 'train.holdup': 'Hold up the train', 'train.rob': 'Rob the express car', 'train.guard': 'Express guard', 'train.held': 'The express guards climb down, guns out!', 'train.guards': 'The guards are still fighting', 'train.empty': 'The express car is empty', 'train.robbed': 'The express robbed!', 'train.robbedSub': '{n} coins from the express car. Every lawman in the county will be after you.',
+    // 2.8: Siege
+    'siege.start': 'Siege: survive the waves', 'siege.bestShort': 'best wave {n}', 'siege.title': 'Siege', 'siege.intro': 'Build a shelter: endless blocks and dynamite. At eight tonight the first wave comes, and one man more every night. Tap Ready to bring a wave early.',
+    'siege.waveTitle': 'Wave {n}', 'siege.waveSub': '{k} outlaws are coming. They blow through walls that hide you.', 'siege.blast': 'Blow that wall!', 'siege.survived': 'Wave {n} survived', 'siege.survivedSub': 'Wave {n} ({k} men) comes at eight tomorrow night. Two medkits for you.',
+    'siege.hudFight': 'Wave {n}: {k} left', 'siege.hudWait': 'Wave {n} in {time} · best {best}', 'siege.ready': 'Ready: bring the next wave',
+    'siege.overTitle': 'The siege is over', 'siege.overText': 'You survived {n} waves.', 'siege.best': 'Best: wave {n}', 'siege.again': 'Try again',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1132,6 +1137,11 @@ const STR = {
     'ext.rent': 'Alquilar ({n} al día)', 'ext.unrent': 'Dejar de alquilar', 'ext.isRented': 'alquilada, {n} al día', 'ext.rented': 'Alquilada: {n} monedas al día, cobradas cada tarde',
     'ext.gos.bounty': 'Dicen que dan {n} por tu cabeza...', 'ext.gos.good': 'La gente dice que eres de fiar.', 'ext.gos.bad': 'Las madres esconden a sus hijos cuando pasas.', 'ext.gos.rivals': '¡Dicen que has vencido a {n} bandas!', 'ext.gos.treasure': '¡Oí que desenterraste una fortuna!', 'ext.gos.rich': 'Dicen que eres el más rico del condado.', 'ext.gos.train': '¿Te enteraste? ¡Robaron el expreso!', 'ext.gos.ranch': 'Tu rancho da trabajo a {n} hombres.', 'ext.gos.jail': 'Ese ha estado en la cárcel {n} veces.', 'ext.gos.new': 'Eres nuevo por aquí, ¿verdad?',
     'train.name': 'Tren', 'train.tower': 'Depósito de agua', 'train.holdup': 'Asaltar el tren', 'train.rob': 'Robar el vagón expreso', 'train.guard': 'Guardia del expreso', 'train.held': '¡Los guardias del expreso bajan con las armas fuera!', 'train.guards': 'Los guardias siguen peleando', 'train.empty': 'El vagón expreso está vacío', 'train.robbed': '¡Robado el expreso!', 'train.robbedSub': '{n} monedas del vagón expreso. Todos los agentes del condado irán a por ti.',
+    // 2.8: Asedio
+    'siege.start': 'Asedio: sobrevive a las oleadas', 'siege.bestShort': 'mejor oleada {n}', 'siege.title': 'Asedio', 'siege.intro': 'Construye un refugio: bloques y dinamita sin fin. A las ocho de esta noche llega la primera oleada, y cada noche un hombre más. Pulsa Listo para traer una oleada antes.',
+    'siege.waveTitle': 'Oleada {n}', 'siege.waveSub': 'Vienen {k} forajidos. Vuelan las paredes que te esconden.', 'siege.blast': '¡Volad esa pared!', 'siege.survived': 'Oleada {n} superada', 'siege.survivedSub': 'La oleada {n} ({k} hombres) llega mañana a las ocho de la noche. Dos botiquines para ti.',
+    'siege.hudFight': 'Oleada {n}: quedan {k}', 'siege.hudWait': 'Oleada {n} en {time} · mejor {best}', 'siege.ready': 'Listo: que venga la siguiente oleada',
+    'siege.overTitle': 'Se acabó el asedio', 'siege.overText': 'Sobreviviste a {n} oleadas.', 'siege.best': 'Mejor: oleada {n}', 'siege.again': 'Otra vez',
   },
 };
 

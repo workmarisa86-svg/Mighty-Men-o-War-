@@ -26,6 +26,7 @@ import { Robbers } from './robbers.js';
 import { bedMesh } from './cabin.js';
 import { Extras } from './extras.js';
 import { Train } from './train.js';
+import { Siege } from './siege.js';
 import { Character, civLook } from './characters.js';
 import { playJailClip } from './jailclip.js';
 import * as THREE from 'three';
@@ -124,6 +125,7 @@ export class TownLife {
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
+    if (g.cfg.siege) { this.chooseLater = false; this.siege = new Siege(this); }      // Siege mode (siege.js): waves every evening
     g.player.spurs = true;                         // a frontier town: spurs on your boots
     // nothing modern in Town Life: any modern gun becomes its period counterpart
     const inv = g.inv;
@@ -738,6 +740,7 @@ export class TownLife {
   // honor is good, otherwise the rest becomes a small debt taken from your
   // job pay (never more than 30 coins).
   onDeath(cause) {
+    if (this.siege) { this.siege.playerDied(); return; }
     const g = this.game, p = g.player, H = this.hospital;
     if (cause === 'starve') { p.hunger = 60; g.hungerStage = 0; }
     if (this.fishing) this.fishing.reelIn();
@@ -1161,7 +1164,8 @@ export class TownLife {
       const hall = this.village.buildings.find((b) => b.type === 'hall');
       if (hall && !this.jailed && p.x > hall.x0 && p.x < hall.x1 + 1 && p.z > hall.z0 && p.z < hall.z1 + 1 && Math.abs(p.y - hall.door.y) < 3) out.push({ a: 'trade', label: t('trade.changeTitle'), run: () => g.app.openPanel('trades', { mode: 'change', v: null }) });
     }
-    out.push(...this.houses.options(p), ...this.extras.options(p), ...this.hidden.options(p), ...this.frontier.options(p));
+    if (this.siege) out.push(...this.siege.options());
+    out.push(...this.houses.options(p), ...(this.siege ? [] : this.extras.options(p)), ...this.hidden.options(p), ...this.frontier.options(p));
     if (this.trades.gang.length && g.app.input.touch) out.push({ a: 'gang', label: t('ctx.gang') });     // (a computer has Q)
     const bed = g.cabin && g.cabin.site ? g.cabin.site.bed : this.cottage.bed;      // (your home's bed: the cottage, or a house you bought)
     const mine = this.beds.find((q) => Math.hypot(q.x - p.x, q.z - p.z) < 2.2 && Math.abs(q.y - p.y) < 2);
@@ -1228,9 +1232,8 @@ export class TownLife {
     this.houses.update(dt);
     this.hidden.update(dt);
     this.frontier.update(dt);
-    this.robbers.update(dt);
-    this.extras.update(dt);
-    this.train.update(dt);
+    if (this.siege) this.siege.update(dt);
+    else { this.robbers.update(dt); this.extras.update(dt); this.train.update(dt); }
     if (this.chooseLater && !g.overlay && !g.dying && (this.chooseT -= dt) <= 0) { this.chooseLater = false; g.app.openPanel('trades', { mode: 'choose' }); }
     this.signs.update(dt);
     if (this.arrestPending && !g.overlay) this.hospitalToJail();       // closing the hospital note doesn't get you out of it
@@ -1340,6 +1343,7 @@ export class TownLife {
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
       (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}${this.jobXY()}</span>` : '') +
+      (this.siege ? `<span class="job">${this.siege.hudText()}</span>` : '') +
       (this.houses.hudText() ? `<span class="job">${this.houses.hudText()}</span>` : '') +
       (this.frontier.hudText() ? `<span class="job">${this.frontier.hudText()}</span>` : '') +
       (this.coordMode || this.hidden.maps.some((m) => !m.found) ? `<span class="xy">${t('tmap.youXY', coords(this.game.player.pos.x, this.game.player.pos.z, this.game.world))}</span>` : '');
@@ -1411,6 +1415,7 @@ export class TownLife {
   }
   // only what changed: the world's block edits are written only when they changed
   save() {
+    if (this.siege) return true;                    // (a Siege is never saved)
     const g = this.game, w = g.world;
     const edits = w.editsVersion !== this.editsSaved ? w.serializeEdits() : null;
     const ok = saveTown(this.toSave(), edits);

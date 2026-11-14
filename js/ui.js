@@ -1,5 +1,6 @@
 // Menus and panels: main menu, new game setup, load, settings, pause,
 // inventory and field crafting.
+import { siegeBest } from './siege.js';
 import { t, setLang, getLang } from './i18n.js';
 import { DIFFICULTIES, SAVE_FORMAT, SEA } from './config.js';
 import { listSaves, deleteSave, deleteAllSaves, loadTown } from './storage.js';
@@ -82,14 +83,25 @@ export class UI {
     this.root.innerHTML = `<h1 class="sr-only">Mighty Men o' War</h1>
       <p class="pick">${t('start.pick')}</p>
       <div class="gamecards">${card('main', 'war-card.webp', "Mighty Men o' War", t('start.warSub'))}${card('town', 'town-card.webp', 'Town Life', t('start.townSub'))}</div>
+      <button class="btn primary siegebtn" id="siegebtn">${t('siege.start')}${siegeBest() ? ' · ' + t('siege.bestShort', { n: siegeBest() }) : ''}</button>
       <div class="extras">${this.langSwitch()}
       <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
       ${this.speakerBtn()}</div>
       <p class="ver">v${this.app.version}</p>`;
     this.app.bindInstall(this.root.querySelector('#installbtn'));
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go));
+    this.root.querySelector('#siegebtn').onclick = () => this.app.startSiege();
     this.bindLang(this.root);
     this.bindSpeaker();
+  }
+  // Siege: you fell
+  r_siegeover({ wave = 0, best = 0 } = {}) {
+    this.root.innerHTML = `<div class="panel narrow center"><h2>${t('siege.overTitle')}</h2>
+      <p>${t('siege.overText', { n: wave })}</p><p class="big">${t('siege.best', { n: best })}</p>
+      <div class="menu"><button class="btn primary" id="sagain">${t('siege.again')}</button>
+      <button class="btn ghost" id="smenu">${t('over.menu')}</button></div></div>`;
+    this.root.querySelector('#sagain').onclick = () => { this.app.quitToMenu(true); this.app.startSiege(); };
+    this.root.querySelector('#smenu').onclick = () => { this.app.quitToMenu(true); };
   }
   speakerBtn() {
     return `<button class="speaker ${this.app.settings.musicMute ? 'off' : ''}" id="spk" title="${t('set.musicMute')}" aria-label="${t('set.musicMute')}"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2"/><path class="x" d="M16 9l6 6M22 9l-6 6" stroke="currentColor" stroke-width="2"/></svg></button>`;
