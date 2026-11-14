@@ -12,7 +12,8 @@ import { sfx } from './audio.js';
 import { RIVALS } from './frontier.js';
 
 const WAVE_HOUR = 20;
-const ENDLESS = ['dirt', 'wood', 'stone', 'brick', 'glass', 'thatch', 'fence', 'gate', 'door', 'ladder', 'loophole', 'bell', 'dynamite', 'chest'];
+// truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
+const ENDLESS = ['dirt', 'wood', 'stone', 'brick', 'glass', 'thatch', 'sand', 'clay', 'fence', 'gate', 'door', 'ladder', 'loophole', 'bell', 'dynamite', 'chest', 'knife', 'revolver', 'lever', 'shotgun'];
 const BEST_KEY = 'mmow-siege-best';
 
 export function siegeBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch { return 0; } }
@@ -36,8 +37,9 @@ export class Siege {
   size(n) { return n + 1; }                       // wave 1: 2 men, wave 2: 3...
   refill() {
     const g = this.game;
-    for (const id of ENDLESS) if ((g.inv.counts[id] || 0) < 64) g.inv.counts[id] = 99;
-    g.hud.dirtyHotbar = true;
+    let changed = false;
+    for (const id of ENDLESS) if (g.inv.counts[id] !== Infinity) { if (!g.inv.hotbar.includes(id) && !g.inv.counts[id]) g.give(id, 1, true); g.inv.counts[id] = Infinity; changed = true; }
+    if (changed) g.hud.dirtyHotbar = true;
   }
   // the wave comes now (the "Ready" button, or eight o'clock)
   startWave() {
@@ -120,6 +122,8 @@ export class Siege {
     try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* private mode */ }
     g.app.openPanel('siegeover', { wave: this.wave, best });
   }
+  // the attackers, for the map (every one of them, however far)
+  marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z })); }
   hudText() {
     const g = this.game;
     if (this.men) return t('siege.hudFight', { n: this.wave + 1, k: this.men.filter((m) => m.alive && !m.away).length });
