@@ -28,7 +28,7 @@ const GHOST_MAX = 900;
 
 // A house, made of blocks in its own frame: x across (0..w-1), z from the
 // back (0) to the front wall (d-1, the door), y up from the floor (0).
-function makeHouse({ w, d, floors = 1, wall, upper = wall, roof, porch = false, front = false, chimney = false }) {
+export function makeHouse({ w, d, floors = 1, wall, upper = wall, roof, porch = false, front = false, chimney = false }) {
   const out = [], H = 4;
   const put = (x, y, z, id) => out.push([x, y, z, id]);
   const top = floors * H;
@@ -77,7 +77,7 @@ export const DESIGN_IDS = Object.keys(DESIGNS);
 const SUPPLY_K = 0.6;                     // supplies cost this much of the built price
 
 // turn a house's own frame (door toward +z) to face a direction (0: +z, 1: -x, 2: -z, 3: +x)
-function turn(x, z, rot, w, d) {
+export function turn(x, z, rot, w, d) {
   switch (rot & 3) {
     case 0: return [x, z];
     case 1: return [z, w - 1 - x];

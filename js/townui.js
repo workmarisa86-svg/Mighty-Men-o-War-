@@ -1,5 +1,6 @@
 // Town Life screens: its own menu (one persistent world: Continue / Start
 // over), shops, jobs, the posse's questions, the sheriff and jail.
+import { SIEGE_HOUSES, houseMeat, meatHeld } from './siegehouses.js';
 import { t } from './i18n.js';
 import { itemIcon } from './items.js';
 import { hasTown } from './storage.js';
@@ -371,6 +372,15 @@ export function installTownUI(UI) {
     c.save(); c.translate(p.pos.x * sc, p.pos.z * sc); c.rotate(-p.yaw);
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr; const r = 8 * dpr;
     c.beginPath(); c.moveTo(0, -r); c.lineTo(r * 0.7, r * 0.7); c.lineTo(0, r * 0.3); c.lineTo(-r * 0.7, r * 0.7); c.closePath(); c.fill(); c.stroke(); c.restore();
+  };
+
+  // ---- Siege: houses for meat ------------------------------------------------------
+  P.r_siegehouses = function () {
+    const g = this.app.game, S = g.town.siege, have = meatHeld(g);
+    const cards = SIEGE_HOUSES.map((id) => `<div class="trade-card house-card"><b>${t('sh.' + id)}</b><span class="tagline">${t('sh.desc.' + id)}</span>
+      <div class="row"><button class="btn small ${have >= houseMeat(id) ? 'primary' : ''}" data-h="${id}" ${have >= houseMeat(id) ? '' : 'disabled'}>${t('sh.buy', { n: houseMeat(id) })}</button></div></div>`).join('');
+    const panel = this.panel(t('sh.title'), `<p class="coins-line">${t('sh.youHave', { n: have })}</p><p class="muted small">${t('sh.note')}</p><div class="trade-cards">${cards}</div>`, { wide: true, onBack: () => this.app.closePanel() });
+    panel.querySelectorAll('[data-h]').forEach((b) => b.onclick = () => S.houses.choose(b.dataset.h));
   };
 
   // ---- looting a body or someone who gave up -----------------------------------

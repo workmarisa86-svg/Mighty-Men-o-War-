@@ -820,6 +820,7 @@ export class TownLife {
   // surrendered person: Loot; a horse: Ride; a house door: Knock (or, with
   // dynamite in hand, Blow it open)
   aimTarget(hit, eye, dir) {
+    if (this.siege) { const sh = this.siege.houses.aimTarget(hit); if (sh) return sh; }      // (Siege: placing a house you traded meat for)
     if (hit && hit.id === B.CHEST) return { a: 'chest', label: t('use.chest'), run: () => this.game.app.openPanel('chest', { box: hit.x + ',' + hit.y + ',' + hit.z }) };
     const ho = this.houses.aimTarget(hit);                   // doors, setting down a blueprint (houses.js)
     if (ho) return ho;
