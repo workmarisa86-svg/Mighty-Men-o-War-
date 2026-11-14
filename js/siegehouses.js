@@ -74,7 +74,16 @@ const DESIGNS = {
 function dedupe(out) { const m = new Map(); for (const q of out) m.set(q[0] + ',' + q[1] + ',' + q[2], q); return [...m.values()]; }
 export const SIEGE_HOUSES = Object.keys(DESIGNS);
 export const houseMeat = (id) => DESIGNS[id].meat;
-export const meatHeld = (g) => (g.inv.counts.meat_raw || 0) + (g.inv.counts.meat_cooked || 0);
+// what pays: meat (raw or cooked) and the skins of what you hunt (worth more for bigger game)
+const WORTH = { hide: 1, wolf_hide: 2, bear_hide: 4, meat_raw: 1, meat_cooked: 1 };
+const PAY_ORDER = ['bear_hide', 'wolf_hide', 'hide', 'meat_raw', 'meat_cooked'];      // (skins first: keep your food)
+export const meatHeld = (g) => Object.entries(WORTH).reduce((n, [id, k]) => n + (g.inv.counts[id] > 0 && g.inv.counts[id] !== Infinity ? g.inv.counts[id] : 0) * k, 0);
+function pay(g, n) {
+  for (const id of PAY_ORDER) {
+    const k = WORTH[id];
+    while (n > 0 && (g.inv.counts[id] || 0) > 0) { g.take(id, 1); n -= k; }
+  }
+}
 
 export class SiegeHouses {
   constructor(siege) { this.S = siege; this.game = siege.game; this.placing = null; this.spot = null; this.prev = null; }
@@ -115,8 +124,7 @@ export class SiegeHouses {
   build(s) {
     const g = this.game, w = g.world, T = this.S.T, n = houseMeat(s.id);
     if (meatHeld(g) < n) { g.hud.toast(t('sh.needMeat', { n })); sfx.error(); this.cancel(); return; }
-    // the meat: raw first, then cooked
-    let left = n; const raw = Math.min(left, g.inv.counts.meat_raw || 0); g.take('meat_raw', raw); left -= raw; g.take('meat_cooked', left);
+    pay(g, n);
     const at = (x, z) => { const [a, c] = turn(x, z, s.rot, s.W, s.Dd); return [s.x + a, s.z + c]; };
     // the ground made level (filled up, cut down), the space cleared
     let top = 4; for (const q of s.P.blocks) top = Math.max(top, q[1] + 1);
