@@ -130,6 +130,16 @@ export function loadTown() {
   if (bak) { bak.restored = true; return bak; }
   return null;
 }
+// Siege: its own slot (never the Town Life one): the state and the world's block edits
+const SS = 'siege-state', SE = 'siege-edits';
+export function saveSiege(state, edits) {
+  if (edits != null && !rawSet(SE, edits)) return false;
+  return rawSet(SS, JSON.stringify(state));
+}
+export function loadSiege() {
+  try { const st = JSON.parse(raw(SS)); if (!st || st.seed == null || !st.player) return null; return { state: st, edits: raw(SE) || '' }; } catch { return null; }
+}
+export function deleteSiege() { for (const k of [SS, SE]) remove(k); }
 export function deleteTown() { for (const k of [TS, TE, TS + '-bak', TE + '-bak']) remove(k); }
 // A new Town Life story (version 2): the old Town Life world, full of test
 // play, is deleted once; War saves are never touched. True if it just happened.

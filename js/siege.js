@@ -21,15 +21,18 @@ const BEST_KEY = 'mmow-siege-best';
 export function siegeBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch { return 0; } }
 
 export class Siege {
-  constructor(town) {
+  constructor(town, saved = null) {
     this.T = town; this.game = town.game;
     const g = this.game;
-    this.wave = 0;               // waves survived
+    this.wave = saved ? saved.wave || 0 : 0;     // waves survived
+    this.deaths = saved ? saved.deaths || 0 : 0;
     this.men = null;             // the wave now attacking
     this.charges = [];
-    this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24;
-    if (g.time > this.nextAt) this.nextAt += 1;
+    this.nextAt = saved && saved.nextAt != null ? saved.nextAt : Math.floor(g.time) + WAVE_HOUR / 24;
+    if (!saved && g.time > this.nextAt) this.nextAt += 1;
     this.refillT = 0; this.over = false;
+    // a saved Siege: carry on (a wave that was under way comes again)
+    if (saved) { this.refill(); if (saved.fighting) this.restartWave = true; g.hud.toast(t('siege.welcomeBack', { n: this.wave + 1 })); return; }
     // no food: hunt (skin what you shoot, cook it at a campfire you light with the flint)
     for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
     if (g.inv.counts.bread) g.inv.counts.bread = 0;
@@ -127,6 +130,7 @@ export class Siege {
     if (this.refillT <= 0) { this.refillT = 1; this.refill(); }
     for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blast(c); }
     this.charges = this.charges.filter((c) => c.t > 0);
+    if (this.restartWave && !this.men) { this.restartWave = false; this.startWave(); }
     if (!this.men && g.time >= this.nextAt) this.startWave();
     if (this.men) {
       const left = this.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
@@ -167,6 +171,7 @@ export class Siege {
   }
   // the attackers, for the map (every one of them, however far)
   marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z })); }
+  toSave() { return { wave: this.wave, deaths: this.deaths || 0, nextAt: this.nextAt, fighting: !!this.men }; }
   hudText() {
     const g = this.game;
     if (this.men) return t('siege.hudFight', { n: this.wave + 1, k: this.men.filter((m) => m.alive && !m.away).length });
