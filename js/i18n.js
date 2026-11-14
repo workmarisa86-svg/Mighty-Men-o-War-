@@ -571,7 +571,7 @@ const STR = {
     'siege.start': 'Siege: survive the waves', 'siege.bestShort': 'best wave {n}', 'siege.title': 'Siege', 'siege.intro': 'Build a shelter: endless blocks and dynamite. No food: hunt, skin what you shoot and cook it on a campfire (light one with the flint). At eight tonight the first wave comes, one man more every night. Tap Ready to bring a wave early.',
     'siege.waveTitle': 'Wave {n}', 'siege.waveSub': '{k} outlaws are coming. They blow through walls that hide you.', 'siege.blast': 'Blow that wall!', 'siege.survived': 'Wave {n} survived', 'siege.survivedSub': 'Wave {n} ({k} men) comes at eight tomorrow night. Two medkits for you.',
     'siege.hudFight': 'Wave {n}: {k} left', 'siege.hudWait': 'Wave {n} in {time} · best {best}', 'siege.ready': 'Ready: bring the next wave',
-    'siege.overTitle': 'The siege is over', 'siege.overText': 'You survived {n} waves.', 'siege.best': 'Best: wave {n}', 'siege.again': 'Try again', 'siege.attackers': 'Attackers',
+    'siege.overTitle': 'The siege is over', 'siege.overText': 'You survived {n} waves.', 'siege.best': 'Best: wave {n}', 'siege.again': 'Try again', 'siege.diedTitle': 'You were killed', 'siege.diedSub': 'You lost your food ({n}) and woke up far away, at X {x}, Y {y}. The waves go on: hunt, eat and get back to your shelter.', 'siege.attackers': 'Attackers',
   },
   es: {
     'app.tagline': 'Atrinchérate. Construye. Resiste.',
@@ -1141,7 +1141,7 @@ const STR = {
     'siege.start': 'Asedio: sobrevive a las oleadas', 'siege.bestShort': 'mejor oleada {n}', 'siege.title': 'Asedio', 'siege.intro': 'Construye un refugio: bloques y dinamita sin fin. Sin comida: caza, despelleja lo que cazas y cocínalo en una hoguera (enciéndela con el pedernal). A las ocho de esta noche llega la primera oleada, un hombre más cada noche. Pulsa Listo para traer una oleada antes.',
     'siege.waveTitle': 'Oleada {n}', 'siege.waveSub': 'Vienen {k} forajidos. Vuelan las paredes que te esconden.', 'siege.blast': '¡Volad esa pared!', 'siege.survived': 'Oleada {n} superada', 'siege.survivedSub': 'La oleada {n} ({k} hombres) llega mañana a las ocho de la noche. Dos botiquines para ti.',
     'siege.hudFight': 'Oleada {n}: quedan {k}', 'siege.hudWait': 'Oleada {n} en {time} · mejor {best}', 'siege.ready': 'Listo: que venga la siguiente oleada',
-    'siege.overTitle': 'Se acabó el asedio', 'siege.overText': 'Sobreviviste a {n} oleadas.', 'siege.best': 'Mejor: oleada {n}', 'siege.again': 'Otra vez', 'siege.attackers': 'Atacantes',
+    'siege.overTitle': 'Se acabó el asedio', 'siege.overText': 'Sobreviviste a {n} oleadas.', 'siege.best': 'Mejor: oleada {n}', 'siege.again': 'Otra vez', 'siege.diedTitle': 'Te han matado', 'siege.diedSub': 'Perdiste tu comida ({n}) y despertaste lejos, en X {x}, Y {y}. Las oleadas siguen: caza, come y vuelve a tu refugio.', 'siege.attackers': 'Atacantes',
   },
 };
 

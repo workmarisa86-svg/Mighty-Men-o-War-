@@ -10,6 +10,8 @@ import { B, SOLID, BLOCKS } from './blocks.js';
 import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { RIVALS } from './frontier.js';
+import { ITEMS } from './items.js';
+import { coords } from './hidden.js';
 
 const WAVE_HOUR = 20;
 // truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
@@ -73,6 +75,14 @@ export class Siege {
     // stuck inside the ground (a hill, a hole filled over him): up onto the surface
     const bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z);
     if (SOLID[w.get(bx, Math.floor(v.pos.y + 0.2), bz)] && SOLID[w.get(bx, Math.floor(v.pos.y + 1.2), bz)]) { v.pos.y = w.surfaceY(bx, bz) + 1; v.route = []; }
+    // far from you (you woke up somewhere else): they track you down, they never just give up
+    if (d > 110) {
+      if (d > 180 && !F.visible(v)) {
+        const a = Math.atan2(v.pos.z - P.z, v.pos.x - P.x), x = P.x + Math.cos(a) * 120, z = P.z + Math.sin(a) * 120, sy = w.surfaceY(Math.floor(x), Math.floor(z));
+        if (w.get(Math.floor(x), sy + 1, Math.floor(z)) !== B.WATER) { v.pos.set(x, sy + 1, z); v.route = []; }
+      } else { F.goDirect(v, P, 6, dt, 4); v.crouch = false; }
+      return true;
+    }
     v.seeT = (v.seeT || 0) - dt;
     if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45)) v.seenT = 0; }
     v.seenT += dt; v.boomT -= dt;
@@ -124,12 +134,28 @@ export class Siege {
     }
   }
   // killed: the siege is over (no hospital)
+  // killed: you lose all your food and wake somewhere else in the world (far
+  // from the outlaws, on dry land), healed and not starving; the waves go on
   playerDied() {
-    const g = this.game;
-    this.over = true;
-    const best = Math.max(siegeBest(), this.wave);
-    try { localStorage.setItem(BEST_KEY, String(best)); } catch { /* private mode */ }
-    g.app.openPanel('siegeover', { wave: this.wave, best });
+    const g = this.game, p = g.player, w = g.world;
+    this.deaths = (this.deaths || 0) + 1;
+    let lost = 0;
+    for (const id of Object.keys(g.inv.counts)) if (ITEMS[id] && ITEMS[id].food && g.inv.counts[id] !== Infinity) { lost += g.inv.counts[id] || 0; g.inv.counts[id] = 0; }
+    const foes = (this.men || []).filter((m) => m.alive && !m.away);
+    let spot = null;
+    for (let k = 0; k < 200 && !spot; k++) {
+      const x = 24 + Math.floor(Math.random() * (w.W - 48)), z = 24 + Math.floor(Math.random() * (w.D - 48)), sy = w.surfaceY(x, z);
+      if (sy <= 1 || w.get(x, sy + 1, z) === B.WATER || w.get(x, sy, z) === B.LOG || SOLID[w.get(x, sy + 1, z)] || SOLID[w.get(x, sy + 2, z)]) continue;
+      if (foes.some((m) => Math.hypot(m.pos.x - x, m.pos.z - z) < 60)) continue;
+      spot = { x: x + 0.5, y: sy + 1, z: z + 0.5 };
+    }
+    if (!spot) spot = { ...w.spawn };
+    p.pos.set(spot.x, spot.y, spot.z); p.vel.set(0, 0, 0);
+    p.health = 100; g.breath = 20; p.hunger = Math.max(60, p.hunger || 0); g.hungerStage = 0;
+    g.hud.dirtyHotbar = true;
+    const C = coords(spot.x, spot.z, w);
+    g.hud.bigMessage(t('siege.diedTitle'), t('siege.diedSub', { x: C.x, y: C.y, n: lost }));
+    sfx.done();
   }
   // the attackers, for the map (every one of them, however far)
   marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z })); }
