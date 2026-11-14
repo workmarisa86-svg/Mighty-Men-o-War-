@@ -1240,7 +1240,11 @@ export class TownLife {
     this.applySeason();
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
     if (g.paused) return;
-    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.ambience(dt);      // (no updateDoors: it put the old houses' doors back)
+    if (this.siege) {
+      // your dynamite: the fuses burn down and go off (the rest of updateDoors put the old houses' doors back)
+      for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blowDoor(c); }
+      this.charges = this.charges.filter((c) => c.t > 0);
+      this.folk.update(dt); this.siege.update(dt); this.ambience(dt);
       if ((this.barT = (this.barT || 0) - dt) <= 0) { this.barT = 0.25; this.updateBar(); } return; }    // (the rest of town life is off)
     this.folk.update(dt);
     this.duels.update(dt);

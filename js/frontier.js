@@ -261,7 +261,9 @@ export class Frontier {
     const g = this.game, F = this.T.folk;
     const L = GANG_LOOK[gang] || GANG_LOOK.hunter;
     const look = { shirt: L.shirt, trousers: 0x262420, vest: L.vest, hat: 'felt', hatColor: L.hatColor, hair: 0x2a1c12, moustache: k % 2 === 0, gunbelt: true };
-    const gy = F.ground(at.x, at.z, at.y + 4); if (gy != null) at.y = gy;
+    // standing on the real ground there (not at your height: that put them inside hills)
+    const sy = g.world.surfaceY(Math.floor(at.x), Math.floor(at.z));
+    const gy = F.ground(at.x, at.z, sy + 1); at.y = gy != null ? gy : sy + 1;
     const v = this.T.trades.makeMan(t('fr.gang.' + gang) + ' ' + (k + 1), 9300 + k + RIVALS.indexOf(gang) * 37 + (gang === 'hunter' ? 500 : 0), look, at);
     Object.assign(v, { outlaw: true, rival: gang, guns: k % 3 === 2 ? ['lever', 'revolver'] : ['revolver'], money: 15 + Math.floor(Math.random() * 30), goods: Math.random() < 0.2 ? ['tmap'] : ['bread'], brave: 0.9 }, opts);
     v.fight = { armed: F.bestGun(v) }; F.armed(v, v.fight.armed);       // (a foe for your gang to shoot)

@@ -49,7 +49,13 @@ export class Siege {
     const a0 = Math.random() * Math.PI * 2, size = this.size(n);
     this.men = [];
     for (let k = 0; k < size; k++) {
-      const a = a0 + (k / size - 0.5) * (size > 6 ? 2.4 : 1.2), r = 60 + Math.random() * 10;
+      let a = a0 + (k / size - 0.5) * (size > 6 ? 2.4 : 1.2), r = 60 + Math.random() * 10;
+      // somewhere dry (not out in a lake)
+      for (let tries = 0; tries < 12; tries++) {
+        const x = Math.floor(P.x + Math.cos(a) * r), z = Math.floor(P.z + Math.sin(a) * r), sy = g.world.surfaceY(x, z);
+        if (g.world.get(x, sy + 1, z) !== B.WATER && sy > 1) break;
+        a += 0.5; r = 45 + Math.random() * 30;
+      }
       const gang = RIVALS[(n + k) % RIVALS.length];
       const v = T.frontier.rivalMan(gang, 200 + k, { x: P.x + Math.cos(a) * r, y: P.y, z: P.z + Math.sin(a) * r }, { hunter: true, provoked: true, guns: n > 4 && k % 3 === 0 ? ['lever', 'revolver'] : n > 8 && k % 4 === 1 ? ['shotgun', 'revolver'] : ['revolver'] });
       v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun) v.seenT = 0; v.boomT = 4 + Math.random() * 4;
@@ -64,6 +70,9 @@ export class Siege {
   manAi(v, dt, d) {
     const g = this.game, F = this.T.folk, P = g.player.pos, w = g.world;
     if (!v.alive) return true;
+    // stuck inside the ground (a hill, a hole filled over him): up onto the surface
+    const bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z);
+    if (SOLID[w.get(bx, Math.floor(v.pos.y + 0.2), bz)] && SOLID[w.get(bx, Math.floor(v.pos.y + 1.2), bz)]) { v.pos.y = w.surfaceY(bx, bz) + 1; v.route = []; }
     v.seeT = (v.seeT || 0) - dt;
     if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45)) v.seenT = 0; }
     v.seenT += dt; v.boomT -= dt;
