@@ -60,7 +60,8 @@ export class Siege {
       }
       const gang = RIVALS[(n + k) % RIVALS.length];
       const v = T.frontier.rivalMan(gang, 200 + k, { x: P.x + Math.cos(a) * r, y: P.y, z: P.z + Math.sin(a) * r }, { hunter: true, provoked: true, guns: n > 4 && k % 3 === 0 ? ['lever', 'revolver'] : n > 8 && k % 4 === 1 ? ['shotgun', 'revolver'] : ['revolver'] });
-      v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun) v.seenT = 0; v.boomT = 4 + Math.random() * 4;
+      v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun)
+      v.seenT = 0; v.boomT = 4 + Math.random() * 4;
       v.ai = (o, dt, d) => this.manAi(o, dt, d);
       this.men.push(v);
     }
@@ -84,7 +85,8 @@ export class Siege {
       return true;
     }
     v.seeT = (v.seeT || 0) - dt;
-    if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45)) v.seenT = 0; }
+    // (seeing you through a door or a window isn't a way in: only a clear line counts)
+    if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45) && this.clearShot(v)) v.seenT = 0; }
     v.seenT += dt; v.boomT -= dt;
     if (v.seenT > 6 && v.boomT <= 0 && d < 40) {
       // the first solid block between him and you, if it is close: a charge there
@@ -98,6 +100,12 @@ export class Siege {
       } else if (d > 2.5) { F.goDirect(v, P, 4.6, dt, 2); v.crouch = false; v.yaw = Math.atan2(-dx, -dz); return true; }
     }
     return this.T.frontier.rivalAi(v, dt, d);
+  }
+  // nothing solid between him and you (a door, glass, a wall)
+  clearShot(v) {
+    const P = this.game.player.pos, w = this.game.world;
+    const dx = P.x - v.pos.x, dy = P.y + 1.2 - (v.pos.y + 1.4), dz = P.z - v.pos.z, L = Math.hypot(dx, dy, dz) || 1;
+    return !w.raycast(v.pos.x, v.pos.y + 1.4, v.pos.z, dx / L, dy / L, dz / L, L - 0.6, false, 'bullet');
   }
   blast(c) {
     const g = this.game, w = g.world, T = this.T, P = g.player.pos;
