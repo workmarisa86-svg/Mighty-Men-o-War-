@@ -125,7 +125,7 @@ export class TownLife {
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
-    if (g.cfg.siege) { this.chooseLater = false; this.emptyForSiege(); this.siege = new Siege(this); }      // Siege mode (siege.js): an empty land, waves every evening
+    if (g.cfg.siege) { this.chooseLater = false; this.money = 0; this.emptyForSiege(); this.siege = new Siege(this); }      // Siege mode (siege.js): an empty land, waves every evening
     g.player.spurs = true;                         // a frontier town: spurs on your boots
     // nothing modern in Town Life: any modern gun becomes its period counterpart
     const inv = g.inv;
@@ -879,7 +879,7 @@ export class TownLife {
   // a body or someone who gave up: their money, guns, food, valuables, horse
   lootList(v) {
     const out = [];
-    if (v.money > 0) out.push({ id: 'coins', n: v.money });
+    if (v.money > 0 && !this.siege) out.push({ id: 'coins', n: v.money });
     for (const gname of v.guns || []) out.push({ id: gname, n: 1 });
     for (const f of v.goods || []) out.push({ id: f, n: 1 });
     for (const [id, n] of Object.entries(v.bag || {})) if (n > 0) out.push({ id, n, bag: true });     // (a robber's saddlebag: what he took from you)
@@ -1354,7 +1354,7 @@ export class TownLife {
     if (s !== 'winter' && g.weather.rain < 0.2 && Math.random() < 0.05) sfx.dust(0.7 + Math.random() * 0.5);   // a dusty gust down the street
   }
   updateBar() {
-    const html = `<span class="coins">${this.money}</span>` +
+    const html = (this.siege ? '' : `<span class="coins">${this.money}</span>`) +        // (no money in a Siege: nothing to buy)
       `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +

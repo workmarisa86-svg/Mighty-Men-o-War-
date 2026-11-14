@@ -50,7 +50,7 @@ export class Siege {
       const a = a0 + (k / size - 0.5) * (size > 6 ? 2.4 : 1.2), r = 60 + Math.random() * 10;
       const gang = RIVALS[(n + k) % RIVALS.length];
       const v = T.frontier.rivalMan(gang, 200 + k, { x: P.x + Math.cos(a) * r, y: P.y, z: P.z + Math.sin(a) * r }, { hunter: true, provoked: true, guns: n > 4 && k % 3 === 0 ? ['lever', 'revolver'] : n > 8 && k % 4 === 1 ? ['shotgun', 'revolver'] : ['revolver'] });
-      v.rival = 'siege'; v.siege = true; v.money = 5 + n * 2; v.seenT = 0; v.boomT = 4 + Math.random() * 4;
+      v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun) v.seenT = 0; v.boomT = 4 + Math.random() * 4;
       v.ai = (o, dt, d) => this.manAi(o, dt, d);
       this.men.push(v);
     }
