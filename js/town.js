@@ -1229,7 +1229,8 @@ export class TownLife {
     if (this.furniture) this.furniture.solids = [];
     if (this.doctor) { const r = this.doctor.root || this.doctor.group || this.doctor.mesh; if (r) r.visible = false; }
     if (g.horses) { for (const h of g.horses.list) h.drop(); g.horses.list = []; }
-    if (g.animals) { for (const a of g.animals.list.slice()) g.animals.remove(a); g.animals.herds = []; g.animals.update = () => {}; }
+    // the wild animals stay (hunt them: you have no other food); the town's and your livestock go with the pens
+    if (g.animals) for (const a of g.animals.list.slice()) if (a.owner) g.animals.remove(a);
     for (const a of this.extraMeshes || []) a.visible = false;
     const s = g.world.spawn; g.player.pos.set(s.x, s.y, s.z); g.player.vel.set(0, 0, 0);
     this.coordMode = true;                                     // (the map: land, water and the grid)

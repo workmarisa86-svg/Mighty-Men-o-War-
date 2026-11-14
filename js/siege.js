@@ -27,7 +27,9 @@ export class Siege {
     this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24;
     if (g.time > this.nextAt) this.nextAt += 1;
     this.refillT = 0; this.over = false;
-    for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['medkit', 3], ['bread', 6]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
+    // no food: hunt (skin what you shoot, cook it at a campfire you light with the flint)
+    for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
+    if (g.inv.counts.bread) g.inv.counts.bread = 0;
     this.refill();
     g.hud.bigMessage(t('siege.title'), t('siege.intro'));
   }
