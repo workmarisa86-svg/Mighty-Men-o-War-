@@ -1240,7 +1240,8 @@ export class TownLife {
     this.applySeason();
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
     if (g.paused) return;
-    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.updateDoors(dt); this.ambience(dt); if ((this.barT = (this.barT || 0) - dt) <= 0) { this.barT = 0.25; this.updateBar(); } return; }    // (the rest of town life is off)
+    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.ambience(dt);      // (no updateDoors: it put the old houses' doors back)
+      if ((this.barT = (this.barT || 0) - dt) <= 0) { this.barT = 0.25; this.updateBar(); } return; }    // (the rest of town life is off)
     this.folk.update(dt);
     this.duels.update(dt);
     this.pens.update(dt);

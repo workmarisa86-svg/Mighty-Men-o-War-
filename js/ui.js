@@ -383,7 +383,7 @@ export class UI {
       return `<div class="cell ${cls} ${sel === id ? 'picked' : ''}" data-item="${id}" title="${t('item.' + id)}">
         <img src="${itemIcon(id)}" alt=""><b>${showCount ? (c === Infinity ? '∞' : c) : ''}</b><span>${t('item.' + id)}${worn}</span></div>`;
     };
-    const money = g.town ? `<p class="coins-line">${t('shop.youHave', { n: g.town.money })} · ${t('town.honor')} ${Math.round(g.town.honor)}${g.town.bounty ? ' · ' + t('town.bounty', { n: g.town.bounty }) : ''}</p>` : '';
+    const money = g.town && !g.town.siege ? `<p class="coins-line">${t('shop.youHave', { n: g.town.money })} · ${t('town.honor')} ${Math.round(g.town.honor)}${g.town.bounty ? ' · ' + t('town.bounty', { n: g.town.bounty }) : ''}</p>` : '';
     const body = money + `<p class="muted small">${t('inv.hint')}</p>
       <p class="label">${t('inv.materials')}</p><div class="grid">${owned.map((id) => cell(id)).join('')}</div>
       ${gear.length ? `<p class="label">${t('inv.gear')}</p><div class="grid">${gear.map((id) => cell(id, 'gear')).join('')}</div>` : ''}
@@ -475,8 +475,8 @@ export class UI {
     const g = this.app.game, C = box && g.town ? g.town.chestStore(box) : g.cabin;      // (a chest you bought and placed, or the house chest)
     const ids = Object.keys(ITEMS).filter((id) => !ITEMS[id].tool && !ITEMS[id].gear && !ITEMS[id].armor);
     const carry = ids.filter((id) => (g.inv.counts[id] || 0) > 0), kept = ids.filter((id) => (C.chest.counts[id] || 0) > 0);
-    const row = (id, n, act) => `<div class="chest-row"><img src="${itemIcon(id)}" alt=""><span>${t('item.' + id)}</span><b>${n}</b>
-      <button class="btn small" data-a="${act}" data-id="${id}" data-n="1">${act === 'in' ? '→' : '←'}</button>${n > 1 ? `<button class="btn small" data-a="${act}" data-id="${id}" data-n="${n}">${act === 'in' ? '⇉' : '⇇'}</button>` : ''}</div>`;
+    const row = (id, n0, act) => { const n = n0 === Infinity ? 64 : n0; return `<div class="chest-row"><img src="${itemIcon(id)}" alt=""><span>${t('item.' + id)}</span><b>${n0 === Infinity ? '∞' : n0}</b>
+      <button class="btn small" data-a="${act}" data-id="${id}" data-n="1">${act === 'in' ? '→' : '←'}</button>${n > 1 ? `<button class="btn small" data-a="${act}" data-id="${id}" data-n="${n}">${act === 'in' ? '⇉' : '⇇'}</button>` : ''}</div>`; };
     const body = `<p class="muted small">${t('chest.hint')}</p><div class="chest">
       <div><p class="label">${t('chest.carry')}</p>${carry.map((id) => row(id, g.inv.counts[id], 'in')).join('') || `<p class="muted">—</p>`}</div>
       <div><p class="label">${t('chest.stored')}</p>${kept.map((id) => row(id, C.chest.counts[id], 'out')).join('') || `<p class="muted">—</p>`}</div></div>`;

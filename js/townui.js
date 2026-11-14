@@ -264,7 +264,7 @@ export function installTownUI(UI) {
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
-      <div class="legend">${T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
+      <div class="legend">${T.siege ? sw('#ff2a1a', 'siege.attackers') : T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
     const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
@@ -358,6 +358,11 @@ export function installTownUI(UI) {
       const me = coords(g.player.pos.x, g.player.pos.z, w);
       label(t('tmap.youXY', me), g.player.pos.x * sc, (g.player.pos.z + 9) * sc, 10);
       for (const m of T.hidden.maps) if (!m.found) { const C = coords(m.x, m.z, w); label(`(${C.x}, ${C.y})`, (m.x + 0.5) * sc, (m.z + 0.5) * sc + 20 * dpr / zoom, 11); }
+    }
+    // Siege: the men of the wave, wherever they are (red dots, so you can hunt them down)
+    if (T.siege) for (const m of T.siege.marks()) {
+      c.fillStyle = '#ff2a1a'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr / zoom;
+      c.beginPath(); c.arc(m.x * sc, m.z * sc, 5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
     }
     // whoever your job is for: a yellow cross, with its X and Y
     const jt = T.jobTarget();
