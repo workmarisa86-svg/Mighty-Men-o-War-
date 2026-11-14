@@ -740,7 +740,7 @@ export class TownLife {
   // honor is good, otherwise the rest becomes a small debt taken from your
   // job pay (never more than 30 coins).
   onDeath(cause) {
-    if (this.siege) { this.siege.playerDied(); return; }
+    if (this.siege) { this.siege.playerDied(cause); return; }
     const g = this.game, p = g.player, H = this.hospital;
     if (cause === 'starve') { p.hunger = 60; g.hungerStage = 0; }
     if (this.fishing) this.fishing.reelIn();
@@ -1439,6 +1439,7 @@ export class TownLife {
   save() {
     const g = this.game, w = g.world;
     const edits = w.editsVersion !== this.editsSaved ? w.serializeEdits() : null;
+    if (this.siege && this.siege.over) return true;               // (a siege that is over is not saved again)
     const ok = this.siege ? saveSiege(this.toSave(), edits) : saveTown(this.toSave(), edits);      // (a Siege has its own slot)
     if (ok && edits != null) this.editsSaved = w.editsVersion;
     return ok;

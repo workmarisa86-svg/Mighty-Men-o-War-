@@ -99,9 +99,9 @@ export class UI {
     this.bindSpeaker();
   }
   // Siege: you fell
-  r_siegeover({ wave = 0, best = 0 } = {}) {
+  r_siegeover({ wave = 0, best = 0, record = false } = {}) {
     this.root.innerHTML = `<div class="panel narrow center"><h2>${t('siege.overTitle')}</h2>
-      <p>${t('siege.overText', { n: wave })}</p><p class="big">${t('siege.best', { n: best })}</p>
+      <p>${t('siege.overText', { n: wave })}</p>${record ? `<p class="big">${t('siege.record')}</p>` : ''}<p class="big">${t('siege.best', { n: best })}</p>
       <div class="menu"><button class="btn primary" id="sagain">${t('siege.again')}</button>
       <button class="btn ghost" id="smenu">${t('over.menu')}</button></div></div>`;
     this.root.querySelector('#sagain').onclick = () => { this.app.quitToMenu(true); this.app.startSiege(true); };

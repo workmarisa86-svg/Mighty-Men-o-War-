@@ -362,8 +362,9 @@ export function installTownUI(UI) {
     }
     // Siege: the men of the wave, wherever they are (red dots, so you can hunt them down)
     if (T.siege) for (const m of T.siege.marks()) {
-      c.fillStyle = '#ff2a1a'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr / zoom;
-      c.beginPath(); c.arc(m.x * sc, m.z * sc, 5 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = m.boss ? '#ffd040' : '#ff2a1a'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr / zoom;
+      c.beginPath(); c.arc(m.x * sc, m.z * sc, (m.boss ? 7 : 5) * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
+      if (m.boss) label(t('siege.leader'), m.x * sc, m.z * sc - 10 * dpr / zoom, 10);
     }
     // whoever your job is for: a yellow cross, with its X and Y
     const jt = T.jobTarget();
