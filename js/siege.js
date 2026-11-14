@@ -12,6 +12,7 @@ import { sfx } from './audio.js';
 import { RIVALS } from './frontier.js';
 import { ITEMS } from './items.js';
 import { coords } from './hidden.js';
+import { SiegeHouses } from './siegehouses.js';
 
 const WAVE_HOUR = 20;
 // truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
@@ -24,6 +25,7 @@ export class Siege {
   constructor(town, saved = null) {
     this.T = town; this.game = town.game;
     const g = this.game;
+    this.houses = new SiegeHouses(this);           // houses for meat (siegehouses.js)
     this.wave = saved ? saved.wave || 0 : 0;     // waves survived
     this.deaths = saved ? saved.deaths || 0 : 0;
     this.men = null;             // the wave now attacking
@@ -126,6 +128,7 @@ export class Siege {
   update(dt) {
     const g = this.game;
     if (this.over) return;
+    this.houses.update();
     this.refillT -= dt;
     if (this.refillT <= 0) { this.refillT = 1; this.refill(); }
     for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blast(c); }
@@ -178,5 +181,11 @@ export class Siege {
     const h = Math.max(0, (this.nextAt - g.time) * 24), hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
     return t('siege.hudWait', { n: this.wave + 1, time: hh + ':' + String(mm).padStart(2, '0'), best: siegeBest() });
   }
-  options() { return this.men || this.over ? [] : [{ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() }]; }
+  options() {
+    const out = [];
+    if (this.houses.placing) out.push({ a: 'shcancel', label: t('sh.cancel'), run: () => this.houses.cancel() });
+    else out.push({ a: 'shtrade', label: t('sh.trade'), run: () => this.game.app.openPanel('siegehouses', {}) });
+    if (!this.men && !this.over) out.push({ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() });
+    return out;
+  }
 }
