@@ -1240,7 +1240,7 @@ export class TownLife {
     this.applySeason();
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
     if (g.paused) return;
-    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.updateDoors(dt); this.ambience(dt); return; }    // (the rest of town life is off)
+    if (this.siege) { this.folk.update(dt); this.siege.update(dt); this.updateDoors(dt); this.ambience(dt); if ((this.barT = (this.barT || 0) - dt) <= 0) { this.barT = 0.25; this.updateBar(); } return; }    // (the rest of town life is off)
     this.folk.update(dt);
     this.duels.update(dt);
     this.pens.update(dt);
@@ -1355,7 +1355,7 @@ export class TownLife {
   }
   updateBar() {
     const html = (this.siege ? '' : `<span class="coins">${this.money}</span>`) +        // (no money in a Siege: nothing to buy)
-      `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>` +
+      (this.siege ? '' : `<span class="honor" title="${t('town.honor')}"><i style="width:${this.honor}%"></i></span>`) +
       (this.bounty > 0 ? `<span class="bounty">${t('town.bounty', { n: this.bounty })}</span>` : '') +
       (this.posse ? `<span class="posse">${t(this.posse.hostile ? 'town.posseHostile' : 'town.posseOut')}</span>` : '') +
       (this.job ? `<span class="job">${this.job.courier ? t('town.jobCourier', { name: this.job.toName }) : t('town.jobBring', { n: this.job.n, item: t('item.' + this.job.item) })}${this.jobXY()}</span>` : '') +
