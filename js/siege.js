@@ -21,15 +21,18 @@ const BEST_KEY = 'mmow-siege-best';
 export function siegeBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch { return 0; } }
 
 export class Siege {
-  constructor(town) {
+  constructor(town, saved = null) {
     this.T = town; this.game = town.game;
     const g = this.game;
-    this.wave = 0;               // waves survived
+    this.wave = saved ? saved.wave || 0 : 0;     // waves survived
+    this.deaths = saved ? saved.deaths || 0 : 0;
     this.men = null;             // the wave now attacking
     this.charges = [];
-    this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24;
-    if (g.time > this.nextAt) this.nextAt += 1;
+    this.nextAt = saved && saved.nextAt != null ? saved.nextAt : Math.floor(g.time) + WAVE_HOUR / 24;
+    if (!saved && g.time > this.nextAt) this.nextAt += 1;
     this.refillT = 0; this.over = false;
+    // a saved Siege: carry on (a wave that was under way comes again)
+    if (saved) { this.refill(); if (saved.fighting) this.restartWave = true; g.hud.toast(t('siege.welcomeBack', { n: this.wave + 1 })); return; }
     // no food: hunt (skin what you shoot, cook it at a campfire you light with the flint)
     for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
     if (g.inv.counts.bread) g.inv.counts.bread = 0;
@@ -60,7 +63,8 @@ export class Siege {
       }
       const gang = RIVALS[(n + k) % RIVALS.length];
       const v = T.frontier.rivalMan(gang, 200 + k, { x: P.x + Math.cos(a) * r, y: P.y, z: P.z + Math.sin(a) * r }, { hunter: true, provoked: true, guns: n > 4 && k % 3 === 0 ? ['lever', 'revolver'] : n > 8 && k % 4 === 1 ? ['shotgun', 'revolver'] : ['revolver'] });
-      v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun) v.seenT = 0; v.boomT = 4 + Math.random() * 4;
+      v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = [];      // (no coins, no bread: only his gun)
+      v.seenT = 0; v.boomT = 4 + Math.random() * 4;
       v.ai = (o, dt, d) => this.manAi(o, dt, d);
       this.men.push(v);
     }
@@ -84,7 +88,8 @@ export class Siege {
       return true;
     }
     v.seeT = (v.seeT || 0) - dt;
-    if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45)) v.seenT = 0; }
+    // (seeing you through a door or a window isn't a way in: only a clear line counts)
+    if (v.seeT <= 0) { v.seeT = 0.5; if (F.sees(v, 45) && this.clearShot(v)) v.seenT = 0; }
     v.seenT += dt; v.boomT -= dt;
     if (v.seenT > 6 && v.boomT <= 0 && d < 40) {
       // the first solid block between him and you, if it is close: a charge there
@@ -98,6 +103,12 @@ export class Siege {
       } else if (d > 2.5) { F.goDirect(v, P, 4.6, dt, 2); v.crouch = false; v.yaw = Math.atan2(-dx, -dz); return true; }
     }
     return this.T.frontier.rivalAi(v, dt, d);
+  }
+  // nothing solid between him and you (a door, glass, a wall)
+  clearShot(v) {
+    const P = this.game.player.pos, w = this.game.world;
+    const dx = P.x - v.pos.x, dy = P.y + 1.2 - (v.pos.y + 1.4), dz = P.z - v.pos.z, L = Math.hypot(dx, dy, dz) || 1;
+    return !w.raycast(v.pos.x, v.pos.y + 1.4, v.pos.z, dx / L, dy / L, dz / L, L - 0.6, false, 'bullet');
   }
   blast(c) {
     const g = this.game, w = g.world, T = this.T, P = g.player.pos;
@@ -119,6 +130,7 @@ export class Siege {
     if (this.refillT <= 0) { this.refillT = 1; this.refill(); }
     for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blast(c); }
     this.charges = this.charges.filter((c) => c.t > 0);
+    if (this.restartWave && !this.men) { this.restartWave = false; this.startWave(); }
     if (!this.men && g.time >= this.nextAt) this.startWave();
     if (this.men) {
       const left = this.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
@@ -159,6 +171,7 @@ export class Siege {
   }
   // the attackers, for the map (every one of them, however far)
   marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z })); }
+  toSave() { return { wave: this.wave, deaths: this.deaths || 0, nextAt: this.nextAt, fighting: !!this.men }; }
   hudText() {
     const g = this.game;
     if (this.men) return t('siege.hudFight', { n: this.wave + 1, k: this.men.filter((m) => m.alive && !m.away).length });

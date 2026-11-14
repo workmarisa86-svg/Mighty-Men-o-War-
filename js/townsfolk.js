@@ -393,11 +393,15 @@ export class Townsfolk {
     sfx.shot(v.armed === 'revolver' ? 'revolver' : v.armed === 'shotgun' ? 'shotgun' : 'rifle', Math.max(0.2, 1 - d / 60));
     const a = new THREE.Vector3(v.pos.x, v.pos.y + 1.45, v.pos.z);
     const b = new THREE.Vector3(p.x + (Math.random() - 0.5) * (Math.random() < hitP ? 0.2 : 2.5), p.y + 1.2, p.z + (Math.random() - 0.5) * 1.5);
+    // a door, a window, a wall in the way: the bullet stops there (a gun slit lets it through)
+    const dir = b.clone().sub(a), L = dir.length(); dir.divideScalar(L);
+    const wall = g.world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, L - 0.3, false, 'bullet');
+    const end = wall ? a.clone().addScaledVector(dir, wall.dist) : b;
     const tr = this.tracers[this.trI++ % this.tracers.length];
     const pos = tr.l.geometry.attributes.position;
-    pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, b.x, b.y, b.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
+    pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
-    if (Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
+    if (!wall && Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
   }
   // the posse firing at one of your gang (trades.js)
   shootAtMan(v, dt, o) {

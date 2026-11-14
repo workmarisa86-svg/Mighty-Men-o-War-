@@ -11,7 +11,7 @@ import { Farm, SEASON_DAYS } from './farm.js';
 import { sfx, setWind } from './audio.js';
 import { startFolk, stopFolk } from './folk.js';
 import { t } from './i18n.js';
-import { saveTown } from './storage.js';
+import { saveTown, saveSiege } from './storage.js';
 import { TOWN_LAYOUT } from './towngen.js';
 import { WEAPONS } from './weapons.js';
 import { Furniture } from './furniture.js';
@@ -125,7 +125,7 @@ export class TownLife {
     // a new story (or an older town without one) starts with the choice of a trade
     // (opened from update(), once you are actually playing)
     this.chooseLater = !this.trades.trade; this.chooseT = 0.8;
-    if (g.cfg.siege) { this.chooseLater = false; this.money = 0; this.emptyForSiege(); this.siege = new Siege(this); }      // Siege mode (siege.js): an empty land, waves every evening
+    if (g.cfg.siege) { this.chooseLater = false; this.money = 0; this.emptyForSiege(!saved.siege); this.siege = new Siege(this, saved.siege); }      // Siege mode (siege.js): an empty land, waves every evening
     g.player.spurs = true;                         // a frontier town: spurs on your boots
     // nothing modern in Town Life: any modern gun becomes its period counterpart
     const inv = g.inv;
@@ -1222,7 +1222,7 @@ export class TownLife {
   // ---- per frame -------------------------------------------------------------------
   // Siege: the land is empty (towngen.js wiped it): no townsfolk, furniture,
   // signs, horses or animals; you stand in the middle of it, from nothing
-  emptyForSiege() {
+  emptyForSiege(fresh = true) {
     const g = this.game, F = this.folk;
     for (const v of F.list) { v.alive = false; v.away = true; F.dead[v.i] = 1e12; F.dropRig(v); }
     for (const m of [this.furniture && this.furniture.mesh, this.furniture && this.furniture.embers, this.signs && this.signs.group, g.cabin && g.cabin.mesh]) if (m) m.visible = false;
@@ -1232,7 +1232,7 @@ export class TownLife {
     // the wild animals stay (hunt them: you have no other food); the town's and your livestock go with the pens
     if (g.animals) for (const a of g.animals.list.slice()) if (a.owner) g.animals.remove(a);
     for (const a of this.extraMeshes || []) a.visible = false;
-    const s = g.world.spawn; g.player.pos.set(s.x, s.y, s.z); g.player.vel.set(0, 0, 0);
+    if (fresh) { const s = g.world.spawn; g.player.pos.set(s.x, s.y, s.z); g.player.vel.set(0, 0, 0); }     // (a saved Siege: where you were)
     this.coordMode = true;                                     // (the map: land, water and the grid)
   }
   update(dt) {
@@ -1430,16 +1430,15 @@ export class TownLife {
         money: this.money, debt: this.debt, honor: this.honor, bounty: this.bounty, lastCrime: this.lastCrime, decayDay: this.decayDay,
         job: this.job, jobCd: this.jobCd, stolen: this.stolen, st: this.st, restock: this.restock || [],
         folk: this.folk.toSave(), farm: this.farm.toSave(), livestock: g.animals.toSaveLivestock(), editsVersion: g.world.editsVersion,
-        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), extras: this.extras.toSave(), train: this.train.toSave(), chests: this.chests, beds: this.beds.map(({ x, y, z, yaw }) => ({ x, y, z, yaw })), craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode,
+        horses: g.horses ? g.horses.toSave() : null, rapport: this.rapport, jailed: this.jailed, held: this.held, trades: this.trades.toSave(), houses: this.houses.toSave(), hidden: this.hidden.toSave(), frontier: this.frontier.toSave(), robbers: this.robbers.toSave(), extras: this.extras.toSave(), train: this.train.toSave(), chests: this.chests, beds: this.beds.map(({ x, y, z, yaw }) => ({ x, y, z, yaw })), craters: g.explosives ? g.explosives.craters.slice(-30) : [], robbed: this.robbed, fineDue: this.fineDue, broken: this.broken, coordMode: this.coordMode, siege: this.siege ? this.siege.toSave() : null,
       },
     };
   }
   // only what changed: the world's block edits are written only when they changed
   save() {
-    if (this.siege) return true;                    // (a Siege is never saved)
     const g = this.game, w = g.world;
     const edits = w.editsVersion !== this.editsSaved ? w.serializeEdits() : null;
-    const ok = saveTown(this.toSave(), edits);
+    const ok = this.siege ? saveSiege(this.toSave(), edits) : saveTown(this.toSave(), edits);      // (a Siege has its own slot)
     if (ok && edits != null) this.editsSaved = w.editsVersion;
     return ok;
   }

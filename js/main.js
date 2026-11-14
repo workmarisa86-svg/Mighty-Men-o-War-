@@ -1,7 +1,7 @@
 // App bootstrap: renderer, menus, game lifecycle and the main loop.
 import * as THREE from 'three';
 import { GAME_VERSION, SAVE_FORMAT, QUALITY, WAR_SIZE, TOWN_SIZE, TOWN_LAYOUT } from './config.js';
-import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown, townNewStory } from './storage.js';
+import { loadSettings, saveSettings, readSave, writeSave, deleteSave, loadTown, deleteTown, townNewStory, loadSiege, deleteSiege } from './storage.js';
 import { M, loadMode, loadWar } from './modes.js';
 import { BATTLE, COUNTRY, WEATHER, LANDS } from './countries.js';
 import { startFolk, stopFolk, setFolk } from './folk.js';
@@ -121,11 +121,14 @@ class App {
   }
 
   // Siege: a fresh Town Life map, never saved (your Town Life game is left alone)
-  startSiege() {
-    const cfg = { mode: 'town', sub: 'town', siege: true, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: (Math.random() * 2 ** 31) | 0 };
+  // (fresh: a new Siege; otherwise the saved one, if there is one)
+  startSiege(fresh = false) {
+    if (fresh) deleteSiege();
+    const L = fresh ? null : loadSiege();
+    const cfg = { mode: 'town', sub: 'town', siege: true, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: L ? L.state.seed : (Math.random() * 2 ** 31) | 0 };
     this.townRebuilt = false; this.townRestored = false;
     stopFolk();
-    this.startGame({ id: 'siege', name: 'Siege', cfg });
+    this.startGame(L ? Object.assign({ id: 'siege', name: 'Siege' }, L.state, { cfg, edits: L.edits }) : { id: 'siege', name: 'Siege', cfg });
   }
 
   resize() {

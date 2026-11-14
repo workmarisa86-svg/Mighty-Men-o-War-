@@ -822,3 +822,4 @@ body.touchui #aimprompt { top: auto; bottom: 128px; }
 
 /* 2.8: the Siege button on the start screen */
 .start-screen .siegebtn { margin: 0; padding: 10px 22px; font-size: 16px; }
+.start-screen .siegerow { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 0; }

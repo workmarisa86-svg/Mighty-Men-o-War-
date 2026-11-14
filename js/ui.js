@@ -1,6 +1,8 @@
 // Menus and panels: main menu, new game setup, load, settings, pause,
 // inventory and field crafting.
 import { siegeBest } from './siege.js';
+import { loadSiege } from './storage.js';
+const hasSiege = () => !!loadSiege();
 import { t, setLang, getLang } from './i18n.js';
 import { DIFFICULTIES, SAVE_FORMAT, SEA } from './config.js';
 import { listSaves, deleteSave, deleteAllSaves, loadTown } from './storage.js';
@@ -83,14 +85,16 @@ export class UI {
     this.root.innerHTML = `<h1 class="sr-only">Mighty Men o' War</h1>
       <p class="pick">${t('start.pick')}</p>
       <div class="gamecards">${card('main', 'war-card.webp', "Mighty Men o' War", t('start.warSub'))}${card('town', 'town-card.webp', 'Town Life', t('start.townSub'))}</div>
-      <button class="btn primary siegebtn" id="siegebtn">${t('siege.start')}${siegeBest() ? ' · ' + t('siege.bestShort', { n: siegeBest() }) : ''}</button>
+      <div class="row siegerow">${hasSiege() ? `<button class="btn primary siegebtn" id="siegego">${t('siege.continue')}</button><button class="btn siegebtn" id="siegenew">${t('siege.new')}</button>` : `<button class="btn primary siegebtn" id="siegenew">${t('siege.start')}</button>`}${siegeBest() ? `<span class="muted small">${t('siege.bestShort', { n: siegeBest() })}</span>` : ''}</div>
       <div class="extras">${this.langSwitch()}
       <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
       ${this.speakerBtn()}</div>
       <p class="ver">v${this.app.version}</p>`;
     this.app.bindInstall(this.root.querySelector('#installbtn'));
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go));
-    this.root.querySelector('#siegebtn').onclick = () => this.app.startSiege();
+    const sg = this.root.querySelector('#siegego'), sn = this.root.querySelector('#siegenew');
+    if (sg) sg.onclick = () => this.app.startSiege(false);
+    if (sn) sn.onclick = () => (hasSiege() ? this.confirm(t('siege.newConfirm'), () => this.app.startSiege(true), () => this.show('start')) : this.app.startSiege(true));
     this.bindLang(this.root);
     this.bindSpeaker();
   }
@@ -100,7 +104,7 @@ export class UI {
       <p>${t('siege.overText', { n: wave })}</p><p class="big">${t('siege.best', { n: best })}</p>
       <div class="menu"><button class="btn primary" id="sagain">${t('siege.again')}</button>
       <button class="btn ghost" id="smenu">${t('over.menu')}</button></div></div>`;
-    this.root.querySelector('#sagain').onclick = () => { this.app.quitToMenu(true); this.app.startSiege(); };
+    this.root.querySelector('#sagain').onclick = () => { this.app.quitToMenu(true); this.app.startSiege(true); };
     this.root.querySelector('#smenu').onclick = () => { this.app.quitToMenu(true); };
   }
   speakerBtn() {
