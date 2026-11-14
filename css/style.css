@@ -819,3 +819,6 @@ body.vwar-on.vw-tank [data-btn=light] { display: inline-block !important; }
 body.touchui #townctx { bottom: 84px; }
 body.touchui #aimprompt { top: auto; bottom: 128px; }
 @media (max-height: 420px) { body.touchui #townctx { bottom: 80px; } body.touchui #aimprompt { bottom: 122px; } }
+
+/* 2.8: the Siege button on the start screen */
+.start-screen .siegebtn { margin: 0; padding: 10px 22px; font-size: 16px; }

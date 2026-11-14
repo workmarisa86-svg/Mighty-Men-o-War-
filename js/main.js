@@ -120,6 +120,14 @@ class App {
     this.startGame(save);
   }
 
+  // Siege: a fresh Town Life map, never saved (your Town Life game is left alone)
+  startSiege() {
+    const cfg = { mode: 'town', sub: 'town', siege: true, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: (Math.random() * 2 ** 31) | 0 };
+    this.townRebuilt = false; this.townRestored = false;
+    stopFolk();
+    this.startGame({ id: 'siege', name: 'Siege', cfg });
+  }
+
   resize() {
     this.renderer.setSize(innerWidth, innerHeight, false);
     if (this.game) this.game.resize();
