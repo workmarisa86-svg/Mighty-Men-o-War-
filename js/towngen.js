@@ -238,6 +238,24 @@ export function generateTown(world) {
   world.spawn = { x: cottage.x + 0.5, y: cottage.y, z: cottage.z + 0.5 };
 }
 
+// Siege: the same land, but empty. Everything built on it goes (the town, the
+// homes, the cottage, roads, fences, trees): only the ground and the water stay,
+// and nothing is locked. You start in the middle, from nothing.
+const NATURAL = new Set([B.GRASS, B.DIRT, B.SAND, B.STONE, B.CLAY, B.MUD, B.ICE, B.BEDROCK, B.WATER, B.IRON, B.GOLD, B.CHARCOAL]);
+export function wipeForSiege(world) {
+  const W = world.W, D = world.D, H = world.H, tops = world.tops, data = world.data;
+  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+    const top = tops[x + z * W];
+    for (let y = top + 1; y < H; y++) { const i = world.idx(x, y, z); if (data[i] !== B.WATER) data[i] = B.AIR; }
+    const i = world.idx(x, top, z);
+    if (!NATURAL.has(data[i])) data[i] = top < SEA ? B.SAND : B.GRASS;      // (floors, paths, farmland: back to grass)
+    for (let y = 1; y < top; y++) { const j = world.idx(x, y, z); if (data[j] !== B.AIR && !NATURAL.has(data[j])) data[j] = B.STONE; }   // (old mine timbers, cellars, strongboxes)
+  }
+  world.locked.fill(0);
+  const cx = Math.floor(W / 2), cz = Math.floor(D / 2);
+  world.spawn = { x: cx + 0.5, y: tops[cx + cz * W] + 1, z: cz + 0.5 };
+}
+
 const smooth = (t) => t * t * (3 - 2 * t);
 
 // A dirt path (2 wide) from a to b over the grass. Returns the walking points

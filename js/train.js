@@ -21,6 +21,7 @@ export class Train {
     this.T = town; this.game = town.game;
     this.robbedDay = saved.robbedDay ?? null;
     this.line = saved.line || null;
+    if (this.game.cfg.siege) { this.line = null; this.mesh = null; this.guards = null; return; }      // (no railroad in a Siege)
     if (!this.line) this.line = this.layLine();
     this.relay();
     this.mesh = null; this.guards = null; this.held = false;

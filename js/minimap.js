@@ -98,28 +98,28 @@ export class Minimap {
     // witnesses on their way to the sheriff (flashing)
     if (g.town) {
       const vil = g.town.village;
-      for (const b of vil.buildings) {
+      for (const b of g.town.siege ? [] : vil.buildings) {      // (a Siege: no town)
         const [x, y, d] = toRadar((b.x0 + b.x1) / 2 + 0.5, (b.z0 + b.z1) / 2 + 0.5);
         if (d > RADAR_RANGE + 6) continue;
         c.fillStyle = b.type === 'house' ? '#8a8270' : b.type === 'hall' ? '#7a8aa0' : '#d8b048'; c.strokeStyle = 'rgba(0,0,0,0.7)'; c.lineWidth = 1;
         c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8);
       }
       // traps (gold: a catch) and the wanted men's cabins
-      for (const m of g.town.houses.mapMarks()) {
+      for (const m of g.town.siege ? [] : g.town.houses.mapMarks()) {
         const [x, y, d] = toRadar(m.x, m.z);
         if (d > RADAR_RANGE) continue;
         c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
         c.fillStyle = m.kind === 'home' ? '#f0e090' : m.kind === 'lot' ? 'rgba(160,220,120,0.8)' : m.kind === 'blueprint' ? '#8ad0ff' : '#c8b080';
         c.fillRect(x - 3.5, y - 3.5, 7, 7); c.strokeRect(x - 3.5, y - 3.5, 7, 7);
       }
-      for (const m of g.town.trades.mapMarks()) {
+      for (const m of g.town.siege ? [] : g.town.trades.mapMarks()) {
         const [x, y, d] = toRadar(m.x, m.z);
         if (d > RADAR_RANGE) continue;
         c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
         if (m.kind === 'wanted') { c.fillStyle = '#b8402e'; c.fillRect(x - 4, y - 4, 8, 8); c.strokeRect(x - 4, y - 4, 8, 8); }
         else { c.fillStyle = m.kind === 'catch' ? '#ffd040' : '#9a9aa2'; c.beginPath(); c.arc(x, y, 3, 0, Math.PI * 2); c.fill(); c.stroke(); }
       }
-      for (const m of g.town.hidden.mapMarks().concat(g.town.frontier.mapMarks())) {
+      for (const m of g.town.siege ? [] : g.town.hidden.mapMarks().concat(g.town.frontier.mapMarks())) {
         const [x, y, d] = toRadar(m.x, m.z);
         if (d > RADAR_RANGE + (m.r || 0)) continue;
         c.strokeStyle = 'rgba(0,0,0,0.8)'; c.lineWidth = 1;
