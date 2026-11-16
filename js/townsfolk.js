@@ -401,7 +401,7 @@ export class Townsfolk {
     const pos = tr.l.geometry.attributes.position;
     pos.setXYZ(0, a.x, a.y, a.z); pos.setXYZ(1, end.x, end.y, end.z); pos.needsUpdate = true; tr.l.geometry.computeBoundingSphere();
     tr.l.visible = true; tr.t = 0.07;
-    if (!wall && Math.random() < hitP) g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos);
+    if (!wall && Math.random() < hitP) { g.damage(v.armed === 'revolver' ? 9 : v.armed === 'shotgun' ? Math.max(6, 22 - d * 0.6) : 13, 'shot', v.pos); this.lastHitBy = v; }
   }
   // the posse firing at one of your gang (trades.js)
   shootAtMan(v, dt, o) {

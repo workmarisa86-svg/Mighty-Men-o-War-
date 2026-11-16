@@ -1,10 +1,12 @@
 // Siege (2.8, 3.0): a survival mode on the Town Life land with no town. You
 // start in the morning with endless blocks and dynamite: build a shelter.
 // Every evening at eight a wave of outlaws comes, one man more each night.
-// They can't break anything: it's a siege. Some camp round your shelter and
-// shoot whenever they get a clear line at you; some prowl the woods where
-// the game is. Every fifth night the gang leader comes with extra men and
-// they hunt you down wherever you are, along any open way (your tunnels too).
+// They carry knives, not guns (a man who helps kill you takes your gun). They
+// go by what they see: seen you, they come after you; lost you (a tunnel hides
+// you), they search where you were, watch your shelter or patrol the woods.
+// Walls: they build ladders and climb over (your button tears down the empty
+// ones); doors: three dynamite charges blow one in, and nothing else. Every
+// fifth night the gang leader comes too, with extra men.
 // A wave not finished by the next evening is joined by the next one.
 //
 // Food is the clock: you have none but what you hunt, meat spoils (raw in
@@ -34,10 +36,13 @@ export class Siege {
     this.T = town; this.game = town.game;
     const g = this.game;
     this.houses = new SiegeHouses(this);           // houses for meat (siegehouses.js)
+    g.player.fast = true;                          // (you walk as fast as you run, and faster)
     this.wave = saved ? saved.wave || 0 : 0;       // waves survived
     this.started = saved ? saved.started ?? this.wave : 0;   // waves that have come
     this.deaths = saved ? saved.deaths || 0 : 0;
     this.food = saved && saved.food ? saved.food : { meat_raw: [], meat_cooked: [] };     // batches: { n, at }
+    this.ladders = saved && saved.ladders ? saved.ladders : [];     // the ladders they built up your walls
+    this.charges = []; this.doorHits = {}; this.hitters = new Map();     // their dynamite; who has hurt you lately
     this.men = null;             // the attackers out there now (every wave not yet finished)
     this.nextAt = saved && saved.nextAt != null ? saved.nextAt : Math.floor(g.time) + WAVE_HOUR / 24;
     if (!saved && g.time > this.nextAt) this.nextAt += 1;
@@ -63,7 +68,7 @@ export class Siege {
   startWave() {
     const g = this.game, T = this.T, P = g.player.pos, n = this.started + 1, boss = this.boss(n);
     this.started = n;
-    this.nextAt = Math.floor(g.time) + 1 + WAVE_HOUR / 24;
+    this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24; if (this.nextAt <= g.time + 1e-4) this.nextAt += 1;     // (tonight at eight, even if a wave came early today)
     const a0 = Math.random() * Math.PI * 2, size = this.size(n) + (boss ? 3 : 0);
     this.men = this.men || [];
     for (let k = 0; k < size; k++) {
@@ -75,11 +80,11 @@ export class Siege {
       }
       const lead = boss && k === 0, gang = RIVALS[(n + k) % RIVALS.length];
       const v = T.frontier.rivalMan(gang, 200 + (n * 13 + k) % 90, { x: P.x + Math.cos(a) * r, y: P.y, z: P.z + Math.sin(a) * r },
-        { hunter: true, provoked: true, guns: lead || (n > 4 && k % 3 === 0) ? ['lever', 'revolver'] : n > 8 && k % 4 === 1 ? ['shotgun', 'revolver'] : ['revolver'] });
+        { hunter: true, provoked: true, guns: [] });       // (knives only: a gun is what they take off you)
       v.rival = 'siege'; v.siege = true; v.money = 0; v.goods = []; v.waveN = n;      // (no coins, no food: only his gun)
       // camp round your shelter, prowl the woods, or (boss nights) hunt you down
-      v.role = boss ? 'hunt' : k % 3 === 2 ? 'roam' : 'camp';
-      v.slot = k; v.fight = { armed: v.guns[0] }; T.folk.armed(v, v.guns[0]);
+      v.role = k % 3 === 2 ? 'roam' : 'siege';          // most make for your shelter; some patrol the woods
+      v.slot = k; v.fight = { armed: 'knife' }; T.folk.armed(v, 'knife'); v.goal = { x: P.x, y: P.y, z: P.z };
       if (lead) { v.leader = true; v.hp = 450; v.name = t('siege.leader'); }
       v.ai = (o, dt, d) => this.manAi(o, dt, d);
       this.men.push(v);
@@ -88,65 +93,142 @@ export class Siege {
     g.hud.bigMessage(t(boss ? 'siege.bossTitle' : 'siege.waveTitle', { n }), t(boss ? 'siege.bossSub' : 'siege.waveSub', { k: size }));
     sfx.alert(); sfx.bell(0.8);
   }
-  // shoot when there's a clear line (doors, glass and walls stop their bullets)
-  shoot(v, dt, d) {
-    const F = this.T.folk;
-    v.yaw = Math.atan2(-(this.game.player.pos.x - v.pos.x), -(this.game.player.pos.z - v.pos.z));
-    if (d < 45 && this.clearShot(v)) F.shootAt(v, dt, 0.8);
-  }
+  // Each outlaw goes by what he sees. Seen you: after you (to where you are,
+  // or where you were last seen). Not seen you: he makes for your shelter
+  // and searches round it, or patrols the woods. A tunnel hides you: he
+  // can't follow what he can't see. Walls in his way: he builds a ladder up
+  // and climbs over; a shut door: dynamite, three charges to blow it in (and
+  // nothing else). Knives only, unless he has taken a gun off you.
   manAi(v, dt, d) {
     const g = this.game, F = this.T.folk, P = g.player.pos, w = g.world;
     if (!v.alive) return true;
     if (v.surrendered > 0) return false;
-    // stuck inside the ground (a hill, a hole filled over him): up onto the surface
     const bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z);
-    if (SOLID[w.get(bx, Math.floor(v.pos.y + 0.2), bz)] && SOLID[w.get(bx, Math.floor(v.pos.y + 1.2), bz)]) { v.pos.y = w.surfaceY(bx, bz) + 1; v.route = []; }
-    // far off (you woke up somewhere else): they make their way back toward you
-    if (d > 110) {
-      if (d > 180 && !F.visible(v)) {
-        const a = Math.atan2(v.pos.z - P.z, v.pos.x - P.x), x = P.x + Math.cos(a) * 120, z = P.z + Math.sin(a) * 120, sy = w.surfaceY(Math.floor(x), Math.floor(z));
-        if (w.get(Math.floor(x), sy + 1, Math.floor(z)) !== B.WATER) { v.pos.set(x, sy + 1, z); v.route = []; }
-      } else { F.goDirect(v, P, 6, dt, 4); v.crouch = false; }
-      return true;
+    if (SOLID[w.get(bx, Math.floor(v.pos.y + 0.2), bz)] && SOLID[w.get(bx, Math.floor(v.pos.y + 1.2), bz)] && w.get(bx, Math.floor(v.pos.y + 0.2), bz) !== B.LADDER) { v.pos.y = w.surfaceY(bx, bz) + 1; v.route = []; }
+    // eyes: a clear line of sight to you (through glass and open doors too; not through earth)
+    v.lookT = (v.lookT || 0) - dt;
+    if (v.lookT <= 0) { v.lookT = 0.4; v.sees = d < 55 && F.sees(v, 55); if (v.sees) { v.last = { x: P.x, y: P.y, z: P.z }; v.lostT = 0; } }
+    const close = d < 1.8 && Math.abs(P.y - v.pos.y) < 1.6 && this.clearShot(v);
+    // the knife: at arm's length; a gun (taken off you): from range
+    v.stabT = (v.stabT || 0) - dt;
+    if (close && v.stabT <= 0) {
+      v.stabT = 1.1; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); sfx.stab && sfx.stab();
+      g.damage(16, 'knife', v.pos); this.hitters.set(v, g.time);
     }
-    const sees = d < 45 && this.clearShot(v);
-    if (v.role === 'hunt') {
-      // the leader's men: after you wherever you go, along any open way (tunnels too)
-      if (d > 3) { F.goDirect(v, P, sees && d < 14 ? 3.4 : 5.4, dt, 2.5); v.crouch = false; } else v.speed = 0;
-      if (sees) this.shoot(v, dt, d);
-      return true;
+    if (v.hasGun && v.sees && d < 40 && this.clearShot(v)) { v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); F.lastHitBy = null; F.shootAt(v, dt, 0.8); if (F.lastHitBy === v) this.hitters.set(v, g.time); }
+    if (close) { v.speed = 0; return true; }
+    // where to: you; where you were last seen; your shelter; the woods
+    let goal = null, fast = false;
+    if (v.sees) { goal = P; fast = true; }
+    else if (v.last) {
+      goal = v.last;
+      if (Math.hypot(v.last.x - v.pos.x, v.last.z - v.pos.z) < 2.5) { v.lostT = (v.lostT || 0) + dt; if (v.lostT > 6) { v.searchAt = v.last; v.last = null; v.prowl = null; } }
     }
-    if (v.role === 'roam') {
-      // prowling the woods where the game is; seen you: after you a while
-      if (sees) v.chaseT = 20;
-      v.chaseT = (v.chaseT || 0) - dt;
-      if (v.chaseT > 0) {
-        if (d > 16) F.goDirect(v, P, 5, dt, 14); else v.speed = 0;
-        v.crouch = false; if (sees) this.shoot(v, dt, d);
-        return true;
+    if (!goal && v.role === 'siege' && v.goal && Math.hypot(v.goal.x - v.pos.x, v.goal.z - v.pos.z) > 2 && !v.searchAt) goal = v.goal;
+    if (!v.sees && v.doorAt) {
+      // a door he found in the wall: up to it with the dynamite
+      if (w.get(v.doorAt.x, v.doorAt.y, v.doorAt.z) !== B.DOOR && w.get(v.doorAt.x, v.doorAt.y, v.doorAt.z) !== B.HDOOR) v.doorAt = null;
+      else goal = { x: v.doorAt.x + 0.5, y: v.doorAt.y, z: v.doorAt.z + 0.5, door: true };
+    }
+    if (!goal) {
+      // search round where you were (your shelter, the spot you vanished), or patrol the woods
+      if (!v.prowl || Math.hypot(v.prowl.x - v.pos.x, v.prowl.z - v.pos.z) < 2.5 || (v.prowlT = (v.prowlT || 0) - dt) <= 0) {
+        let cx, cz, R;
+        const base = v.searchAt || (v.role === 'siege' ? v.goal : null);
+        if (base) { cx = base.x; cz = base.z; R = 6 + Math.random() * 18; }
+        else {
+          const herds = g.animals.herds.filter((h) => !h.pen && h.members.some((a) => a.state !== 'dead') && Math.hypot(h.cx - v.pos.x, h.cz - v.pos.z) < 160);
+          const h = herds[Math.floor(Math.random() * herds.length)];
+          cx = h ? h.cx : v.pos.x; cz = h ? h.cz : v.pos.z; R = 8 + Math.random() * 25;
+        }
+        const a = Math.random() * 6.28, x = Math.max(8, Math.min(w.W - 8, cx + Math.cos(a) * R)), z = Math.max(8, Math.min(w.D - 8, cz + Math.sin(a) * R));
+        v.prowl = { x, y: w.surfaceY(Math.floor(x), Math.floor(z)) + 1, z }; v.prowlT = 35; v.route = [];
+        if (v.searchAt && Math.random() < 0.15) v.searchAt = null;          // (and in the end, back to the woods)
       }
-      if (!v.prowl || Math.hypot(v.prowl.x - v.pos.x, v.prowl.z - v.pos.z) < 3 || (v.prowlT = (v.prowlT || 0) - dt) <= 0) {
-        const herds = g.animals.herds.filter((h) => !h.pen && h.members.some((a) => a.state !== 'dead') && Math.hypot(h.cx - P.x, h.cz - P.z) < 140);
-        const h = herds[Math.floor(Math.random() * herds.length)];
-        const cx = h ? h.cx : P.x, cz = h ? h.cz : P.z, a = Math.random() * 6.28, r = 8 + Math.random() * 25;
-        const x = Math.max(8, Math.min(w.W - 8, cx + Math.cos(a) * r)), z = Math.max(8, Math.min(w.D - 8, cz + Math.sin(a) * r));
-        v.prowl = { x, y: w.surfaceY(Math.floor(x), Math.floor(z)) + 1, z }; v.prowlT = 40; v.route = [];
-      }
-      F.goDirect(v, v.prowl, 2.6, dt, 2); v.crouch = false;
-      return true;
+      goal = v.prowl;
     }
-    // camping round your shelter: each at his own place in the ring, in cover, shooting when you show yourself
-    const C = this.camp;
-    const ang = (v.slot / Math.max(1, this.men.length)) * Math.PI * 2, R = 24 + (v.slot % 3) * 6;
-    const spot = { x: C.x + Math.cos(ang) * R, z: C.z + Math.sin(ang) * R };
-    spot.y = w.surfaceY(Math.floor(spot.x), Math.floor(spot.z)) + 1;
-    if (Math.hypot(spot.x - v.pos.x, spot.z - v.pos.z) > 2) { F.goDirect(v, spot, 4.4, dt, 1.5); v.crouch = false; if (sees) this.shoot(v, dt, d); return true; }
-    v.speed = 0;
-    v.peekT = (v.peekT || 0) - dt;
-    if (v.peekT <= 0) { v.peek = !v.peek; v.peekT = v.peek ? 2.2 : 1.6; }
-    v.crouch = !v.peek;
-    if (v.peek && sees) this.shoot(v, dt, d);
+    F.goDirect(v, goal, fast ? 5.6 : 2.8, dt, 1.2); v.crouch = false;
+    // in his way: a wall (a ladder up it), a shut door (dynamite), or the top of a wall (down the other side)
+    if (goal !== v.prowl) this.getIn(v, goal, dt);       // (going for you or your shelter: over the walls, through the doors)
     return true;
+  }
+  getIn(v, goal, dt) {
+    const g = this.game, w = g.world, F = this.T.folk;
+    const gx = goal.x - v.pos.x, gz = goal.z - v.pos.z, gd = Math.hypot(gx, gz);
+    const by = Math.floor(v.pos.y + 0.05);
+    const isDoor = (q) => q === B.DOOR || q === B.HDOOR;
+    if (goal.door) {
+      // at the door: the charge goes on it
+      if (gd < 2.4 && !this.charges.some((c) => c.x === v.doorAt.x && c.z === v.doorAt.z)) { this.charges.push({ x: v.doorAt.x, y: v.doorAt.y, z: v.doorAt.z, t: 3 }); F.say(v, 'siege.doorCharge', null, 'warn'); sfx.leather(); }
+      return;
+    }
+    if (gd < 1.5) return;
+    // on top of a wall with the goal below on the other side: over and down
+    if (goal.y < v.pos.y - 2 && gd < 10) {
+      const fx = Math.floor(v.pos.x + gx / gd), fz = Math.floor(v.pos.z + gz / gd);
+      if (!SOLID[w.get(fx, by, fz)] && !SOLID[w.get(fx, by + 1, fz)]) { v.pos.x = fx + 0.5; v.pos.z = fz + 0.5; v.route = []; return; }
+    }
+    // blocked: hardly moved these last seconds while the goal is still away
+    v.progT = (v.progT || 0) + dt;
+    if (!v.progAt) v.progAt = v.pos.clone();
+    if (v.progT < 3) return;
+    const moved = v.pos.distanceTo(v.progAt);
+    v.progT = 0; v.progAt.copy(v.pos);
+    if (moved > 1.2) return;
+    // what is in the way, straight toward the goal
+    const hit = w.raycast(v.pos.x, v.pos.y + 0.6, v.pos.z, gx / gd, 0, gz / gd, 3.5, false, 'bullet');
+    if (!hit) return;
+    const id = w.get(hit.x, hit.y, hit.z), above = w.get(hit.x, hit.y + 1, hit.z), below = w.get(hit.x, hit.y - 1, hit.z);
+    if (isDoor(id) || isDoor(above) || isDoor(below)) {
+      // a shut door: a charge on it (three to blow it in; only the door goes)
+      if (!this.charges.some((c) => c.x === hit.x && c.z === hit.z)) { this.charges.push({ x: hit.x, y: isDoor(id) ? hit.y : isDoor(above) ? hit.y + 1 : hit.y - 1, z: hit.z, t: 3 }); F.say(v, 'siege.doorCharge', null, 'warn'); sfx.leather(); }
+      return;
+    }
+    // a wall with a door in it near by: he goes for the door instead
+    for (let r = 1; r <= 8 && !v.doorAt; r++) for (let dx = -r; dx <= r && !v.doorAt; dx++) for (let dz = -r; dz <= r; dz++) {
+      if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+      for (let dy = -1; dy <= 2; dy++) if (isDoor(w.get(hit.x + dx, by + dy, hit.z + dz))) { v.doorAt = { x: hit.x + dx, y: by + dy, z: hit.z + dz }; break; }
+      if (v.doorAt) break;
+    }
+    if (v.doorAt) { v.route = []; return; }
+    // a wall: a ladder up it from his side, and up he goes onto the top
+    let h = 0; while (h < 12 && SOLID[w.get(hit.x, by + h, hit.z)]) h++;
+    if (h === 0 || h >= 12 || SOLID[w.get(hit.x, by + h + 1, hit.z)] || (v.ladderT || 0) > g.time) return;
+    const lx = hit.x + hit.nx, lz = hit.z + hit.nz;
+    v.ladderT = g.time + 0.004;
+    for (let y = by; y < by + h; y++) if (!SOLID[w.get(lx, y, lz)]) w.set(lx, y, lz, B.LADDER);
+    this.ladders.push({ x: lx, z: lz, y0: by, y1: by + h - 1 });
+    v.pos.set(hit.x + 0.5, by + h, hit.z + 0.5); v.route = []; v.progAt = null;       // over the top: standing on the wall
+    F.say(v, 'siege.ladder', null, 'warn');
+  }
+  // their dynamite on your doors: three charges and the door is gone (the walls never are)
+  doorBlast(c) {
+    const g = this.game, w = g.world, T = this.T, P = g.player.pos, key = c.x + ',' + c.z;
+    T.boom(c.x + 0.5, c.y + 0.5, c.z + 0.5);
+    const d = Math.hypot(P.x - c.x - 0.5, P.y + 1 - c.y, P.z - c.z - 0.5);
+    if (d < 3.5) g.damage(Math.round(30 * (1 - d / 3.5)), 'blast');
+    this.doorHits[key] = (this.doorHits[key] || 0) + 1;
+    if (this.doorHits[key] >= 3) {
+      for (let y = c.y - 1; y <= c.y + 1; y++) { const id = w.get(c.x, y, c.z); if (id === B.DOOR || id === B.DOOR_OPEN || id === B.HDOOR) w.set(c.x, y, c.z, B.AIR); }
+      delete this.doorHits[key];
+      g.hud.alert(t('siege.doorDown'));
+    } else g.hud.toast(t('siege.doorHit', { n: 3 - this.doorHits[key] }));
+  }
+  // your button: their ladders come down (any with nobody on them)
+  ladderOptions(p) {
+    const near = this.ladders.filter((L) => Math.hypot(L.x + 0.5 - p.x, L.z + 0.5 - p.z) < 30);
+    return near.length ? [{ a: 'siegeladders', label: t('siege.tearLadders', { n: near.length }), run: () => this.tearLadders(p) }] : [];
+  }
+  tearLadders(p) {
+    const g = this.game, w = g.world, men = (this.men || []).filter((m) => m.alive);
+    let n = 0;
+    this.ladders = this.ladders.filter((L) => {
+      if (Math.hypot(L.x + 0.5 - p.x, L.z + 0.5 - p.z) >= 30) return true;
+      if (men.some((m) => Math.hypot(m.pos.x - L.x - 0.5, m.pos.z - L.z - 0.5) < 1.3 && m.pos.y >= L.y0 - 0.5 && m.pos.y <= L.y1 + 2)) return true;      // (someone on it)
+      for (let y = L.y0; y <= L.y1; y++) if (w.get(L.x, y, L.z) === B.LADDER) w.set(L.x, y, L.z, B.AIR);
+      n++; return false;
+    });
+    g.hud.toast(t('siege.laddersDown', { n })); sfx.breakBlock('wood');
   }
   // nothing solid between him and you (a door, glass, a wall)
   clearShot(v) {
@@ -190,6 +272,8 @@ export class Siege {
     this.houses.update();
     this.refillT -= dt;
     if (this.refillT <= 0) { this.refillT = 1; this.refill(); }
+    for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.doorBlast(c); }
+    this.charges = this.charges.filter((c) => c.t > 0);
     this.foodT -= dt;
     if (this.foodT <= 0) { this.foodT = 1; this.spoil(); }
     if (this.restart && !this.men) { this.started = Math.max(0, this.started - this.restart); for (let k = 0; k < this.restart; k++) this.startWave(); this.restart = 0; }
@@ -215,6 +299,10 @@ export class Siege {
   playerDied(cause) {
     const g = this.game, p = g.player, w = g.world;
     if (cause === 'starve') { this.gameOver(); return; }
+    // every man who had a hand in killing you takes a gun off you
+    let armed = 0;
+    for (const [m, at] of this.hitters) if (m.alive && g.time - at < 0.012 && !m.hasGun) { m.hasGun = true; m.guns = ['revolver']; m.fight = { armed: 'revolver' }; this.T.folk.armed(m, 'revolver'); armed++; }
+    this.hitters.clear();
     this.deaths = (this.deaths || 0) + 1;
     let lost = 0;
     for (const id of Object.keys(g.inv.counts)) if (ITEMS[id] && ITEMS[id].food && g.inv.counts[id] !== Infinity) { lost += g.inv.counts[id] || 0; g.inv.counts[id] = 0; }
@@ -231,7 +319,7 @@ export class Siege {
     p.health = 100; g.breath = 20; p.hunger = Math.max(60, p.hunger || 0); g.hungerStage = 0;
     g.hud.dirtyHotbar = true;
     const C = coords(spot.x, spot.z, w);
-    g.hud.bigMessage(t('siege.diedTitle'), t('siege.diedSub', { x: C.x, y: C.y, n: lost }));
+    g.hud.bigMessage(t('siege.diedTitle'), t('siege.diedSub', { x: C.x, y: C.y, n: lost }) + (armed ? ' ' + t('siege.tookGuns', { n: armed }) : ''));
     sfx.done();
   }
   gameOver() {
@@ -245,7 +333,7 @@ export class Siege {
   }
   // the attackers, for the map (every one of them, however far)
   marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z, boss: !!m.leader })); }
-  toSave() { return { wave: this.wave, started: this.started, deaths: this.deaths || 0, nextAt: this.nextAt, food: this.food, fighting: this.men ? new Set(this.men.filter((m) => m.alive && !m.away).map((m) => m.waveN)).size : 0 }; }
+  toSave() { return { wave: this.wave, started: this.started, deaths: this.deaths || 0, nextAt: this.nextAt, food: this.food, ladders: this.ladders, fighting: this.men ? new Set(this.men.filter((m) => m.alive && !m.away).map((m) => m.waveN)).size : 0 }; }
   hudText() {
     const g = this.game;
     const h = Math.max(0, (this.nextAt - g.time) * 24), hh = Math.floor(h), mm = Math.floor((h - hh) * 60), time = hh + ':' + String(mm).padStart(2, '0');
@@ -254,6 +342,7 @@ export class Siege {
   }
   options() {
     const out = [];
+    out.push(...this.ladderOptions(this.game.player.pos));
     if (this.houses.placing) out.push({ a: 'shcancel', label: t('sh.cancel'), run: () => this.houses.cancel() });
     else out.push({ a: 'shtrade', label: t('sh.trade'), run: () => this.game.app.openPanel('siegehouses', {}) });
     if (!this.men && !this.over) out.push({ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() });

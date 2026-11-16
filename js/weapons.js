@@ -80,7 +80,7 @@ export class Combat {
         if (this.swimWarn <= 0) { g.hud.toast(t('hud.swimWeapon')); this.swimWarn = 2; }
         return;
       }
-      this.cool = W.rate;
+      this.cool = W.rate * (g.town && g.town.siege ? 0.5 : 1);        // (Siege: twice the rate of fire)
       if (W.mag && this.ammo(id) <= 0) {
         // out of rounds: the hammer falls on an empty chamber; reload
         sfx.dryFire(); this.cool = 0.35; this.cockT = 0.25;
@@ -155,11 +155,11 @@ export class Combat {
       if ((input.mouse.rightPressed || input.thit('place')) && !g.townKey && this.cool <= 0) this.charge = { t: 0 };
       return;
     }
-    const C = this.charge; C.t += dt;
+    const C = this.charge; C.t += dt * (g.town && g.town.siege ? 2 : 1);     // (Siege: a full throw charges twice as fast)
     const k = this.chargeK();
     if (C.t > 0.14) { this.chargeEl.hidden = false; this.chargeEl.firstChild.style.width = Math.round(k * 100) + '%'; this.chargeEl.classList.toggle('full', k >= 1); }
     if (k > 0.04) this.drawArc(k); else this.arc.visible = false;
-    if (!held) { this.throwKnife(k); this.cancelCharge(); this.cool = 0.75; }
+    if (!held) { this.throwKnife(k); this.cancelCharge(); this.cool = g.town && g.town.siege ? 0.25 : 0.75; }
   }
   chargeK() { return this.charge ? Math.min(1, Math.max(0, (this.charge.t - 0.14) / KNIFE_HOLD)) : 0; }
   cancelCharge() { this.charge = null; this.chargeEl.hidden = true; this.arc.visible = false; }
