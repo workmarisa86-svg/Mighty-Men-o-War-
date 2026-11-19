@@ -833,7 +833,7 @@ export class TownLife {
     const W = WEAPONS[sel], gun = W && !W.melee && !W.throw;
     const v = F.raycast(eye, dir, gun ? 14 : 3.4);
     const blockD = hit ? Math.hypot(hit.x + 0.5 - eye.x, hit.y + 0.5 - eye.y, hit.z + 0.5 - eye.z) : 99;
-    if (v && v.dist < blockD) {
+    if (v && v.dist < blockD && !this.siege) {          // (in a Siege: no looting, holding up or duels: right-click throws, places, aims)
       const u = v.villager;
       if (gun && u.alive && !u.surrendered && !u.posse && !u.fight && !u.duel && !u.gang && !u.cuffed) return { a: 'holdup', label: t('use.holdup'), run: () => this.holdUp(u) };
       // no gun in hand, a revolver on your belt: challenge a man to a duel
@@ -842,7 +842,7 @@ export class TownLife {
     }
     // a dead body nearby (lying low, the ray passes over it)
     const body = F.list.concat(F.extra).find((u) => !u.alive && !u.away && !u.looted && !u.gang && Math.hypot(u.pos.x - p.pos.x, u.pos.z - p.pos.z) < 2.4);
-    if (body && p.pitch < -0.35) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: body }) };
+    if (body && !this.siege && p.pitch < -0.35) return { a: 'loot', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: body }) };
     if (p.riding) return { a: 'dismount', label: t('use.dismount'), run: () => g.horses.dismount() };
     const hr = g.horses.raycast(eye, dir, 3.6);
     if (hr && hr.dist < blockD && !hr.horse.rider) {
@@ -1154,7 +1154,7 @@ export class TownLife {
     }
     // a body at your feet (an outlaw who robbed you, say): a button to search it (phones too)
     const corpse = this.folk.list.concat(this.folk.extra).find((u) => !u.alive && !u.away && !u.looted && !u.gang && Math.hypot(u.pos.x - p.x, u.pos.z - p.z) < 2.6 && Math.abs(u.pos.y - p.y) < 2.5 && this.lootList(u).length);
-    if (corpse) out.push({ a: 'search', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: corpse }) });
+    if (corpse && !this.siege) out.push({ a: 'search', label: t('use.loot'), run: () => g.app.openPanel('loot', { v: corpse }) });
     // your guns in the sheriff's gun cabinet: take them yourself in his office (no need to find him)
     if (this.held && !this.held.forfeit && !this.jailed) {
       const hall = this.village.buildings.find((b) => b.type === 'hall');
