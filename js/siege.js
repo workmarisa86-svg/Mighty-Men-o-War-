@@ -28,6 +28,7 @@ const ENDLESS = ['dirt', 'wood', 'stone', 'brick', 'glass', 'thatch', 'sand', 'c
 const BEST_KEY = 'mmow-siege-best';
 const SPOILS = { meat_raw: 2, meat_cooked: 4 };         // days before it goes bad
 const BOSS_EVERY = 5;
+const MAX_OUT = 40;                                       // never more attackers than this out at once
 
 export function siegeBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch { return 0; } }
 
@@ -48,7 +49,14 @@ export class Siege {
     if (!saved && g.time > this.nextAt) this.nextAt += 1;
     this.refillT = 0; this.foodT = 0; this.over = false; this.bestAtStart = siegeBest();
     // a saved Siege: carry on (the waves that were out come again)
-    if (saved) { this.refill(); if (saved.fighting) this.restart = Math.max(1, saved.fighting); g.hud.toast(t('siege.welcomeBack', { n: this.wave + 1 })); return; }
+    if (saved) {
+      this.refill();
+      if (this.nextAt <= g.time) { this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24; if (this.nextAt <= g.time) this.nextAt += 1; }     // (never a wave just for opening the game)
+      // the men who were still out when you left: exactly those come back (no new wave)
+      if (Array.isArray(saved.out)) this.restore = saved.out;
+      else if (saved.fighting) this.restore = [{ w: this.started, n: Math.min(this.size(this.started), MAX_OUT), boss: false }];     // (an older save: just the last wave)
+      g.hud.toast(t('siege.welcomeBack', { n: this.wave + 1 })); return;
+    }
     // no food: hunt (skin what you shoot, cook it at a campfire you light with the flint)
     for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
     if (g.inv.counts.bread) g.inv.counts.bread = 0;
@@ -66,11 +74,21 @@ export class Siege {
   // a wave comes (eight o'clock, or the Ready button). Men still out from an
   // earlier wave stay: the new ones join them.
   startWave() {
-    const g = this.game, T = this.T, P = g.player.pos, n = this.started + 1, boss = this.boss(n);
+    const g = this.game, n = this.started + 1, boss = this.boss(n);
     this.started = n;
     this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24; if (this.nextAt <= g.time + 1e-4) this.nextAt += 1;     // (tonight at eight, even if a wave came early today)
-    const a0 = Math.random() * Math.PI * 2, size = this.size(n) + (boss ? 3 : 0);
+    const size = this.size(n) + (boss ? 3 : 0);
+    this.spawnMen(n, size, boss);
+    g.hud.bigMessage(t(boss ? 'siege.bossTitle' : 'siege.waveTitle', { n }), t(boss ? 'siege.bossSub' : 'siege.waveSub', { k: size }));
+    sfx.alert(); sfx.bell(0.8);
+  }
+  // put men for wave n out there (never more than MAX_OUT at once)
+  spawnMen(n, count, boss) {
+    const g = this.game, T = this.T, P = g.player.pos;
     this.men = this.men || [];
+    const room = MAX_OUT - this.men.filter((m) => m.alive && !m.away).length;
+    const size = Math.max(boss ? 1 : 0, Math.min(count, room));
+    const a0 = Math.random() * Math.PI * 2;
     for (let k = 0; k < size; k++) {
       let a = a0 + (k / size - 0.5) * (size > 6 ? 2.4 : 1.2), r = 60 + Math.random() * 10;
       for (let tries = 0; tries < 12; tries++) {         // somewhere dry (not out in a lake)
@@ -90,8 +108,6 @@ export class Siege {
       this.men.push(v);
     }
     this.camp = { x: P.x, z: P.z, t: g.time };
-    g.hud.bigMessage(t(boss ? 'siege.bossTitle' : 'siege.waveTitle', { n }), t(boss ? 'siege.bossSub' : 'siege.waveSub', { k: size }));
-    sfx.alert(); sfx.bell(0.8);
   }
   // Each outlaw goes by what he sees. Seen you: after you (to where you are,
   // or where you were last seen). Not seen you: he makes for your shelter
@@ -276,7 +292,7 @@ export class Siege {
     this.charges = this.charges.filter((c) => c.t > 0);
     this.foodT -= dt;
     if (this.foodT <= 0) { this.foodT = 1; this.spoil(); }
-    if (this.restart && !this.men) { this.started = Math.max(0, this.started - this.restart); for (let k = 0; k < this.restart; k++) this.startWave(); this.restart = 0; }
+    if (this.restore) { const r = this.restore; this.restore = null; for (const o of r) if (o.n > 0) this.spawnMen(o.w, o.n, !!o.boss); if (this.men && !this.men.length) this.men = null; }
     if (g.time >= this.nextAt) this.startWave();
     // the camp follows you if you move house
     if (this.camp && Math.hypot(this.camp.x - g.player.pos.x, this.camp.z - g.player.pos.z) > 60 && g.time - this.camp.t > 0.04) this.camp = { x: g.player.pos.x, z: g.player.pos.z, t: g.time };
@@ -333,7 +349,12 @@ export class Siege {
   }
   // the attackers, for the map (every one of them, however far)
   marks() { return (this.men || []).filter((m) => m.alive && !m.away).map((m) => ({ x: m.pos.x, z: m.pos.z, boss: !!m.leader })); }
-  toSave() { return { wave: this.wave, started: this.started, deaths: this.deaths || 0, nextAt: this.nextAt, food: this.food, ladders: this.ladders, fighting: this.men ? new Set(this.men.filter((m) => m.alive && !m.away).map((m) => m.waveN)).size : 0 }; }
+  toSave() { return { wave: this.wave, started: this.started, deaths: this.deaths || 0, nextAt: this.nextAt, food: this.food, ladders: this.ladders, out: this.outSave() }; }
+  outSave() {
+    const by = {};
+    for (const m of this.men || []) if (m.alive && !m.away) { const o = by[m.waveN] || (by[m.waveN] = { w: m.waveN, n: 0, boss: false }); o.n++; if (m.leader) o.boss = true; }
+    return Object.values(by);
+  }
   hudText() {
     const g = this.game;
     const h = Math.max(0, (this.nextAt - g.time) * 24), hh = Math.floor(h), mm = Math.floor((h - hh) * 60), time = hh + ':' + String(mm).padStart(2, '0');
