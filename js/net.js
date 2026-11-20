@@ -90,24 +90,26 @@ export class Net {
   }
   // you host: your Siege, a code for your friends
   async startHost({ name, pvp }) {
-    const P = await loadLib();
+    let P;
+    try { P = await loadLib(); } catch { throw new Error('load'); }
     this.role = 'host'; this.name = name; this.pvp = !!pvp; this.myId = 'H';
     for (let k = 0; k < 6; k++) {
       const code = WORDS[Math.floor(Math.random() * WORDS.length)] + '-' + (10 + Math.floor(Math.random() * 90));
       try { await this.openPeer(P, PREFIX + code.toLowerCase()); this.code = code; break; }
-      catch (e) { if (e.type !== 'unavailable-id' || k === 5) throw e; }
+      catch (e) { if (e.type !== 'unavailable-id' || k === 5) throw new Error('server:' + ((e && e.type) || 'error')); }
     }
     this.peer.on('connection', (c) => this.accept(c));
     return this.code;
   }
   // you join a friend's game with their code: resolves with their world
   async startJoin({ name, code }) {
-    const P = await loadLib();
+    let P;
+    try { P = await loadLib(); } catch { throw new Error('load'); }
     this.role = 'guest'; this.name = name;
     this.code = code.trim().toUpperCase().replace(/\s+/g, '');
-    await this.openPeer(P, null);
+    try { await this.openPeer(P, null); } catch (e) { throw new Error('server:' + ((e && e.type) || 'error')); }      // (this device can't reach the connection service)
     return new Promise((res, rej) => {
-      const timer = setTimeout(() => { this.joinFail = null; rej(new Error('timeout')); }, 25000);
+      const timer = setTimeout(() => { this.joinFail = null; rej(new Error(this.hostConn && this.hostConn.open ? 'timeout' : 'link:timeout')); }, 25000);
       this.joinFail = (why) => { clearTimeout(timer); this.joinFail = null; rej(new Error(why)); };
       this.onWelcome = (m) => { clearTimeout(timer); this.joinFail = null; res(m); };
       const c = this.peer.connect(PREFIX + this.code.toLowerCase(), { reliable: true, serialization: 'raw' });
@@ -119,7 +121,7 @@ export class Net {
     });
   }
   onError(e) {
-    if (this.joinFail) { this.joinFail(e && e.type === 'peer-unavailable' ? 'nocode' : 'error'); return; }
+    if (this.joinFail) { const ty = (e && e.type) || 'error'; this.joinFail(ty === 'peer-unavailable' ? 'nocode' : /network|server-error|socket/.test(ty) ? 'server:' + ty : 'link:' + ty); return; }
     console.warn('net', e && e.type);
   }
   // the game is up: hook into it
@@ -161,7 +163,7 @@ export class Net {
   // (guest) the host is gone
   lost() {
     if (this.closed) return;
-    if (this.joinFail) { this.joinFail('error'); return; }
+    if (this.joinFail) { this.joinFail('link:closed'); return; }
     const app = this.app;
     this.close(); app.net = null;
     if (app.game) app.quitToMenu(true);

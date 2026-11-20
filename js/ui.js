@@ -118,7 +118,11 @@ export class UI {
     let pv = pvp;
     this.root.querySelectorAll('#npvp button').forEach((b) => b.onclick = () => { pv = b.dataset.v === '1'; this.root.querySelectorAll('#npvp button').forEach((x) => x.classList.toggle('on', x === b)); });
     const who = () => { const n = $('#nname').value.trim().slice(0, 16) || t('net.player'); s.netName = n; this.app.applySettings(); return n; };
-    const fail = (e) => this.show('online', { pvp: pv, msg: t('net.err.' + (['nocode', 'version', 'full', 'timeout'].includes(e && e.message) ? e.message : 'error')) });
+    const fail = (e) => {
+      const m = String((e && e.message) || 'error'), [kind, why] = m.split(':');
+      const key = ['nocode', 'version', 'full', 'timeout', 'load', 'server', 'link'].includes(kind) ? kind : 'error';
+      this.show('online', { pvp: pv, msg: t('net.err.' + key) + (why ? ` (${why})` : '') });
+    };
     $('#nhost').onclick = () => { const name = who(); $('#nmsg').textContent = t('net.connecting'); $('#nhost').disabled = $('#njoin').disabled = true; this.app.hostOnline({ name, pvp: pv }).catch(fail); };
     $('#njoin').onclick = () => {
       const code = $('#ncode').value.trim();
