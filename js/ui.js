@@ -118,7 +118,11 @@ export class UI {
     let pv = pvp;
     this.root.querySelectorAll('#npvp button').forEach((b) => b.onclick = () => { pv = b.dataset.v === '1'; this.root.querySelectorAll('#npvp button').forEach((x) => x.classList.toggle('on', x === b)); });
     const who = () => { const n = $('#nname').value.trim().slice(0, 16) || t('net.player'); s.netName = n; this.app.applySettings(); return n; };
-    const fail = (e) => this.show('online', { pvp: pv, msg: t('net.err.' + (['nocode', 'version', 'full', 'timeout'].includes(e && e.message) ? e.message : 'error')) });
+    const fail = (e) => {
+      const m = String((e && e.message) || 'error'), [kind, why] = m.split(':');
+      const key = ['nocode', 'version', 'full', 'timeout', 'load', 'server', 'link'].includes(kind) ? kind : 'error';
+      this.show('online', { pvp: pv, msg: t('net.err.' + key) + (why ? ` (${why})` : '') });
+    };
     $('#nhost').onclick = () => { const name = who(); $('#nmsg').textContent = t('net.connecting'); $('#nhost').disabled = $('#njoin').disabled = true; this.app.hostOnline({ name, pvp: pv }).catch(fail); };
     $('#njoin').onclick = () => {
       const code = $('#ncode').value.trim();
@@ -397,7 +401,7 @@ export class UI {
     this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2>${net ? `<p class="big" id="online-code">${t('net.code', { code: esc(net.code) })}</p><p class="muted small">${t(net.pvp ? 'net.pvpOn' : 'net.pvpOff')}</p>` : ''}<div class="menu">
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
-      <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
+      <button class="btn" id="pmap">${t(this.app.game && this.app.game.town && !this.app.game.town.siege ? 'menu.townMap' : 'menu.map')}</button>
       ${this.app.game && this.app.game.town && this.app.game.town.trades.trade ? `<button class="btn" id="ptrade">${t('trade.title')}</button>` : ''}
       ${this.app.game && this.app.game.town ? `<button class="btn" id="pgoals">${t('goal.title')}</button>` : ''}
       ${net && net.guest ? `<button class="btn" id="pcopy">${t('net.copy')}</button>` : ''}

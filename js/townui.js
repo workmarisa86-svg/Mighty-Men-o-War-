@@ -262,12 +262,13 @@ export function installTownUI(UI) {
   // ---- the town map: the center, the homes and paths, your cottage, people ----
   P.r_townmap = function ({ from }) {
     const g = this.app.game, T = g.town, V = T.village;
+    if (T.siege) { T.coordMode = true; this.townZoom = false; }        // (a Siege has no town: only the land and its coordinates)
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
       <div class="legend">${T.siege ? sw('#ff2a1a', 'siege.attackers') + (g.net ? sw('#4aa8ff', 'net.friends') : '') : T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
-    const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>` + body, { wide: true, onBack: close });
+    const panel = this.panel(t(T.siege ? 'menu.map' : 'menu.townMap'), (T.siege ? '' : `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>`) + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
     const flip = (e) => { e.stopPropagation(); e.preventDefault(); if (performance.now() - (this.xyAt || 0) < 400) return; this.xyAt = performance.now(); T.coordMode = !T.coordMode; this.show('townmap', { from }); };
     panel.querySelectorAll('[data-xy]').forEach((b) => { b.onclick = flip; b.addEventListener('pointerup', flip); b.addEventListener('touchend', flip, { passive: false }); });
