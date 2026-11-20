@@ -109,7 +109,7 @@ export class Net {
       const timer = setTimeout(() => { this.joinFail = null; rej(new Error('timeout')); }, 25000);
       this.joinFail = (why) => { clearTimeout(timer); this.joinFail = null; rej(new Error(why)); };
       this.onWelcome = (m) => { clearTimeout(timer); this.joinFail = null; res(m); };
-      const c = this.peer.connect(PREFIX + this.code.toLowerCase(), { reliable: true, serialization: 'none' });
+      const c = this.peer.connect(PREFIX + this.code.toLowerCase(), { reliable: true, serialization: 'raw' });
       this.hostConn = c;
       c.on('open', () => this.sendTo(c, { t: 'hello', name, v: GAME_VERSION }));
       c.on('data', (raw) => this.recv(c, raw));
