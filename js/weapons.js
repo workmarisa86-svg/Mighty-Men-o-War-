@@ -28,6 +28,8 @@ export const WEAPONS = {
   lever:    { damage: 90, range: 85, rate: 0.8, spread: 0.005, loud: 45, sound: 'rifle', kick: 1, reticle: 'cross', mag: 8, reloadEach: 0.5, period: true },
   smg:    { damage: 28, range: 50, rate: 0.09, spread: 0.03, loud: 40, sound: 'smg', kick: 0.35, auto: true, reticle: 'cross' },
   grenade: { throw: true, rate: 0.9, reticle: 'arc' },
+  // a stick of dynamite, lit and thrown (it can still be set at a door or a rock with E)
+  dynamite: { throw: true, rate: 0.9, reticle: 'arc' },
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
 };
 
@@ -236,6 +238,7 @@ export class Combat {
 
   melee(damage, range, silent) {
     const g = this.game;
+    if (g.net) g.net.fx('swing');
     g.vm.doSwing();
     sfx.swish();
     const { eye, dir } = g.aim();
@@ -247,6 +250,7 @@ export class Combat {
   throwIt(id) {
     const g = this.game, p = g.player;
     if (!g.has(id)) return;
+    if (g.net) g.net.fx('throw');
     if (p.swimming) { g.hud.toast(t('hud.swimWeapon')); return; }
     g.take(id);
     const { eye, dir } = g.aim();
@@ -268,6 +272,7 @@ export class Combat {
     const { pos, vel, dir } = this.knifeLaunch(k);
     const mesh = gunModel('knife'); mesh.scale.setScalar(1.3); g.scene.add(mesh);
     const kn = { mesh, pos, vel, spin: 0, yaw: Math.atan2(dir.x, dir.z) + Math.PI, flying: true, t: 0, dmg: 55 + 30 * k, bounces: 0 };
+    if (g.net) g.net.fx('knife', { p: [pos.x, pos.y, pos.z], v: [vel.x, vel.y, vel.z] });
     mesh.position.copy(kn.pos);
     (this.knives || (this.knives = [])).push(kn);
     this.throwT = 0; this.throwFrom = Math.max(0.7, Math.min(1, 0.3 + k * 0.7)); g.vm.doSwing(); sfx.swish(); if (k > 0.5) sfx.swish();
@@ -284,7 +289,7 @@ export class Combat {
         else k.vel.y -= 14 * dt;
         const step = k.vel.length() * dt; d.copy(k.vel).normalize();
         const block = g.world.raycast(k.pos.x, k.pos.y, k.pos.z, d.x, d.y, d.z, step, false, 'bullet');
-        const hit = k.bounces ? null : this.target(k.pos, d, block ? block.dist : step);
+        const hit = k.bounces || k.ghost ? null : this.target(k.pos, d, block ? block.dist : step);      // (a friend's knife here only shows: their game does the hitting)
         if (hit) {
           this.applyHit(hit, k.dmg, { silent: true }); sfx.stab();
           k.flying = false; k.pos.copy(hit.point || k.pos.clone().addScaledVector(d, hit.dist || 0));
@@ -329,14 +334,23 @@ export class Combat {
       }
       k.mesh.position.copy(k.pos);
       // pick it back up (walk over it, or up to a body it is in), or it is lost after a few minutes
-      if (!k.flying && Math.hypot(k.pos.x - p.x, k.pos.z - p.z) < 1.6 && Math.abs(k.pos.y - p.y - 0.5) < 2) {
+      if (k.ghost) { if (!k.flying && (k.landT = (k.landT || 0) + dt) > 4) this.dropKnife(k); }
+      else if (!k.flying && Math.hypot(k.pos.x - p.x, k.pos.z - p.z) < 1.6 && Math.abs(k.pos.y - p.y - 0.5) < 2) {
         g.give('knife', 1); g.hud.dirtyHotbar = true; sfx.pick && sfx.pick(); this.dropKnife(k);
       } else if (k.t > 300) this.dropKnife(k);
     }
   }
+  // a knife another player threw: shown flying and landing, then gone (it hurts nobody here)
+  ghostKnife(pos, vel) {
+    const g = this.game, mesh = gunModel('knife'); mesh.scale.setScalar(1.3); g.scene.add(mesh);
+    const P = new THREE.Vector3(...pos), V = new THREE.Vector3(...vel);
+    mesh.position.copy(P);
+    (this.knives || (this.knives = [])).push({ mesh, pos: P, vel: V, spin: 0, yaw: Math.atan2(V.x, V.z) + Math.PI, flying: true, t: 0, dmg: 0, bounces: 0, ghost: true });
+  }
   dropKnife(k) { this.game.scene.remove(k.mesh); this.knives = this.knives.filter((x) => x !== k); }
 
   shoot(id, W) {
+    if (this.game.net) this.game.net.fx('shot', { w: id });         // (online: the others see the shot and hear it)
     const g = this.game, p = g.player;
     const { eye, dir } = g.aim();
     let spread = W.spread;
