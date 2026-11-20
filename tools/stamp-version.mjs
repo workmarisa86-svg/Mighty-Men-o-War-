@@ -19,7 +19,7 @@ const imgs = fs.readdirSync(root + 'img').map((f) => './img/' + f);
 const audio = fs.readdirSync(root + 'audio').filter((f) => !f.endsWith('.txt')).map((f) => './audio/' + f);
 const sounds = fs.existsSync(root + 'sounds') ? fs.readdirSync(root + 'sounds').filter((f) => /\.(ogg|mp3)$/i.test(f)).map((f) => './sounds/' + f) : [];   // drop-in recordings
 const fonts = fs.existsSync(root + 'fonts') ? fs.readdirSync(root + 'fonts').filter((f) => /\.(woff2?|ttf|otf)$/i.test(f)).map((f) => './fonts/' + f) : [];
-const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, './js/vendor/three.module.js?v=' + v, ...files.map((f) => './js/' + f + '?v=' + v), ...icons, ...imgs, ...audio, ...sounds, ...fonts];
+const offline = ['./', './index.html', './manifest.webmanifest', './css/style.css?v=' + v, './js/vendor/three.module.js?v=' + v, './js/vendor/peerjs.min.js', ...files.map((f) => './js/' + f + '?v=' + v), ...icons, ...imgs, ...audio, ...sounds, ...fonts];
 let sw = fs.readFileSync(root + 'sw.js', 'utf8');
 sw = sw.replace(/const VERSION = '[^']*';/, `const VERSION = '${v}';`).replace(/const FILES = \[[\s\S]*?\];/, 'const FILES = ' + JSON.stringify(offline, null, 2) + ';');
 fs.writeFileSync(root + 'sw.js', sw);

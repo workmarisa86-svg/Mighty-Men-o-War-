@@ -9,6 +9,7 @@ import { setLang, setDevice, t, applyI18n, onLang } from './i18n.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Game } from './game.js';
+import { Net } from './net.js';
 import { initAudio, setVolume, sfx } from './audio.js';
 import { startMusic, stopMusic, setMusic, preloadMusic } from './music.js';
 
@@ -131,6 +132,29 @@ class App {
     this.startGame(L ? Object.assign({ id: 'siege', name: 'Siege' }, L.state, { cfg, edits: L.edits }) : { id: 'siege', name: 'Siege', cfg });
   }
 
+  // Online (Siege): you host your Siege (a code for your friends), or join a friend's with theirs
+  async hostOnline({ name, pvp }) {
+    if (this.net) { this.net.close(); this.net = null; }
+    const net = new Net(this);
+    const code = await net.startHost({ name, pvp });
+    this.net = net;
+    this.startSiege(false);
+    return code;
+  }
+  async joinOnline({ name, code }) {
+    if (this.net) { this.net.close(); this.net = null; }
+    const net = new Net(this);
+    try {
+      const m = await net.startJoin({ name, code });
+      this.net = net;
+      const cfg = { mode: 'town', sub: 'town', siege: true, difficulty: 'medium', timeMode: 'cycle', gameType: 'open', size: TOWN_SIZE, seed: m.save.seed };
+      this.townRebuilt = false; this.townRestored = false;
+      stopFolk();
+      await this.startGame(Object.assign({ id: 'siege-online', name: 'Online' }, m.save, { cfg, edits: m.edits }));
+    } catch (e) { net.close(); this.net = null; throw e; }
+  }
+  stopOnline() { if (this.net) { this.net.close(); this.net = null; } }
+
   resize() {
     this.renderer.setSize(innerWidth, innerHeight, false);
     if (this.game) this.game.resize();
@@ -228,6 +252,7 @@ class App {
     // only this game's own code is loaded (War or Town Life), the first time it is played
     try { await loadMode(save.cfg.mode); } catch (e) { console.error(e); this.ui.show('main'); return; }
     this.game = new Game(this, save);
+    if (this.net) this.net.attach(this.game);
     if (save.cfg.mode !== 'town') startFolk('war');          // War: marches while you play (Town Life starts its own tunes)
     if (save.cfg.gameType === 'battle') this.lastBattleSide = { side: save.cfg.side, difficulty: save.cfg.difficulty };
     document.body.classList.add('ingame');
@@ -298,13 +323,14 @@ class App {
     if (!this.game) return;
     this.game.flushStats();
     this.saveGame(true);
-    const town = !!this.game.town, battle = !!this.game.battle;
+    const town = !!this.game.town, battle = !!this.game.battle, online = !!this.net;
+    this.stopOnline();
     this.game.dispose();
     this.game = null;
     document.body.classList.remove('ingame');
     this.input.enabled = false;
     this.input.exitLock();
-    if (!silent) { this.ui.show(town ? 'town' : battle ? 'battles' : 'main', battle ? this.lastBattleSide : {}); this.menuMusic(); }
+    if (!silent) { this.ui.show(online ? 'start' : town ? 'town' : battle ? 'battles' : 'main', battle ? this.lastBattleSide : {}); this.menuMusic(); }
   }
 
   loop(now) {

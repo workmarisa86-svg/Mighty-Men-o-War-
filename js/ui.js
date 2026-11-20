@@ -85,7 +85,7 @@ export class UI {
     this.root.innerHTML = `<h1 class="sr-only">Mighty Men o' War</h1>
       <p class="pick">${t('start.pick')}</p>
       <div class="gamecards">${card('main', 'war-card.webp', "Mighty Men o' War", t('start.warSub'))}${card('town', 'town-card.webp', 'Town Life', t('start.townSub'))}</div>
-      <div class="row siegerow">${hasSiege() ? `<button class="btn primary siegebtn" id="siegego">${t('siege.continue')}</button><button class="btn siegebtn" id="siegenew">${t('siege.new')}</button>` : `<button class="btn primary siegebtn" id="siegenew">${t('siege.start')}</button>`}${siegeBest() ? `<span class="muted small">${t('siege.bestShort', { n: siegeBest() })}</span>` : ''}</div>
+      <div class="row siegerow">${hasSiege() ? `<button class="btn primary siegebtn" id="siegego">${t('siege.continue')}</button><button class="btn siegebtn" id="siegenew">${t('siege.new')}</button>` : `<button class="btn primary siegebtn" id="siegenew">${t('siege.start')}</button>`}<button class="btn siegebtn" id="onlinego">${t('net.play')}</button>${siegeBest() ? `<span class="muted small">${t('siege.bestShort', { n: siegeBest() })}</span>` : ''}</div>
       <div class="extras">${this.langSwitch()}
       <button class="installbtn" id="installbtn" hidden>${t('menu.install')}</button>
       ${this.speakerBtn()}</div>
@@ -94,9 +94,39 @@ export class UI {
     this.root.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => this.show(b.dataset.go));
     const sg = this.root.querySelector('#siegego'), sn = this.root.querySelector('#siegenew');
     if (sg) sg.onclick = () => this.app.startSiege(false);
+    this.root.querySelector('#onlinego').onclick = () => this.show('online');
     if (sn) sn.onclick = () => (hasSiege() ? this.confirm(t('siege.newConfirm'), () => this.app.startSiege(true), () => this.show('start')) : this.app.startSiege(true));
     this.bindLang(this.root);
     this.bindSpeaker();
+  }
+  // Online (Siege): host your Siege and share the code, or join a friend's with theirs
+  r_online({ msg = '', pvp = false, busy = false } = {}) {
+    const s = this.app.settings, name = s.netName || '';
+    this.root.innerHTML = `<div class="panel narrow"><h2>${t('net.title')}</h2>
+      <p class="muted small">${t('net.intro')}</p>
+      <p class="label">${t('net.name')}</p><input id="nname" maxlength="16" value="${esc(name)}" placeholder="${t('net.namePh')}">
+      <h3>${t('net.hostTitle')}</h3>
+      <p class="muted small">${t(hasSiege() ? 'net.hostSaved' : 'net.hostNew')}</p>
+      <div class="seg" id="npvp"><button data-v="0" class="${pvp ? '' : 'on'}">${t('net.pvpOff')}</button><button data-v="1" class="${pvp ? 'on' : ''}">${t('net.pvpOn')}</button></div>
+      <div class="menu"><button class="btn primary" id="nhost" ${busy ? 'disabled' : ''}>${t('net.host')}</button></div>
+      <h3>${t('net.joinTitle')}</h3>
+      <input id="ncode" maxlength="12" placeholder="WOLF-42" autocapitalize="characters" autocomplete="off">
+      <div class="menu"><button class="btn primary" id="njoin" ${busy ? 'disabled' : ''}>${t('net.join')}</button></div>
+      <p class="netmsg" id="nmsg">${esc(msg)}</p>
+      <div class="menu"><button class="btn ghost" id="nback">${t('menu.back')}</button></div></div>`;
+    const $ = (q) => this.root.querySelector(q);
+    let pv = pvp;
+    this.root.querySelectorAll('#npvp button').forEach((b) => b.onclick = () => { pv = b.dataset.v === '1'; this.root.querySelectorAll('#npvp button').forEach((x) => x.classList.toggle('on', x === b)); });
+    const who = () => { const n = $('#nname').value.trim().slice(0, 16) || t('net.player'); s.netName = n; this.app.applySettings(); return n; };
+    const fail = (e) => this.show('online', { pvp: pv, msg: t('net.err.' + (['nocode', 'version', 'full', 'timeout'].includes(e && e.message) ? e.message : 'error')) });
+    $('#nhost').onclick = () => { const name = who(); $('#nmsg').textContent = t('net.connecting'); $('#nhost').disabled = $('#njoin').disabled = true; this.app.hostOnline({ name, pvp: pv }).catch(fail); };
+    $('#njoin').onclick = () => {
+      const code = $('#ncode').value.trim();
+      if (!/^[A-Za-z]+-?\d+$/.test(code)) { $('#nmsg').textContent = t('net.err.badcode'); return; }
+      const name = who(); $('#nmsg').textContent = t('net.joining'); $('#nhost').disabled = $('#njoin').disabled = true;
+      this.app.joinOnline({ name, code: code.includes('-') ? code : code.replace(/(\d+)$/, '-$1') }).catch(fail);
+    };
+    $('#nback').onclick = () => this.show('start');
   }
   // Siege: you fell
   r_siegeover({ wave = 0, best = 0, record = false } = {}) {
@@ -348,7 +378,8 @@ export class UI {
 
   // ----------------------------------------------------------------- pause
   r_pause() {
-    this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2><div class="menu">
+    const net = this.app.game && this.app.game.net;
+    this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2>${net ? `<p class="big" id="online-code">${t('net.code', { code: esc(net.code) })}</p><p class="muted small">${t(net.pvp ? 'net.pvpOn' : 'net.pvpOff')}</p>` : ''}<div class="menu">
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
       <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>

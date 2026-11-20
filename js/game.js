@@ -50,6 +50,7 @@ export class Game {
   constructor(app, save) {
     this.app = app;
     this.save = save;
+    this.net = app.net || null;          // online play (net.js): set before the town (a guest's Siege runs differently)
     this.cfg = save.cfg;
     // Town Life runs on the same engine; War systems (forts, soldiers,
     // missions, orders) stay switched off there
@@ -303,6 +304,7 @@ export class Game {
       else dt *= 0.3;
     }
     const playing = !this.paused && !this.overlay && !this.dying;
+    const frozen = this.paused && !this.net;      // (online, the world never stops for a menu)
 
     this.time += dt / DAY_SECONDS;
     if (!this.paused) this.stats.played = (this.stats.played || 0) + dt;     // time played (seconds)
@@ -340,11 +342,11 @@ export class Game {
     else { this.dig.key = null; this.crack.visible = false; this.use.t = 0; }
     this.combat.update(dt, input, playing && !vw);
     this.updateCraft(dt);
-    if (!this.paused) this.updateHunger(dt);
+    if (!frozen) this.updateHunger(dt);
 
     for (const r of this.rafts) r.update(dt);
     this.particles.update(dt);
-    if (!this.paused) {
+    if (!frozen) {
       this.animals.update(dt); this.pickups.update(dt); this.fishing.update(dt);
       if (!(this.vwar && this.vwar.mode === 'air')) this.enemies.update(dt);     // (no ground war under a dogfight)
       this.explosives.update(dt); this.forts.update(dt);
@@ -361,8 +363,9 @@ export class Game {
       this.updateDefuse(dt);
     }
     this.campfires.update(dt);
-    if (!this.paused) this.injury.update(dt);
-    if (this.town && this.paused) this.town.update(dt);
+    if (!frozen) this.injury.update(dt);
+    if (this.town && frozen) this.town.update(dt);
+    if (this.net) this.net.update(this.realDt);
     this.bubbles.update(dt);
 
     // camera

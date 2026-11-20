@@ -122,7 +122,7 @@ export class Explosives {
     // player
     const pp = g.player.pos.clone(); pp.y += 0.9;
     const dp = pp.distanceTo(center);
-    if (dp < reach) {
+    if (dp < reach && !(owner === 'remote' && !(g.net && g.net.pvp))) {      // (online: a friend's dynamite hurts you only in Free for all)
       g.damage(falloff(dp) * (owner === 'enemy' ? g.enemies.dmgScale() : 1), 'combat', center);
       const push = new THREE.Vector3().subVectors(pp, center).normalize().multiplyScalar(10 * (1 - dp / reach));
       g.player.vel.add(push); g.player.vel.y += 4 * (1 - dp / reach);

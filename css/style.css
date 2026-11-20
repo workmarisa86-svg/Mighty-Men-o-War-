@@ -823,3 +823,10 @@ body.touchui #aimprompt { top: auto; bottom: 128px; }
 /* 2.8: the Siege button on the start screen */
 .start-screen .siegebtn { margin: 0; padding: 10px 22px; font-size: 16px; }
 .start-screen .siegerow { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 0; }
+
+/* online play: who is in the game (top of the screen) and messages on the Play online screen */
+#netbar { position: fixed; top: calc(6px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 6; pointer-events: none;
+  max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 12px/1.6 Oswald, sans-serif; color: #f3e6c8; background: rgba(0, 0, 0, 0.45); padding: 1px 10px; border-radius: 6px; }
+.netmsg { min-height: 1.4em; color: var(--amber); font-size: 14px; }
+#online-code { font-family: var(--stencil); }

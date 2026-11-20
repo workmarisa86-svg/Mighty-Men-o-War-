@@ -1240,7 +1240,7 @@ export class TownLife {
     const g = this.game;
     this.applySeason();
     for (let k = 0; k < 2 && this.rebuild.length; k++) g.world.dirty.add(this.rebuild.pop());
-    if (g.paused) return;
+    if (g.paused && !g.net) return;
     if (this.siege) {
       // your dynamite: the fuses burn down and go off (the rest of updateDoors put the old houses' doors back)
       for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.blowDoor(c); }
@@ -1439,7 +1439,8 @@ export class TownLife {
   save() {
     const g = this.game, w = g.world;
     const edits = w.editsVersion !== this.editsSaved ? w.serializeEdits() : null;
-    if (this.siege && this.siege.over) return true;               // (a siege that is over is not saved again)
+    if (this.siege && this.siege.over) return true;
+    if (this.siege && this.siege.guest) return true;              // (in a friend's game online: their world is theirs to save)               // (a siege that is over is not saved again)
     const ok = this.siege ? saveSiege(this.toSave(), edits) : saveTown(this.toSave(), edits);      // (a Siege has its own slot)
     if (ok && edits != null) this.editsSaved = w.editsVersion;
     return ok;
