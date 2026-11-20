@@ -312,7 +312,7 @@ export function setRain(intensity) {
     rainGain = ctx.createGain(); rainGain.gain.value = 0;
     rainNode.connect(f); f.connect(rainGain); rainGain.connect(master); rainNode.start();
   }
-  rainGain.gain.setTargetAtTime(intensity * 0.16, ctx.currentTime, 0.5);
+  rainGain.gain.setTargetAtTime(intensity * 0.025, ctx.currentTime, 0.5);     // (soft: barely there under everything else)
 }
 // ---- drop-in recordings --------------------------------------------------------
 // Put a recording in the sounds/ folder with one of these names (.ogg or .mp3)
