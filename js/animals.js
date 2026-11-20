@@ -1028,6 +1028,7 @@ export class Animals {
   }
   updateProxies(dt) {
     const pl = this.game.player, viewR = (this.game.settings.renderDist + 1) * 16, k = Math.min(1, dt * 8);
+    for (const a of this.list.slice()) if (a.netId == null) this.remove(a);      // (only theirs: none of the town's own)
     for (const a of this.list) {
       a.mesh.visible = Math.hypot(a.pos.x - pl.pos.x, a.pos.z - pl.pos.z) < viewR;
       const N = a.net;
