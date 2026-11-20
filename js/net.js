@@ -487,11 +487,22 @@ export class Net {
     if (!this.chatEl) return;
     const now = performance.now(), recent = this.chat.filter((l) => now - l.at < 15000).slice(-6);
     const key = recent.map((l) => l.at).join(',');
+    if ((this.placeT = (this.placeT || 0) - 1) <= 0) { this.placeT = 30; this.placeChat(); }     // (the radar's size can change with the window)
     if (key === this.chatKey && !this.chatDirty) return;
     this.chatKey = key; this.chatDirty = false;
     this.chatEl.replaceChildren(...recent.map((l) => { const d = document.createElement('div'); const b = document.createElement('b'); b.textContent = l.name + ': '; d.append(b, l.s); return d; }));
     const on = document.body.classList.contains('ingame');
     this.chatEl.hidden = !on || !recent.length; this.chatBtn.hidden = !on;
+    this.placeChat();
+  }
+  // the Chat button and the lines: under the radar (not on it), so they are easy to tap
+  placeChat() {
+    const mm = document.getElementById('minimap'), r = mm && mm.offsetParent ? mm.getBoundingClientRect() : null;
+    const top = r && r.height ? Math.round(r.bottom + 12) : 12, left = r && r.width ? Math.round(r.left) : 12;
+    if (this.chatTop === top && this.chatLeft === left) return;
+    this.chatTop = top; this.chatLeft = left;
+    this.chatBtn.style.top = top + 'px'; this.chatBtn.style.left = left + 'px';
+    this.chatEl.style.top = (top + 50) + 'px'; this.chatEl.style.left = left + 'px';
   }
 
   // ---- your own copy of the world ---------------------------------------------------------------

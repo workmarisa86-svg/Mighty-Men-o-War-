@@ -401,7 +401,7 @@ export class UI {
     this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2>${net ? `<p class="big" id="online-code">${t('net.code', { code: esc(net.code) })}</p><p class="muted small">${t(net.pvp ? 'net.pvpOn' : 'net.pvpOff')}</p>` : ''}<div class="menu">
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
-      <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
+      <button class="btn" id="pmap">${t(this.app.game && this.app.game.town && !this.app.game.town.siege ? 'menu.townMap' : 'menu.map')}</button>
       ${this.app.game && this.app.game.town && this.app.game.town.trades.trade ? `<button class="btn" id="ptrade">${t('trade.title')}</button>` : ''}
       ${this.app.game && this.app.game.town ? `<button class="btn" id="pgoals">${t('goal.title')}</button>` : ''}
       ${net && net.guest ? `<button class="btn" id="pcopy">${t('net.copy')}</button>` : ''}
