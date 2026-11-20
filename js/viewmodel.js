@@ -202,10 +202,13 @@ export class ViewModel {
       else if (id === 'lever') { rz -= A.reload * 0.55; rx += A.reload * 0.2; py += A.reload * 0.03 - A.round * 0.02; }
       else if (id === 'shotgun') { rx += A.reload * 0.25; py += A.reload * 0.03 - A.round * 0.02; }
     }
-    // the knife: wound back over the shoulder while charging, then the throw and the follow-through
+    // the knife, thrown overhand: raised high beside the head with the blade tipped
+    // back over the shoulder while charging, then brought over and down in front
+    // (like a pitch), the arm following through low
     if (id === 'knife') {
-      const c = K.charge, s2 = K.swing ? Math.sin(K.swing * Math.PI) : 0, f = K.swing;
-      px += c * 0.06; py += c * 0.14; pz += c * 0.16 - s2 * 0.22; rx -= c * 1.25 - f * 1.6 * (1 - f) * 2; rz += c * 0.35;
+      const f = K.swing || 0, c = f ? (K.from || 0.7) : K.charge, s2 = f ? Math.sin(f * Math.PI) : 0, up = c * (1 - f);
+      px += up * 0.05 - s2 * 0.08; py += up * 0.3 + s2 * 0.08 - f * f * 0.18; pz += up * 0.14 - s2 * 0.3;
+      rx += up * 1.5 - s2 * 2.1 - f * f * 0.5; rz += up * 0.2 - s2 * 0.15;
     }
     this.holder.position.set(px, py, pz);
     this.holder.rotation.set(rx, ry, rz);

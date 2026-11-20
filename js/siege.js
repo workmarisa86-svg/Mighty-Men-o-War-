@@ -22,10 +22,11 @@ import { coords } from './hidden.js';
 import { deleteSiege } from './storage.js';
 import { SiegeHouses } from './siegehouses.js';
 import { dropsOf } from './net.js';
+import { Powers } from './powers.js';
 
 const WAVE_HOUR = 20;
 // truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
-const ENDLESS = ['dirt', 'wood', 'stone', 'brick', 'glass', 'thatch', 'sand', 'clay', 'fence', 'gate', 'door', 'ladder', 'loophole', 'bell', 'dynamite', 'chest', 'knife', 'revolver', 'lever', 'shotgun'];
+const ENDLESS = ['dirt', 'wood', 'stone', 'brick', 'glass', 'thatch', 'sand', 'clay', 'fence', 'gate', 'door', 'ladder', 'loophole', 'bell', 'dynamite', 'chest', 'knife', 'revolver', 'lever', 'sniper'];
 const BEST_KEY = 'mmow-siege-best';
 const SPOILS = { meat_raw: 2, meat_cooked: 4 };         // days before it goes bad
 const BOSS_EVERY = 5;
@@ -38,7 +39,8 @@ export class Siege {
     this.T = town; this.game = town.game;
     const g = this.game;
     this.houses = new SiegeHouses(this);           // houses for meat (siegehouses.js)
-    g.player.fast = true;                          // (you walk as fast as you run, and faster)
+    g.player.fast = true;
+    if (!g.powers) g.powers = new Powers(g);                  // abilities earned by killing (powers.js)                          // (you walk as fast as you run, and faster)
     this.wave = saved ? saved.wave || 0 : 0;       // waves survived
     this.started = saved ? saved.started ?? this.wave : 0;   // waves that have come
     this.deaths = saved ? saved.deaths || 0 : 0;
@@ -53,7 +55,7 @@ export class Siege {
     // online, in a friend's Siege: their game runs the waves and the outlaws (you see theirs)
     if (g.net && g.net.guest) {
       this.guest = true; this.food = { meat_raw: [], meat_cooked: [] }; this.proxies = new Map();
-      for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
+      for (const [id, n] of [['revolver', 1], ['lever', 1], ['sniper', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
       this.refill(); g.hud.bigMessage(t('net.inTitle'), t('net.inSub', { code: g.net.code }));
       return;
     }
@@ -68,7 +70,7 @@ export class Siege {
       g.hud.toast(t('siege.welcomeBack', { n: this.wave + 1 })); return;
     }
     // no food: hunt (skin what you shoot, cook it at a campfire you light with the flint)
-    for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
+    for (const [id, n] of [['revolver', 1], ['lever', 1], ['sniper', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
     if (g.inv.counts.bread) g.inv.counts.bread = 0;
     this.refill();
     g.hud.bigMessage(t('siege.title'), t('siege.intro'));
@@ -78,6 +80,7 @@ export class Siege {
   refill() {
     const g = this.game;
     let changed = false;
+    if (g.inv.counts.shotgun) { g.inv.counts.shotgun = 0; g.inv.hotbar = g.inv.hotbar.map((x) => (x === 'shotgun' ? 'sniper' : x)); changed = true; }     // (no shotgun in a Siege: a sniper rifle instead)
     for (const id of ENDLESS) if (g.inv.counts[id] !== Infinity) { if (!g.inv.hotbar.includes(id) && !g.inv.counts[id]) g.give(id, 1, true); g.inv.counts[id] = Infinity; changed = true; }
     if (changed) g.hud.dirtyHotbar = true;
   }
@@ -134,7 +137,7 @@ export class Siege {
     v.lookT = (v.lookT || 0) - dt;
     if (v.lookT <= 0 || !v.tgt) {
       v.lookT = 0.4;
-      const all = this.targets().map((o) => ({ o, d: Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z) })).sort((a, b) => a.d - b.d);
+      const all = this.targets().map((o) => ({ o, d: Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z) })).sort((a, b) => (a.d - (a.o.id === 'decoy' ? 40 : 0)) - (b.d - (b.o.id === 'decoy' ? 40 : 0)));      // (a Decoy draws them first)
       v.sees = false; v.tgt = all.length ? all[0].o : { id: null, pos: g.player.pos };
       for (const { o, d } of all) { if (d >= 55) break; if (this.seesAt(v, o, 55)) { v.sees = true; v.tgt = o; break; } }
       if (v.sees) { const Q = v.tgt.pos; v.last = { x: Q.x, y: Q.y, z: Q.z }; v.lostT = 0; }
@@ -146,12 +149,12 @@ export class Siege {
     if (close && v.stabT <= 0) {
       v.stabT = 1.1; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); sfx.stab && sfx.stab();
       if (tg.id == null) { if (g.net) g.net.hurtBy(v.name); g.damage(16, 'knife', v.pos); this.hitters.set(v, g.time); }
-      else { g.net.hurtPlayer(tg.id, 16, 'knife', v.pos, v.name); this.hitOn(tg.id, v); }
+      else if (tg.id !== 'decoy') { g.net.hurtPlayer(tg.id, 16, 'knife', v.pos, v.name); this.hitOn(tg.id, v); }
     }
     if (v.hasGun && v.sees && d < 40 && this.clearShot(v, P)) {
       v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
       if (tg.id == null) { F.lastHitBy = null; F.shootAt(v, dt, 0.8); if (F.lastHitBy === v) { this.hitters.set(v, g.time); if (g.net) g.net.hurtBy(v.name); } }
-      else if ((v.gunT = (v.gunT || 0) - dt) <= 0) { v.gunT = 1.3; sfx.shot && sfx.shot('revolver', Math.max(0, 1 - g.player.pos.distanceTo(v.pos) / 80)); if (Math.random() < 0.4) { g.net.hurtPlayer(tg.id, 14, 'shot', v.pos, v.name); this.hitOn(tg.id, v); } }
+      else if (tg.id !== 'decoy' && (v.gunT = (v.gunT || 0) - dt) <= 0) { v.gunT = 1.3; sfx.shot && sfx.shot('revolver', Math.max(0, 1 - g.player.pos.distanceTo(v.pos) / 80)); if (Math.random() < 0.4) { g.net.hurtPlayer(tg.id, 14, 'shot', v.pos, v.name); this.hitOn(tg.id, v); } }
     }
     if (close) { v.speed = 0; return true; }
     // where to: you; where you were last seen; your shelter; the woods
@@ -322,6 +325,8 @@ export class Siege {
       // every 40 outlaws you kill: two medkits
       for (const m of this.men) if (!m.alive && !m.counted) {
         m.counted = true; this.kills++;
+        if (m.hitBy === 'H') { if (g.powers) g.powers.addKill('outlaw', !!m.leader); }             // (your kill: it counts for the abilities)
+        else if (m.hitBy && g.net) g.net.credit(m.hitBy, 'outlaw', !!m.leader);
         if (this.kills % KILL_PRIZE === 0) { g.give('medkit', 2, true); g.hud.dirtyHotbar = true; g.hud.toast(t('siege.killPrize', { n: this.kills })); sfx.done(); }
       }
       const left = this.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
@@ -376,6 +381,8 @@ export class Siege {
     const g = this.game, out = [];
     if (!g.dying && !g.dead) out.push({ id: null, pos: g.player.pos });
     if (g.net) out.push(...g.net.targets());
+    if (g.powers && g.powers.decoy) out.push({ id: 'decoy', pos: g.powers.decoyPos });          // (a Decoy: they go for it)
+    if (g.net) for (const d of g.net.decoyList()) out.push({ id: 'decoy', pos: d.pos });
     return out;
   }
   seesAt(v, o, range) {
@@ -403,9 +410,9 @@ export class Siege {
     return { t: 'men', m: men, s: this.started, w: this.wave, n: this.nextAt, time: this.game.time, k: this.kills, l: this.ladders };
   }
   // (host) a friend's shot or knife hit one of the outlaws
-  netHitMan(id, dmg, head) {
+  netHitMan(id, dmg, head, by) {
     const v = (this.men || []).find((m) => m.netId === id);
-    if (v && v.alive) { this.T.folk.hurt(v, dmg, { head }); v.provoked = true; }
+    if (v && v.alive) { v.hitBy = by; this.T.folk.hurt(v, dmg, { head }); v.provoked = true; }
   }
   // (guest) the host's outlaws as they are now: shown here, moved smoothly
   netMen(m) {

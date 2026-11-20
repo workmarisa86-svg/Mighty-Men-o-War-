@@ -25,6 +25,8 @@ const PREFIX = 'mmow-siege-';
 const WORDS = ['WOLF', 'BEAR', 'COLT', 'HAWK', 'MULE', 'DUST', 'GOLD', 'IRON', 'RUST', 'SAGE', 'MESA', 'FORT', 'DEER', 'LARK', 'CROW', 'PINE', 'BULL', 'FOX'];
 const SEND_HZ = 12, MEN_HZ = 8, AN_HZ = 5, AN_RANGE = 140, PIECE = 60000, MAX_PLAYERS = 8;
 const HIDES = ['hide', 'wolf_hide', 'bear_hide'];
+// player against player: how much each weapon takes (of 100; a bar is 10). Head shots count the same.
+const PVP = { revolver: 5, lever: 10, sniper: 15, knife: 10 };
 // what a fallen player leaves in their bag: food, skins and medkits
 export function dropsOf(counts) {
   const out = {};
@@ -138,7 +140,7 @@ export class Net {
     // Enter or T: write to the others
     this.onKey = (e) => {
       const gm = this.game;
-      if (!gm || gm.overlay || gm.paused || (e.code !== 'Enter' && e.code !== 'KeyT') || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+      if (!gm || gm.overlay || gm.paused || e.code !== 'Enter' || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
       e.preventDefault(); this.openChat();
     };
     addEventListener('keydown', this.onKey);
@@ -152,6 +154,7 @@ export class Net {
     setTimeout(() => { try { this.peer && this.peer.destroy(); } catch { /* gone */ } }, 200);
     for (const P of this.players.values()) this.dropAvatar(P);
     for (const m of this.bagMeshes.values()) m.removeFromParent();
+    for (const d of this.decoyList()) this.dropDecoy(d);
     this.bagMeshes.clear();
     if (this.bar) this.bar.remove();
     if (this.chatEl) this.chatEl.remove();
@@ -225,13 +228,13 @@ export class Net {
         return;
       }
       case 'st': { const P = this.players.get(c.pid); if (P) { P.st = m.s; P.seen = performance.now(); } return; }
-      case 'hitMan': if (g.town && g.town.siege) g.town.siege.netHitMan(m.id, m.dmg, !!m.head); return;
+      case 'hitMan': if (g.town && g.town.siege) g.town.siege.netHitMan(m.id, m.dmg, !!m.head, c.pid); return;
       case 'pvp':
         if (!this.pvp) return;
-        if (m.to === 'H') this.gotHurt({ dmg: m.dmg, head: m.head, by: this.nameOf(c.pid), from: m.from });
-        else this.sendTo(this.conns.get(m.to), { t: 'hurt', dmg: m.dmg, head: m.head, by: this.nameOf(c.pid), from: m.from });
+        if (m.to === 'H') this.gotHurt({ dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from });
+        else this.sendTo(this.conns.get(m.to), { t: 'hurt', dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from });
         return;
-      case 'died': this.feed(this.nameOf(c.pid), m.by); if (g.town && g.town.siege) g.town.siege.remoteDied(c.pid); return;
+      case 'died': this.feed(this.nameOf(c.pid), m.by); if (g.town && g.town.siege) g.town.siege.remoteDied(c.pid); if (m.byId) this.credit(m.byId, 'player'); return;
       case 'bag': this.addBag(this.nameOf(c.pid), m.items, m.at); return;
       case 'hitAn': { const a = g.animals.byNetId(m.id); if (a) { g.animals.fp = g.animals.pickFocus(a.pos.x, a.pos.z); g.animals.hurt(a, m.dmg, !!m.silent); g.animals.fp = null; } return; }
       case 'skin': {
@@ -287,6 +290,11 @@ export class Net {
         else this.addChat(m.n, m.s);
         return;
       case 'bags': this.bags = m.b || []; return;
+      case 'credit': if (g.powers) g.powers.addKill(m.k, !!m.boss); return;
+      case 'decoy':
+        if (this.host) this.toAll(m, c.pid);
+        if (m.id !== this.myId) this.addDecoy(m);
+        return;
       case 'msg': this.toast(t(m.k, m.p)); return;
       case 'bye': this.lost(); return;
     }
@@ -336,6 +344,7 @@ export class Net {
       }
     }
     this.updateAvatars(dt);
+    this.updateDecoys(dt);
     this.updateShims();
     this.updateBags();
     this.updateChat();
@@ -344,7 +353,8 @@ export class Net {
   }
   myState() {
     const g = this.game, p = g.player;
-    const fl = (p.crouch ? 1 : 0) | (p.running ? 2 : 0) | (g.dying || g.dead ? 4 : 0);
+    const W = g.powers;
+    const fl = (p.crouch ? 1 : 0) | (p.running ? 2 : 0) | (g.dying || g.dead ? 4 : 0) | (W && W.on('shadow') ? 8 : 0) | (W && W.on('ghost') ? 16 : 0);
     return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), r2(p.pitch), g.selected() || '', fl, r2(Math.hypot(p.vel.x, p.vel.z)), Math.round(p.health)];
   }
   updateBar() {
@@ -366,8 +376,10 @@ export class Net {
         P.pos = new THREE.Vector3(x, y, z); P.yaw = yaw; P.wpn = undefined;
         P.tag = nameTag(P.name); g.scene.add(P.tag);
       }
-      const stale = now - (P.seen || now) > 6000;
-      P.av.root.visible = P.tag.visible = !stale;
+      const stale = now - (P.seen || now) > 6000, ghost = !!(fl & 16);
+      P.stale = stale;
+      P.av.root.visible = !stale && (!ghost || Math.sin(now / 70) > 0.93);       // (Ghost: only a flicker now and then)
+      P.tag.visible = !stale && !ghost;
       const k = Math.min(1, dt * 12);
       if (Math.hypot(x - P.pos.x, z - P.pos.z) > 8) P.pos.set(x, y, z);
       else { P.pos.x += (x - P.pos.x) * k; P.pos.y += (y - P.pos.y) * k; P.pos.z += (z - P.pos.z) * k; }
@@ -394,7 +406,7 @@ export class Net {
   raycast(eye, dir, maxD) {
     let best = null;
     for (const P of this.players.values()) {
-      if (!P.av || !P.st || (P.st[6] & 4) || !P.av.root.visible) continue;
+      if (!P.av || !P.st || (P.st[6] & 4) || P.stale) continue;
       const ox = eye.x - P.pos.x, oz = eye.z - P.pos.z;
       const a = dir.x * dir.x + dir.z * dir.z, b = 2 * (ox * dir.x + oz * dir.z), c = ox * ox + oz * oz - 0.38 * 0.38;
       const disc = b * b - 4 * a * c;
@@ -411,14 +423,15 @@ export class Net {
 
   // ---- hurting -----------------------------------------------------------------------------
   // you hit another player (only in Free for all)
-  hitPlayer(id, dmg, head) {
+  hitPlayer(id, dmg, head, weapon) {
+    dmg = PVP[weapon] ?? 10;
     if (!this.pvp) {
       if (performance.now() - this.friendsT > 4000) { this.friendsT = performance.now(); this.toast(t('net.friendsOnly')); }
       return false;
     }
     const p = this.game.player.pos, from = [r2(p.x), r2(p.z)];
-    if (this.host) this.sendTo(this.conns.get(id), { t: 'hurt', dmg, head, by: this.name, from });
-    else this.sendTo(this.hostConn, { t: 'pvp', to: id, dmg, head, from });
+    if (this.host) this.sendTo(this.conns.get(id), { t: 'hurt', dmg, by: this.name, byId: 'H', from });
+    else this.sendTo(this.hostConn, { t: 'pvp', to: id, dmg, from });
     return true;
   }
   // (host) an outlaw hits another player
@@ -427,25 +440,48 @@ export class Net {
     const g = this.game, p = g.player;
     if (!g || g.dying || g.dead) return;
     const from = m.from ? { x: m.from[0], y: p.pos.y, z: m.from[1] } : null;
-    this.lastBy = { name: m.by || null, at: performance.now() };
+    this.lastBy = { name: m.by || null, id: m.byId || null, at: performance.now() };
     g.damage(m.dmg * (m.head ? 2 : 1), m.cause || 'shot', from);
   }
   // (guest) your hit on an outlaw: the host's outlaw takes it
   hitMan(id, dmg, head) { this.sendTo(this.hostConn, { t: 'hitMan', id, dmg, head }); }
   // you died: who did it goes round, and your things stay in a bag where you fell
   died(items, at) {
-    const by = this.lastBy && performance.now() - this.lastBy.at < 12000 ? this.lastBy.name : null;
+    const L = this.lastBy && performance.now() - this.lastBy.at < 12000 ? this.lastBy : null, by = L ? L.name : null, byId = L ? L.id : null;
     this.lastBy = null;
     const pos = [r2(at.x), r2(at.y), r2(at.z)];
-    if (this.host) { this.feed(this.name, by); if (Object.keys(items).length) this.addBag(this.name, items, pos); }
-    else { this.sendTo(this.hostConn, { t: 'died', by }); if (Object.keys(items).length) this.sendTo(this.hostConn, { t: 'bag', items, at: pos }); }
+    if (this.host) { this.feed(this.name, by); if (byId) this.credit(byId, 'player'); if (Object.keys(items).length) this.addBag(this.name, items, pos); }
+    else { this.sendTo(this.hostConn, { t: 'died', by, byId }); if (Object.keys(items).length) this.sendTo(this.hostConn, { t: 'bag', items, at: pos }); }
   }
   feed(a, b) {
     const m = { t: 'msg', k: b ? 'net.killedBy' : 'net.died', p: { a, b } };
     this.toAll(m); this.toast(t(m.k, m.p));
   }
   // an outlaw's knife on the host: who did it, for the bag message
-  hurtBy(name) { this.lastBy = { name, at: performance.now() }; }
+  hurtBy(name) { this.lastBy = { name, id: null, at: performance.now() }; }
+  // (host) a kill goes to whoever made it: the host's own abilities, or that player's
+  credit(id, k, boss = false) {
+    if (id === 'H') { if (this.game.powers) this.game.powers.addKill(k, boss); }
+    else this.sendTo(this.conns.get(id), { t: 'credit', k, boss });
+  }
+  // ---- decoys (an ability): a false you on everyone's screen, radar and map ----------------
+  sendDecoy(d, dur) { this.send({ t: 'decoy', id: this.myId, name: this.name, x: r2(d.x), y: r2(d.y), z: r2(d.z), yaw: r2(d.yaw), dur }); }
+  addDecoy(m) {
+    const old = (this.decoys || (this.decoys = new Map())).get(m.id);
+    if (old) this.dropDecoy(old);
+    const g = this.game, R = new Character('civ', 'player', 2), tag = nameTag(m.name || this.nameOf(m.id));
+    g.scene.add(R.root); g.scene.add(tag);
+    this.decoys.set(m.id, { id: m.id, name: m.name, pos: new THREE.Vector3(m.x, m.y, m.z), yaw: m.yaw, until: performance.now() + m.dur * 1000, rig: R, tag });
+  }
+  dropDecoy(d) { d.rig.dispose(); d.tag.removeFromParent(); d.tag.material.map.dispose(); d.tag.material.dispose(); this.decoys.delete(d.id); }
+  decoyList() { return this.decoys ? [...this.decoys.values()] : []; }
+  updateDecoys(dt) {
+    for (const d of this.decoyList()) {
+      if (performance.now() > d.until) { this.dropDecoy(d); continue; }
+      d.rig.pose({ speed: 0, look: 0, pitch: 0 }, dt); d.rig.place(d.pos, d.yaw, d.pos.y);
+      d.tag.position.set(d.pos.x, d.pos.y + 2.2, d.pos.z);
+    }
+  }
 
   // (host) the other players as the animals see them (net.shims: stand-ins with a position)
   updateShims() {
@@ -465,7 +501,8 @@ export class Net {
   // the other players on the maps (blue)
   mapMarks() {
     const out = [];
-    for (const P of this.players.values()) if (P.pos && P.st && performance.now() - (P.seen || 0) < 6000) out.push({ x: P.pos.x, z: P.pos.z, name: P.name, dead: !!(P.st[6] & 4) });
+    for (const P of this.players.values()) if (P.pos && P.st && !(P.st[6] & 8) && performance.now() - (P.seen || 0) < 6000) out.push({ x: P.pos.x, z: P.pos.z, name: P.name, dead: !!(P.st[6] & 4) });     // (Shadow: off the maps)
+    for (const d of this.decoyList()) out.push({ x: d.pos.x, z: d.pos.z, name: d.name, dead: false });
     return out;
   }
 
