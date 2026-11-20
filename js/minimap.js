@@ -138,6 +138,13 @@ export class Minimap {
         c.beginPath(); c.arc(x, y, wit ? 4 : 2.6, 0, Math.PI * 2); c.fill(); c.stroke();
       }
     }
+    // online: the other players (blue; kept on the rim when they are farther than the radar shows)
+    if (g.net) for (const f of g.net.mapMarks()) {
+      let [x, y, d] = toRadar(f.x, f.z);
+      if (d > RADAR_RANGE) { x = R + (x - R) * RADAR_RANGE / d; y = R + (y - R) * RADAR_RANGE / d; }
+      c.fillStyle = f.dead ? '#8aa0b8' : '#4aa8ff'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(x, y, 4, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
     // incoming enemy grenades: flashing warning marks
     if (g.explosives && Math.floor(this.t * 4) % 2 === 0) for (const pr of g.explosives.projectiles) {
       if (pr.owner !== 'enemy' || pr.kind !== 'grenade') continue;

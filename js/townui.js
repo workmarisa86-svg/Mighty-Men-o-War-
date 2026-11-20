@@ -265,7 +265,7 @@ export function installTownUI(UI) {
     const C = { shop: '#d8b048', law: '#7a8aa0', home: '#a89a80', cottage: '#e8dcb0', people: '#7ac860', posse: '#c04a3a' };
     const sw = (c, k) => `<span><i style="background:${c}"></i>${t(k)}</span>`;
     const body = `<div class="warmap"><canvas id="wmap"></canvas></div>
-      <div class="legend">${T.siege ? sw('#ff2a1a', 'siege.attackers') : T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
+      <div class="legend">${T.siege ? sw('#ff2a1a', 'siege.attackers') + (g.net ? sw('#4aa8ff', 'net.friends') : '') : T.coordMode ? `${sw('#ff3a2a', 'tmap.treasure')}${sw('#ffd040', 'tmap.job')}` : `${sw('#a0dc78', 'tmap.lots')}${sw('#f0e090', 'tmap.home')}${sw('#9a9aa2', 'tmap.traps')}${sw('#b8402e', 'tmap.wanted')}${sw(C.shop, 'tmap.shops')}${sw(C.law, 'tmap.law')}${sw(C.home, 'tmap.homes')}${sw(C.cottage, 'tmap.cottage')}${sw(C.people, 'tmap.people')}${T.posse ? sw(C.posse, 'tmap.posse') : ''}`}<span><i class="you"></i>${t('map.you')}</span></div>`;
     const close = () => from === 'pause' ? this.show('pause') : this.app.closePanel();
     const panel = this.panel(t('menu.townMap'), `<div class="seg tabs"><button data-z="0" class="${this.townZoom ? '' : 'on'}">${t('tmap.whole')}</button><button data-z="1" class="${this.townZoom ? 'on' : ''}">${t('tmap.zoomCenter')}</button><button data-xy="1" class="${T.coordMode ? 'on' : ''}">${t('tmap.coords')}</button></div>` + body, { wide: true, onBack: close });
     panel.querySelectorAll('[data-z]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); this.townZoom = b.dataset.z === '1'; this.show('townmap', { from }); });
@@ -365,6 +365,12 @@ export function installTownUI(UI) {
       c.fillStyle = m.boss ? '#ffd040' : '#ff2a1a'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr / zoom;
       c.beginPath(); c.arc(m.x * sc, m.z * sc, (m.boss ? 7 : 5) * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
       if (m.boss) label(t('siege.leader'), m.x * sc, m.z * sc - 10 * dpr / zoom, 10);
+    }
+    // online: the other players (blue, with their names)
+    if (g.net) for (const f of g.net.mapMarks()) {
+      c.fillStyle = f.dead ? '#8aa0b8' : '#4aa8ff'; c.strokeStyle = '#000'; c.lineWidth = 1.5 * dpr / zoom;
+      c.beginPath(); c.arc(f.x * sc, f.z * sc, 6 * dpr / zoom, 0, Math.PI * 2); c.fill(); c.stroke();
+      label(f.name, f.x * sc, f.z * sc - 11 * dpr / zoom, 10);
     }
     // whoever your job is for: a yellow cross, with its X and Y
     const jt = T.jobTarget();

@@ -21,6 +21,7 @@ import { ITEMS } from './items.js';
 import { coords } from './hidden.js';
 import { deleteSiege } from './storage.js';
 import { SiegeHouses } from './siegehouses.js';
+import { dropsOf } from './net.js';
 
 const WAVE_HOUR = 20;
 // truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
@@ -49,6 +50,14 @@ export class Siege {
     this.nextAt = saved && saved.nextAt != null ? saved.nextAt : Math.floor(g.time) + WAVE_HOUR / 24;
     if (!saved && g.time > this.nextAt) this.nextAt += 1;
     this.refillT = 0; this.foodT = 0; this.over = false; this.bestAtStart = siegeBest();
+    // online, in a friend's Siege: their game runs the waves and the outlaws (you see theirs)
+    if (g.net && g.net.guest) {
+      this.guest = true; this.food = { meat_raw: [], meat_cooked: [] }; this.proxies = new Map();
+      for (const [id, n] of [['revolver', 1], ['lever', 1], ['shotgun', 1], ['knife', 1], ['flint', 1], ['medkit', 3]]) if (g.count(id) < n) g.give(id, n - g.count(id), true);
+      this.refill(); g.hud.bigMessage(t('net.inTitle'), t('net.inSub', { code: g.net.code }));
+      return;
+    }
+    this.rHit = new Map();       // (online) who has hurt each of the other players lately
     // a saved Siege: carry on (the waves that were out come again)
     if (saved) {
       this.refill();
@@ -115,23 +124,35 @@ export class Siege {
   // can't follow what he can't see. Walls in his way: he builds a ladder up
   // and climbs over; a shut door: dynamite, three charges to blow it in (and
   // nothing else). Knives only, unless he has taken a gun off you.
-  manAi(v, dt, d) {
-    const g = this.game, F = this.T.folk, P = g.player.pos, w = g.world;
+  manAi(v, dt) {
+    const g = this.game, F = this.T.folk, w = g.world;
     if (!v.alive) return true;
     if (v.surrendered > 0) return false;
     const bx = Math.floor(v.pos.x), bz = Math.floor(v.pos.z);
     if (SOLID[w.get(bx, Math.floor(v.pos.y + 0.2), bz)] && SOLID[w.get(bx, Math.floor(v.pos.y + 1.2), bz)] && w.get(bx, Math.floor(v.pos.y + 0.2), bz) !== B.LADDER) { v.pos.y = w.surfaceY(bx, bz) + 1; v.route = []; }
-    // eyes: a clear line of sight to you (through glass and open doors too; not through earth)
+    // eyes: a clear line of sight to a player (you, or online any player: the nearest he can see)
     v.lookT = (v.lookT || 0) - dt;
-    if (v.lookT <= 0) { v.lookT = 0.4; v.sees = d < 55 && F.sees(v, 55); if (v.sees) { v.last = { x: P.x, y: P.y, z: P.z }; v.lostT = 0; } }
-    const close = d < 1.8 && Math.abs(P.y - v.pos.y) < 1.6 && this.clearShot(v);
+    if (v.lookT <= 0 || !v.tgt) {
+      v.lookT = 0.4;
+      const all = this.targets().map((o) => ({ o, d: Math.hypot(o.pos.x - v.pos.x, o.pos.z - v.pos.z) })).sort((a, b) => a.d - b.d);
+      v.sees = false; v.tgt = all.length ? all[0].o : { id: null, pos: g.player.pos };
+      for (const { o, d } of all) { if (d >= 55) break; if (this.seesAt(v, o, 55)) { v.sees = true; v.tgt = o; break; } }
+      if (v.sees) { const Q = v.tgt.pos; v.last = { x: Q.x, y: Q.y, z: Q.z }; v.lostT = 0; }
+    }
+    const tg = v.tgt, P = tg.pos, d = Math.hypot(P.x - v.pos.x, P.z - v.pos.z);
+    const close = d < 1.8 && Math.abs(P.y - v.pos.y) < 1.6 && this.clearShot(v, P);
     // the knife: at arm's length; a gun (taken off you): from range
     v.stabT = (v.stabT || 0) - dt;
     if (close && v.stabT <= 0) {
       v.stabT = 1.1; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); sfx.stab && sfx.stab();
-      g.damage(16, 'knife', v.pos); this.hitters.set(v, g.time);
+      if (tg.id == null) { if (g.net) g.net.hurtBy(v.name); g.damage(16, 'knife', v.pos); this.hitters.set(v, g.time); }
+      else { g.net.hurtPlayer(tg.id, 16, 'knife', v.pos, v.name); this.hitOn(tg.id, v); }
     }
-    if (v.hasGun && v.sees && d < 40 && this.clearShot(v)) { v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); F.lastHitBy = null; F.shootAt(v, dt, 0.8); if (F.lastHitBy === v) this.hitters.set(v, g.time); }
+    if (v.hasGun && v.sees && d < 40 && this.clearShot(v, P)) {
+      v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
+      if (tg.id == null) { F.lastHitBy = null; F.shootAt(v, dt, 0.8); if (F.lastHitBy === v) { this.hitters.set(v, g.time); if (g.net) g.net.hurtBy(v.name); } }
+      else if ((v.gunT = (v.gunT || 0) - dt) <= 0) { v.gunT = 1.3; sfx.shot && sfx.shot('revolver', Math.max(0, 1 - g.player.pos.distanceTo(v.pos) / 80)); if (Math.random() < 0.4) { g.net.hurtPlayer(tg.id, 14, 'shot', v.pos, v.name); this.hitOn(tg.id, v); } }
+    }
     if (close) { v.speed = 0; return true; }
     // where to: you; where you were last seen; your shelter; the woods
     let goal = null, fast = false;
@@ -247,8 +268,8 @@ export class Siege {
     g.hud.toast(t('siege.laddersDown', { n })); sfx.breakBlock('wood');
   }
   // nothing solid between him and you (a door, glass, a wall)
-  clearShot(v) {
-    const P = this.game.player.pos, w = this.game.world;
+  clearShot(v, P = this.game.player.pos) {
+    const w = this.game.world;
     const dx = P.x - v.pos.x, dy = P.y + 1.2 - (v.pos.y + 1.4), dz = P.z - v.pos.z, L = Math.hypot(dx, dy, dz) || 1;
     return !w.raycast(v.pos.x, v.pos.y + 1.4, v.pos.z, dx / L, dy / L, dz / L, L - 0.6, false, 'bullet');
   }
@@ -287,7 +308,8 @@ export class Siege {
     if (this.over) return;
     this.houses.update();
     this.refillT -= dt;
-    if (this.refillT <= 0) { this.refillT = 1; this.refill(); }
+    if (this.refillT <= 0) { this.refillT = 1; this.refill(); if (this.ladders.length) this.ladders = this.ladders.filter((L) => g.world.get(L.x, L.y0, L.z) === B.LADDER); }
+    if (this.guest) { this.foodT -= dt; if (this.foodT <= 0) { this.foodT = 1; this.spoil(); } this.netProxies(dt); return; }
     for (const c of this.charges) { c.t -= dt; if (c.t <= 0) this.doorBlast(c); }
     this.charges = this.charges.filter((c) => c.t > 0);
     this.foodT -= dt;
@@ -319,15 +341,20 @@ export class Siege {
   // your food and wake far from every outlaw, healed and not starving
   playerDied(cause) {
     const g = this.game, p = g.player, w = g.world;
-    if (cause === 'starve') { this.gameOver(); return; }
+    if (cause === 'starve' && !g.net) { this.gameOver(); return; }      // (online, starving is a death like any other)
     // every man who had a hand in killing you takes a gun off you
     let armed = 0;
     for (const [m, at] of this.hitters) if (m.alive && g.time - at < 0.012 && !m.hasGun) { m.hasGun = true; m.guns = ['revolver']; m.fight = { armed: 'revolver' }; this.T.folk.armed(m, 'revolver'); armed++; }
     this.hitters.clear();
     this.deaths = (this.deaths || 0) + 1;
     let lost = 0;
-    for (const id of Object.keys(g.inv.counts)) if (ITEMS[id] && ITEMS[id].food && g.inv.counts[id] !== Infinity) { lost += g.inv.counts[id] || 0; g.inv.counts[id] = 0; }
-    const foes = (this.men || []).filter((m) => m.alive && !m.away);
+    if (g.net) {
+      // online: your food, skins and medkits stay in a bag where you fell (anyone can take it)
+      const items = dropsOf(g.inv.counts);
+      for (const [id, n] of Object.entries(items)) { lost += n; g.inv.counts[id] = 0; }
+      g.net.died(items, p.pos);
+    } else for (const id of Object.keys(g.inv.counts)) if (ITEMS[id] && ITEMS[id].food && g.inv.counts[id] !== Infinity) { lost += g.inv.counts[id] || 0; g.inv.counts[id] = 0; }
+    const foes = (this.men || []).filter((m) => m.alive && !m.away && !m.netDead);
     let spot = null;
     for (let k = 0; k < 400 && !spot; k++) {
       const x = 24 + Math.floor(Math.random() * (w.W - 48)), z = 24 + Math.floor(Math.random() * (w.D - 48)), sy = w.surfaceY(x, z);
@@ -340,8 +367,81 @@ export class Siege {
     p.health = 100; g.breath = 20; p.hunger = Math.max(60, p.hunger || 0); g.hungerStage = 0;
     g.hud.dirtyHotbar = true;
     const C = coords(spot.x, spot.z, w);
-    g.hud.bigMessage(t('siege.diedTitle'), t('siege.diedSub', { x: C.x, y: C.y, n: lost }) + (armed ? ' ' + t('siege.tookGuns', { n: armed }) : ''));
+    g.hud.bigMessage(t('siege.diedTitle'), t(g.net ? 'net.diedSub' : 'siege.diedSub', { x: C.x, y: C.y, n: lost }) + (armed ? ' ' + t('siege.tookGuns', { n: armed }) : ''));
     sfx.done();
+  }
+  // ---- online ---------------------------------------------------------------------------
+  // the players the outlaws can go after: you, and online the others too
+  targets() {
+    const g = this.game, out = [];
+    if (!g.dying && !g.dead) out.push({ id: null, pos: g.player.pos });
+    if (g.net) out.push(...g.net.targets());
+    return out;
+  }
+  seesAt(v, o, range) {
+    if (o.id == null) return this.T.folk.sees(v, range);
+    const g = this.game, P = o.pos, dx = P.x - v.pos.x, dz = P.z - v.pos.z, d = Math.hypot(dx, dz);
+    const R = range * (0.45 + 0.55 * g.sky.daylight) * (o.crouch ? 0.6 : 1);
+    if (d > R || Math.abs(P.y - v.pos.y) > 12) return false;
+    const facing = (-Math.sin(v.yaw) * dx - Math.cos(v.yaw) * dz) / (d || 1);
+    if (facing < -0.3 && d > 5) return false;
+    const ex = v.pos.x, ey = v.pos.y + 1.65, ez = v.pos.z, ux = P.x - ex, uy = P.y + 1.2 - ey, uz = P.z - ez, L = Math.hypot(ux, uy, uz) || 1;
+    return !g.world.raycast(ex, ey, ez, ux / L, uy / L, uz / L, L - 0.4, false, 'sight');
+  }
+  hitOn(id, v) { const m = this.rHit.get(id) || new Map(); m.set(v, this.game.time); this.rHit.set(id, m); }
+  // another player died: the outlaws who had a hand in it take a gun off them
+  remoteDied(id) {
+    const m = this.rHit.get(id), F = this.T.folk;
+    if (!m) return;
+    for (const [v, at] of m) if (v.alive && this.game.time - at < 0.012 && !v.hasGun) { v.hasGun = true; v.guns = ['revolver']; v.fight = { armed: 'revolver' }; F.armed(v, 'revolver'); }
+    this.rHit.delete(id);
+  }
+  // (host) the outlaws, the wave and the time, for everyone else
+  netSnapshot() {
+    const r = (x) => Math.round(x * 100) / 100;
+    const men = (this.men || []).filter((m) => !m.away).map((m) => [m.netId || (m.netId = this.netSeq = (this.netSeq || 0) + 1), r(m.pos.x), r(m.pos.y), r(m.pos.z), r(m.yaw), m.alive ? 1 : 0, m.leader ? 1 : 0, m.hasGun ? 1 : 0, r(m.speed || 0)]);
+    return { t: 'men', m: men, s: this.started, w: this.wave, n: this.nextAt, time: this.game.time, k: this.kills, l: this.ladders };
+  }
+  // (host) a friend's shot or knife hit one of the outlaws
+  netHitMan(id, dmg, head) {
+    const v = (this.men || []).find((m) => m.netId === id);
+    if (v && v.alive) { this.T.folk.hurt(v, dmg, { head }); v.provoked = true; }
+  }
+  // (guest) the host's outlaws as they are now: shown here, moved smoothly
+  netMen(m) {
+    const g = this.game, F = this.T.folk, by = this.proxies, seen = new Set();
+    this.started = m.s; this.wave = m.w; this.nextAt = m.n; this.ladders = m.l || []; this.kills = m.k || 0;
+    if (Math.abs(g.time - m.time) > 0.0015) g.time = m.time;
+    for (const [id, x, y, z, yaw, alive, lead, gun, spd] of m.m) {
+      seen.add(id);
+      let v = by.get(id);
+      if (!v) {
+        if (!alive) continue;
+        v = this.T.frontier.rivalMan(RIVALS[id % RIVALS.length], 200 + id % 90, { x, y, z }, { hunter: true, provoked: true, guns: [] });
+        Object.assign(v, { siege: true, netId: id, money: 0, goods: [], onHurt: null, onKill: () => {} });
+        v.ai = () => true; v.fight = { armed: 'knife' }; F.armed(v, 'knife');
+        if (lead) { v.leader = true; v.name = t('siege.leader'); }
+        v.pos.set(x, y, z); v.yaw = yaw;
+        by.set(id, v);
+      }
+      v.net = { x, y, z, yaw, spd };
+      if (gun && !v.hasGun) { v.hasGun = true; F.armed(v, 'revolver'); }
+      if (!alive && v.alive) { v.netDead = true; F.kill(v); }
+    }
+    for (const [id, v] of by) if (!seen.has(id)) { if (v.alive) { v.netDead = true; F.kill(v); } by.delete(id); }
+    const list = [...by.values()];
+    this.men = list.length ? list : null;
+  }
+  netProxies(dt) {
+    const k = Math.min(1, dt * 10);
+    for (const v of this.proxies.values()) {
+      if (!v.alive || !v.net) continue;
+      const N = v.net;
+      if (Math.hypot(N.x - v.pos.x, N.z - v.pos.z) > 6) v.pos.set(N.x, N.y, N.z);
+      else { v.pos.x += (N.x - v.pos.x) * k; v.pos.y += (N.y - v.pos.y) * k; v.pos.z += (N.z - v.pos.z) * k; }
+      let dy = N.yaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * k;
+      v.speed = N.spd;
+    }
   }
   gameOver() {
     const g = this.game, p = g.player;
@@ -371,7 +471,8 @@ export class Siege {
     out.push(...this.ladderOptions(this.game.player.pos));
     if (this.houses.placing) out.push({ a: 'shcancel', label: t('sh.cancel'), run: () => this.houses.cancel() });
     else out.push({ a: 'shtrade', label: t('sh.trade'), run: () => this.game.app.openPanel('siegehouses', {}) });
-    if (!this.men && !this.over) out.push({ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() });
+    if (!this.men && !this.over && !this.guest) out.push({ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() });
+    if (this.game.net) out.unshift(...this.game.net.bagOptions(this.game.player.pos));
     return out;
   }
 }

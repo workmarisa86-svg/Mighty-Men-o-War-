@@ -193,10 +193,15 @@ export class Combat {
     const v = g.town ? g.town.folk.raycast(eye, dir, (e || a) ? (e || a).dist : maxD) : null;
     const h = g.horses ? g.horses.raycast(eye, dir, (v || e || a) ? (v || e || a).dist : maxD) : null;
     const c = g.vehicles ? g.vehicles.raycast(eye, dir, (h || v || e || a) ? (h || v || e || a).dist : maxD) : null;
-    return c || h || v || e || a;
+    const best = c || h || v || e || a;
+    const r = g.net ? g.net.raycast(eye, dir, best ? best.dist : maxD) : null;     // online: another player
+    return r || best;
   }
   applyHit(hit, damage, { silent = false } = {}) {
     const g = this.game;
+    if (hit.remote) { if (g.net.hitPlayer(hit.remote, damage, hit.head)) { g.hud.hitMarker(hit.head); sfx.hitMark(); } return; }
+    if (hit.villager && hit.villager.netId != null && g.net && g.net.guest) { g.net.hitMan(hit.villager.netId, damage, hit.head); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's outlaw takes it)
+    if (hit.animal && hit.animal.netId != null && g.net && g.net.guest) { g.net.hitAnimal(hit.animal.netId, damage, silent); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's animal takes it)
     if (hit.car) g.vehicles.hurt(hit.car, damage * 0.5);
     else if (hit.horse) g.horses.hurt(hit.horse, damage, 'player');
     else if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
