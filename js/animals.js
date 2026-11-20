@@ -202,9 +202,11 @@ export class Animals {
     this.respawnEvery = this.town ? 45 : DIFF[game.cfg.difficulty].animalRespawn;
     this.respawnTimer = this.respawnEvery;
     this.r = Math.random;
+    // online, in a friend's game: their animals are shown here (net.js), none of your own
+    if (game.net && game.net.guest) { this.proxy = true; this.target = 0; this.netById = new Map(); }
     for (let i = 0; i < this.target; i++) this.spawnHerd(false);
     // War: a few bears always live in the woods (where the land has bears)
-    if (!this.town && this.landOk('bear')) for (let k = this.herds.filter((h) => h.type === 'bear').length; k < WAR_BEARS; k++) this.spawnHerd(false, 'bear');
+    if (!this.town && !this.proxy && this.landOk('bear')) for (let k = this.herds.filter((h) => h.type === 'bear').length; k < WAR_BEARS; k++) this.spawnHerd(false, 'bear');
     this.box = new THREE.Box3(); this.ray = new THREE.Ray(); this.tmp = new THREE.Vector3();
   }
 
@@ -328,7 +330,7 @@ export class Animals {
   // How far away this animal notices the player (sneaking from behind is best)
   senseRange(a) {
     if (a.owner) return 0;            // farm animals are used to people
-    const pl = this.game.player;
+    const pl = this.focus();
     const moving = Math.hypot(pl.vel.x, pl.vel.z) > 0.5;
     let r = pl.crouch ? (moving ? 2.0 : 1.2) : pl.running ? 18 : moving ? 9 : 4.5;
     r *= a.T.sense;
@@ -336,7 +338,7 @@ export class Animals {
     const d = Math.hypot(dx, dz) || 1;
     const facing = (-Math.sin(a.yaw) * dx - Math.cos(a.yaw) * dz) / d; // 1 = looking at player
     if (facing < -0.2) r *= 0.5;
-    if (this.game.player.flying) r *= 1.5;
+    if (pl.flying) r *= 1.5;
     return r;
   }
 
@@ -391,7 +393,7 @@ export class Animals {
 
   // returns true if the animal died
   hurt(a, dmg, silent) {
-    if (a.state === 'dead') return false;
+    if (a.state === 'dead' || this.proxy) return false;        // (a friend's animal: their game decides)
     const unaware = !a.alarmed && a.state !== 'flee';
     if (silent && unaware) dmg *= 4;        // silent sneak attack
     a.hp -= dmg;
@@ -404,14 +406,28 @@ export class Animals {
       if (this.onKill) this.onKill(a);
       if (a.type === 'pig') sfx.squeal(0.8);
       // a silent kill on an unaware animal doesn't alarm the rest of the herd
-      if (!(silent && unaware)) this.alarm(a.herd, g.player.pos);
+      if (!(silent && unaware)) this.alarm(a.herd, this.focus().pos);
       return true;
     }
     if (a.type === 'pig') sfx.squeal(0.7);
     if (a.T.fierce) { if (!a.fleeing) { a.rage = 30; } sfx.roar(0.9); return false; }
     if (a.T.pack) { sfx.yelp(0.7); if (a.herd.pack) a.herd.pack.hurt = true; a.hunting = true; return false; }
-    this.alarm(a.herd, g.player.pos);
+    this.alarm(a.herd, this.focus().pos);
     return false;
+  }
+  // Online (host): each animal reacts to the nearest player, you or a friend
+  focus() { return this.fp || this.game.player; }
+  pickFocus(x, z) {
+    const g = this.game;
+    if (!g.net || !g.net.host) return g.player;
+    let best = g.player, bd = g.dying || g.dead ? 1e9 : Math.hypot(g.player.pos.x - x, g.player.pos.z - z);
+    for (const o of g.net.shims()) { const d = Math.hypot(o.pos.x - x, o.pos.z - z); if (d < bd) { bd = d; best = o; } }
+    return best;
+  }
+  hitFocus(dmg, cause, from, opts) {
+    const f = this.focus();
+    if (f.remote) this.game.net.hurtPlayer(f.remote, dmg, cause, from, null);
+    else this.game.damage(dmg, cause, from, opts);
   }
 
   // ---- terrain ---------------------------------------------------------------
@@ -511,6 +527,7 @@ export class Animals {
   }
 
   update(dt) {
+    if (this.proxy) { this.updateProxies(dt); return; }
     const g = this.game, pl = g.player;
     const viewR = (g.settings.renderDist + 1) * 16;
     for (const herd of this.herds) {
@@ -520,11 +537,12 @@ export class Animals {
         const nx = herd.cx + (this.r() - 0.5) * 30, nz = herd.cz + (this.r() - 0.5) * 30;
         if (this.ground(nx, nz, g.world.surfaceY(Math.floor(nx), Math.floor(nz)) + 0.5) != null) { herd.cx = nx; herd.cz = nz; }
       }
-      if (herd.pack) this.updatePack(herd, dt);
+      if (herd.pack) { this.fp = this.pickFocus(herd.cx, herd.cz); this.updatePack(herd, dt); }
     }
     for (const a of this.list.slice()) {
-      const d = Math.hypot(a.pos.x - pl.pos.x, a.pos.z - pl.pos.z);
-      a.mesh.visible = d < viewR;
+      const dl = Math.hypot(a.pos.x - pl.pos.x, a.pos.z - pl.pos.z), fp = this.fp = this.pickFocus(a.pos.x, a.pos.z);
+      const d = fp === pl ? dl : Math.hypot(a.pos.x - fp.pos.x, a.pos.z - fp.pos.z);
+      a.mesh.visible = dl < viewR;
       if (d > 90 && a.state !== 'leave') {            // distant animals idle, but still stand on the ground
         if (a.type !== 'bird' || a.state === 'dead' || a.state === 'calm') { a.farT = (a.farT || 0) - dt; if (a.farT <= 0) { a.farT = 1; this.settle(a, 1); if (a.state !== 'dead' || a.type !== 'bird') a.mesh.position.copy(a.pos); } }
         continue;
@@ -532,7 +550,7 @@ export class Animals {
       if (a.state === 'dead') { this.updateDead(a, dt); continue; }
       // awareness
       if (!a.alarmed && a.state !== 'flee' && d < this.senseRange(a) && !g.paused && !a.T.pack) {
-        this.alarm(a.herd, pl.pos);
+        this.alarm(a.herd, fp.pos);
         if (a.type === 'pig') sfx.pig(1 - d / 25); else if (a.type === 'cow') sfx.cow(1 - d / 30); else if (a.type !== 'bear') sfx.flap(1 - d / 25);
       }
       if (a.type === 'bird' && (a.state !== 'calm')) this.updateFlying(a, dt, d);
@@ -544,11 +562,12 @@ export class Animals {
       a.callT -= dt;
       if (a.callT <= 0) {
         a.callT = 8 + this.r() * 20;
-        if (d < 28) { const v = 1 - d / 28; if (a.type === 'pig') sfx.pig(v); else if (a.type === 'cow') sfx.cow(v); else if (a.type === 'chicken') sfx.cluck(v); else if (a.type === 'bear') sfx.growl(v * 0.6); else if (a.type === 'wolf') { if (this.r() < 0.4) sfx.snarl(v * 0.5); } else if (a.type === 'deer') { if (this.r() < 0.3) sfx.deer(v); } else sfx.bird(v); }
+        if (dl < 28) { const v = 1 - dl / 28; if (a.type === 'pig') sfx.pig(v); else if (a.type === 'cow') sfx.cow(v); else if (a.type === 'chicken') sfx.cluck(v); else if (a.type === 'bear') sfx.growl(v * 0.6); else if (a.type === 'wolf') { if (this.r() < 0.4) sfx.snarl(v * 0.5); } else if (a.type === 'deer') { if (this.r() < 0.3) sfx.deer(v); } else sfx.bird(v); }
       }
       a.mesh.position.copy(a.pos);
       a.mesh.rotation.y = a.yaw;
     }
+    this.fp = null;
     // respawning (slower at higher difficulty)
     this.respawnTimer -= dt;
     if (this.respawnTimer <= 0) {
@@ -651,7 +670,7 @@ export class Animals {
   // and only if you are still in reach and in front) and recovers; then it
   // attacks again or follows you. Badly hurt, it may turn and run.
   updateBear(a, dt, d) {
-    const g = this.game, P = g.player, pl = P.pos;
+    const g = this.game, P = this.focus(), pl = P.pos;
     if (a.state === 'flee' && a.fleeing) { a.rage = 0; return false; }
     a.rage = Math.max(0, (a.rage || 0) - dt);
     const wild = !a.owner;
@@ -712,11 +731,11 @@ export class Animals {
       if (dd > 1.1) this.step(a, a.pos.x + fx * step, a.pos.z + fz * step, false);
       if (!A.hit) {
         A.hit = true;
-        const facing = (fx * dx + fz * dz) / (dd || 1), reach = wolf ? 1.9 : 2.8, P = g.player;
+        const facing = (fx * dx + fz * dz) / (dd || 1), reach = wolf ? 1.9 : 2.8, P = this.focus();
         if (dd < reach && facing > 0.35 && Math.abs(P.pos.y - a.pos.y) < 2.2 && !g.dead && !g.dying && this.clearTo(a, P.pos.x, P.pos.z, P.pos.y)) {
           const dmg = wolf ? 7 : claw ? 17 : 13;
           if (claw) sfx.claw(); else sfx.bite(wolf ? 0.7 : 1);
-          g.damage(dmg * (g.animalDmgMul || 1), wolf ? 'wolf' : 'bear', a.pos, { heavy: !wolf, bleed: true });
+          this.hitFocus(dmg * (g.animalDmgMul || 1), wolf ? 'wolf' : 'bear', a.pos, { heavy: !wolf, bleed: true });
           if (!wolf) { const kx = -fx * 0, push = 3.5; P.vel.x += fx * push; P.vel.z += fz * push; void kx; }
         } else sfx.swish();
       }
@@ -735,7 +754,7 @@ export class Animals {
   // each at its own place in the ring), attack (rush in from its side, bite,
   // fall back, rush again) or flee.
   updatePack(herd, dt) {
-    const P = herd.pack, g = this.game, pl = g.player.pos;
+    const P = herd.pack, g = this.game, pl = this.focus().pos;
     const alive = herd.members.filter((m) => m.state !== 'dead');
     if (!alive.length) return;
     if (P.mode === 'flee') return;
@@ -817,7 +836,7 @@ export class Animals {
     return T.season === 'winter' || h < 6 || h > 20;         // Town Life: at night and in winter
   }
   updateWolf(a, dt, d) {
-    const g = this.game, pl = g.player.pos, H = a.herd, P = H.pack;
+    const g = this.game, pl = this.focus().pos, H = a.herd, P = H.pack;
     if (P && P.mode === 'feed' && P.food) return this.feedStep(a, dt, P);
     if (!P || P.mode === 'roam' || P.mode === 'flee' || !a.hunting) { if (a.atk) this.endAttack(a); return false; }
     const n = H.members.length, dx = pl.x - a.pos.x, dz = pl.z - a.pos.z, dd = Math.hypot(dx, dz) || 1;
@@ -861,14 +880,14 @@ export class Animals {
   // a pounce: a short arc through the air at where you are; landing on you is
   // a heavy hit that knocks you down for about a second
   startLeap(a, dx, dz, dd) {
-    const pl = this.game.player.pos;
+    const pl = this.focus().pos;
     this.face(a, Math.atan2(-dx, -dz), 1);
     a.leap = { t: 0, dur: 0.32 + dd * 0.045, fx: a.pos.x, fz: a.pos.z, fy: a.pos.y, tx: pl.x - dx / dd * 0.6, tz: pl.z - dz / dd * 0.6, ty: pl.y };
     a.pounceCool = 3.5 + this.r() * 3; sfx.snarl(1);
     return true;
   }
   leapStep(a, dt) {
-    const L = a.leap, g = this.game, P = g.player;
+    const L = a.leap, g = this.game, P = this.focus();
     L.t += dt;
     const k = Math.min(1, L.t / L.dur);
     const nx = L.fx + (L.tx - L.fx) * k, nz = L.fz + (L.tz - L.fz) * k;
@@ -882,8 +901,8 @@ export class Animals {
       a.leap = null; a.body.rotation.x = 0; a.vy = 0;
       const d = Math.hypot(P.pos.x - a.pos.x, P.pos.z - a.pos.z);
       if (d < 1.8 && Math.abs(P.pos.y - a.pos.y) < 1.6 && !g.dying && !g.dead) {
-        sfx.bite(1); g.damage(7, 'wolf', a.pos, { heavy: true, bleed: true });
-        if (g.knockDown) g.knockDown(1, a.pos);
+        sfx.bite(1); this.hitFocus(7, 'wolf', a.pos, { heavy: true, bleed: true });
+        if (g.knockDown && !P.remote) g.knockDown(1, a.pos);
       } else sfx.swish();
       a.retreat = 1.2 + this.r(); a.cool = 0.4;
     }
@@ -938,6 +957,7 @@ export class Animals {
   }
   skin(a) {
     const g = this.game;
+    if (this.proxy && a.netId != null) { g.net.send({ t: 'skin', id: a.netId }); a.skinned = true; this.remove(a); return true; }   // (the meat and skin come from their game)
     a.skinned = true;
     g.give('meat_raw', a.T.meat);
     if (a.T.hide) g.give(a.T.hide, a.T.hides || 1);
@@ -976,5 +996,51 @@ export class Animals {
     if (a.dead > (a.type === 'bird' || !FOOD.has(a.type) ? 2.5 : a.eaters ? 70 : 45)) this.remove(a);
   }
 
+  // ---- online -------------------------------------------------------------------------------
+  // (host) the animals near a friend, for their game: id, kind, where, alive or dead
+  netList(pos, R) {
+    const out = [], kinds = Object.keys(TYPES), r = (x) => Math.round(x * 100) / 100;
+    for (const a of this.list) {
+      if (a.skinned || Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z) > R) continue;
+      out.push([a.netId || (a.netId = this.netSeq = (this.netSeq || 0) + 1), kinds.indexOf(a.type), r(a.pos.x), r(a.pos.y), r(a.pos.z), r(a.yaw), a.state === 'dead' ? 1 : 0, r(Math.min(a.dead || 0, 999)), r(a.speed || 0)]);
+    }
+    return out;
+  }
+  byNetId(id) { return this.list.find((a) => a.netId === id); }
+  // (guest) the host's animals near you, as they are now
+  netAnimals(list) {
+    const kinds = Object.keys(TYPES), seen = new Set();
+    for (const [id, ti, x, y, z, yaw, dead, deadT, spd] of list) {
+      seen.add(id);
+      let a = this.netById.get(id);
+      if (!a) {
+        const type = kinds[ti];
+        if (!type || !MAKERS[type]) continue;
+        const herd = { type, cx: x, cz: z, cy: y, moveT: 1e9, members: [], stub: true };
+        this.herds.push(herd);
+        a = this.add(type, herd, x, y, z); a.netId = id; a.yaw = yaw; a.state = 'calm';
+        this.netById.set(id, a);
+      }
+      a.net = { x, y, z, yaw, spd };
+      if (dead) { a.state = 'dead'; a.dead = deadT; } else if (a.state === 'dead') a.state = 'calm';
+    }
+    for (const [id, a] of this.netById) if (!seen.has(id)) { this.netById.delete(id); if (this.list.includes(a)) this.remove(a); }
+  }
+  updateProxies(dt) {
+    const pl = this.game.player, viewR = (this.game.settings.renderDist + 1) * 16, k = Math.min(1, dt * 8);
+    for (const a of this.list) {
+      a.mesh.visible = Math.hypot(a.pos.x - pl.pos.x, a.pos.z - pl.pos.z) < viewR;
+      const N = a.net;
+      if (N) {
+        if (Math.hypot(N.x - a.pos.x, N.z - a.pos.z) > 8) a.pos.set(N.x, N.y, N.z);
+        else { a.pos.x += (N.x - a.pos.x) * k; a.pos.y += (N.y - a.pos.y) * k; a.pos.z += (N.z - a.pos.z) * k; }
+        let dy = N.yaw - a.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.yaw += dy * k;
+        a.speed = N.spd;
+      }
+      if (a.state === 'dead') { a.dead += dt; a.mesh.rotation.z = Math.min(Math.PI / 2, a.dead * 5); }
+      else if (a.legs && a.legs.length) this.legsAnim(a, dt, a.speed || 0);
+      a.mesh.position.copy(a.pos); a.mesh.rotation.y = a.yaw;
+    }
+  }
   dispose() { for (const a of this.list.slice()) this.remove(a); }
 }

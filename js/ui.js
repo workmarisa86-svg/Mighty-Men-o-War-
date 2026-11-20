@@ -128,6 +128,21 @@ export class UI {
     };
     $('#nback').onclick = () => this.show('start');
   }
+  // Online: a line to the other players (Enter or T opens it)
+  r_chat() {
+    const net = this.app.game && this.app.game.net;
+    if (!net) { this.app.closePanel(); return; }
+    this.root.innerHTML = `<div class="panel narrow"><h2>${t('net.chat')}</h2><div class="chatlog" id="clog"></div>
+      <input id="cin" maxlength="120" placeholder="${t('net.chatPh')}" autocomplete="off">
+      <div class="row end"><button class="btn ghost" id="cback">${t('menu.back')}</button><button class="btn primary" id="csend">${t('net.send')}</button></div></div>`;
+    const $ = (q) => this.root.querySelector(q), log = $('#clog');
+    for (const l of net.chat.slice(-14)) { const d = document.createElement('div'); const b = document.createElement('b'); b.textContent = l.name + ': '; d.append(b, l.s); log.append(d); }
+    log.scrollTop = log.scrollHeight;
+    const send = () => { net.say($('#cin').value); this.app.closePanel(); };
+    $('#csend').onclick = send; $('#cback').onclick = () => this.app.closePanel();
+    $('#cin').onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') send(); else if (e.key === 'Escape') this.app.closePanel(); };
+    setTimeout(() => $('#cin').focus(), 30);
+  }
   // Siege: you fell
   r_siegeover({ wave = 0, best = 0, record = false } = {}) {
     this.root.innerHTML = `<div class="panel narrow center"><h2>${t('siege.overTitle')}</h2>
@@ -385,6 +400,7 @@ export class UI {
       <button class="btn" id="pmap">${t(this.app.game && this.app.game.town ? 'menu.townMap' : 'menu.map')}</button>
       ${this.app.game && this.app.game.town && this.app.game.town.trades.trade ? `<button class="btn" id="ptrade">${t('trade.title')}</button>` : ''}
       ${this.app.game && this.app.game.town ? `<button class="btn" id="pgoals">${t('goal.title')}</button>` : ''}
+      ${net && net.guest ? `<button class="btn" id="pcopy">${t('net.copy')}</button>` : ''}
       <button class="btn" id="pset">${t('menu.settings')}</button>
       <button class="btn" id="pman">${t('menu.manual')}</button>
       <button class="btn ghost" id="pquit">${t(this.app.game && this.app.game.town ? 'town.quit' : 'menu.quit')}</button></div>
@@ -396,6 +412,7 @@ export class UI {
     if ($('#ptrade')) $('#ptrade').onclick = () => this.show('trades', { mode: 'info' });
     if ($('#pgoals')) $('#pgoals').onclick = () => this.show('goals', { from: 'pause' });
     $('#pset').onclick = () => this.show('settings', { from: 'pause' });
+    if ($('#pcopy')) $('#pcopy').onclick = () => this.confirm(t('net.copyConfirm'), () => { net.copyWorld(); this.show('pause'); }, () => this.show('pause'));
     $('#pman').onclick = () => this.show('manual', { from: 'pause' });
     $('#pquit').onclick = () => this.app.quitToMenu();
   }

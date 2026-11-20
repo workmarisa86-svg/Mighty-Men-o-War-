@@ -830,3 +830,11 @@ body.touchui #aimprompt { top: auto; bottom: 128px; }
   font: 600 12px/1.6 Oswald, sans-serif; color: #f3e6c8; background: rgba(0, 0, 0, 0.45); padding: 1px 10px; border-radius: 6px; }
 .netmsg { min-height: 1.4em; color: var(--amber); font-size: 14px; }
 #online-code { font-family: var(--stencil); }
+#netchat { position: fixed; top: calc(32px + env(safe-area-inset-top)); left: 12px; z-index: 6; pointer-events: none; max-width: min(420px, calc(100vw - 32px));
+  font: 14px/1.35 Oswald, sans-serif; color: #f3e6c8; text-shadow: 0 1px 2px #000; }
+#netchat div { background: rgba(0, 0, 0, 0.4); padding: 1px 8px; border-radius: 5px; margin-bottom: 2px; overflow-wrap: anywhere; }
+#netchat b, .chatlog b { color: #8ac8ff; }
+#netchatbtn { position: fixed; top: calc(4px + env(safe-area-inset-top)); left: 12px; z-index: 7; font: 600 12px Oswald, sans-serif;
+  color: #f3e6c8; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(243, 230, 200, 0.4); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.chatlog { max-height: 40vh; overflow-y: auto; margin-bottom: 8px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+#cin { width: 100%; box-sizing: border-box; margin-bottom: 8px; }

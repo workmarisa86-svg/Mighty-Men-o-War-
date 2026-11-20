@@ -19,10 +19,11 @@ import { GAME_VERSION } from './config.js';
 import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { ITEMS } from './items.js';
+import { saveSiege } from './storage.js';
 
 const PREFIX = 'mmow-siege-';
 const WORDS = ['WOLF', 'BEAR', 'COLT', 'HAWK', 'MULE', 'DUST', 'GOLD', 'IRON', 'RUST', 'SAGE', 'MESA', 'FORT', 'DEER', 'LARK', 'CROW', 'PINE', 'BULL', 'FOX'];
-const SEND_HZ = 12, MEN_HZ = 8, PIECE = 60000, MAX_PLAYERS = 8;
+const SEND_HZ = 12, MEN_HZ = 8, AN_HZ = 5, AN_RANGE = 140, PIECE = 60000, MAX_PLAYERS = 8;
 const HIDES = ['hide', 'wolf_hide', 'bear_hide'];
 // what a fallen player leaves in their bag: food, skins and medkits
 export function dropsOf(counts) {
@@ -68,7 +69,7 @@ export class Net {
     this.game = null; this.out = []; this.sendT = 0; this.menT = 0;
     this.bags = []; this.bagMeshes = new Map(); this.bagSeq = 1;
     this.parts = {}; this.nextId = 1; this.closed = false; this.waiting = [];
-    this.lastBy = null; this.friendsT = 0;
+    this.lastBy = null; this.friendsT = 0; this.anT = 0; this.shimList = []; this.chat = [];
   }
   get host() { return this.role === 'host'; }
   get guest() { return this.role === 'guest'; }
@@ -129,6 +130,16 @@ export class Net {
     const E = game.explosives, ex = E.explode.bind(E);
     E.explode = (x, y, z, o) => { ex(x, y, z, o); if (!this.inBoom && o.owner !== 'remote') this.send({ t: 'boom', x: r2(x), y: r2(y), z: r2(z), r: o.radius, p: o.power }); };
     this.bar = document.createElement('div'); this.bar.id = 'netbar'; document.body.appendChild(this.bar);
+    this.chatEl = document.createElement('div'); this.chatEl.id = 'netchat'; document.body.appendChild(this.chatEl);
+    this.chatBtn = document.createElement('button'); this.chatBtn.id = 'netchatbtn'; this.chatBtn.textContent = t('net.chat');
+    this.chatBtn.onclick = () => this.openChat(); document.body.appendChild(this.chatBtn);
+    // Enter or T: write to the others
+    this.onKey = (e) => {
+      const gm = this.game;
+      if (!gm || gm.overlay || gm.paused || (e.code !== 'Enter' && e.code !== 'KeyT') || /INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+      e.preventDefault(); this.openChat();
+    };
+    addEventListener('keydown', this.onKey);
     for (const [c, m] of this.waiting) this.handle(c, m);
     this.waiting = [];
   }
@@ -141,6 +152,9 @@ export class Net {
     for (const m of this.bagMeshes.values()) m.removeFromParent();
     this.bagMeshes.clear();
     if (this.bar) this.bar.remove();
+    if (this.chatEl) this.chatEl.remove();
+    if (this.chatBtn) this.chatBtn.remove();
+    if (this.onKey) removeEventListener('keydown', this.onKey);
     if (this.game) this.game.net = null;
     this.game = null;
   }
@@ -217,6 +231,15 @@ export class Net {
         return;
       case 'died': this.feed(this.nameOf(c.pid), m.by); if (g.town && g.town.siege) g.town.siege.remoteDied(c.pid); return;
       case 'bag': this.addBag(this.nameOf(c.pid), m.items, m.at); return;
+      case 'hitAn': { const a = g.animals.byNetId(m.id); if (a) { g.animals.fp = g.animals.pickFocus(a.pos.x, a.pos.z); g.animals.hurt(a, m.dmg, !!m.silent); g.animals.fp = null; } return; }
+      case 'skin': {
+        const A = g.animals, a = A.byNetId(m.id);
+        if (!a || a.state !== 'dead' || a.skinned) return;
+        const items = { meat_raw: a.T.meat }; if (a.T.hide) items[a.T.hide] = a.T.hides || 1;
+        a.skinned = true; a.dead = Math.max(a.dead, 1e9); A.remove(a);
+        this.sendTo(c, { t: 'give', items, kind: 'skin' });
+        return;
+      }
       case 'take': {
         const b = this.bags.find((x) => x.id === m.id);
         if (!b) return;
@@ -254,8 +277,13 @@ export class Net {
         }
         return;
       case 'men': if (g.town && g.town.siege) g.town.siege.netMen(m); return;
+      case 'an': if (g.animals.proxy) g.animals.netAnimals(m.a); return;
       case 'hurt': this.gotHurt(m); return;
-      case 'give': this.giveItems(m.items, m.name); return;
+      case 'give': this.giveItems(m.items, m.name, m.kind); return;
+      case 'chat':
+        if (this.host) { const n = this.nameOf(c.pid), s2 = String(m.s || '').slice(0, 120); if (!s2.trim()) return; this.toAll({ t: 'chat', n, s: s2 }, c.pid); this.addChat(n, s2); }
+        else this.addChat(m.n, m.s);
+        return;
       case 'bags': this.bags = m.b || []; return;
       case 'msg': this.toast(t(m.k, m.p)); return;
       case 'bye': this.lost(); return;
@@ -298,8 +326,17 @@ export class Net {
       this.menT -= dt;
       if (this.menT <= 0) { this.menT = 1 / MEN_HZ; this.toAll(g.town.siege.netSnapshot()); }
     }
+    if (this.host && this.conns.size) {
+      this.anT -= dt;
+      if (this.anT <= 0) {
+        this.anT = 1 / AN_HZ;
+        for (const [id, c] of this.conns) { const P = this.players.get(id); if (P && P.pos) this.sendTo(c, { t: 'an', a: g.animals.netList(P.pos, AN_RANGE) }); }
+      }
+    }
     this.updateAvatars(dt);
+    this.updateShims();
     this.updateBags();
+    this.updateChat();
     this.barT = (this.barT || 0) - dt;
     if (this.barT <= 0) { this.barT = 0.5; this.updateBar(); }
   }
@@ -408,6 +445,65 @@ export class Net {
   // an outlaw's knife on the host: who did it, for the bag message
   hurtBy(name) { this.lastBy = { name, at: performance.now() }; }
 
+  // (host) the other players as the animals see them (net.shims: stand-ins with a position)
+  updateShims() {
+    const out = [];
+    for (const P of this.players.values()) {
+      if (!P.st || !P.pos || (P.st[6] & 4) || performance.now() - (P.seen || 0) > 6000) continue;
+      const S = P.shim || (P.shim = { remote: P.id, pos: P.pos, vel: new THREE.Vector3(), flying: false });
+      S.pos = P.pos; S.crouch = !!(P.st[6] & 1); S.running = !!(P.st[6] & 2);
+      const sp = P.st[7] || 0; S.vel.set(Math.sin(-P.yaw) * sp, 0, -Math.cos(P.yaw) * sp);
+      out.push(S);
+    }
+    this.shimList = out;
+  }
+  shims() { return this.shimList; }
+  // (guest) your shot or knife hit one of the host's animals
+  hitAnimal(id, dmg, silent) { this.sendTo(this.hostConn, { t: 'hitAn', id, dmg, silent }); }
+  // the other players on the maps (blue)
+  mapMarks() {
+    const out = [];
+    for (const P of this.players.values()) if (P.pos && P.st && performance.now() - (P.seen || 0) < 6000) out.push({ x: P.pos.x, z: P.pos.z, name: P.name, dead: !!(P.st[6] & 4) });
+    return out;
+  }
+
+  // ---- chat -------------------------------------------------------------------------------
+  openChat() { if (this.game && !this.game.overlay) this.app.openPanel('chat', {}); }
+  say(text) {
+    const s = String(text || '').trim().slice(0, 120);
+    if (!s) return;
+    this.addChat(this.name, s);
+    if (this.host) this.toAll({ t: 'chat', n: this.name, s }); else this.sendTo(this.hostConn, { t: 'chat', s });
+  }
+  addChat(name, s) {
+    this.chat.push({ name, s, at: performance.now() });
+    if (this.chat.length > 40) this.chat.shift();
+    this.chatDirty = true;
+    sfx.tick && sfx.tick();
+  }
+  updateChat() {
+    if (!this.chatEl) return;
+    const now = performance.now(), recent = this.chat.filter((l) => now - l.at < 15000).slice(-6);
+    const key = recent.map((l) => l.at).join(',');
+    if (key === this.chatKey && !this.chatDirty) return;
+    this.chatKey = key; this.chatDirty = false;
+    this.chatEl.replaceChildren(...recent.map((l) => { const d = document.createElement('div'); const b = document.createElement('b'); b.textContent = l.name + ': '; d.append(b, l.s); return d; }));
+    const on = document.body.classList.contains('ingame');
+    this.chatEl.hidden = !on || !recent.length; this.chatBtn.hidden = !on;
+  }
+
+  // ---- your own copy of the world ---------------------------------------------------------------
+  // (guest) keep a copy of your friend's world on this device (as your Siege: Continue your Siege)
+  copyWorld() {
+    const g = this.game, T = g.town;
+    if (!T || !T.siege) return false;
+    const S = T.siege;
+    for (const v of S.men || []) v.waveN = v.waveN || S.started;
+    const ok = saveSiege(T.toSave(), g.world.serializeEdits());
+    g.hud.toast(t(ok ? 'net.copied' : 'hud.saveFail')); if (ok) sfx.done();
+    return ok;
+  }
+
   // ---- bags -------------------------------------------------------------------------------
   addBag(name, items, at) {
     this.bags.push({ id: 'b' + this.bagSeq++, name, x: at[0], y: at[1], z: at[2], items });
@@ -424,11 +520,12 @@ export class Net {
     if (this.host) { this.bags = this.bags.filter((x) => x !== b); this.giveItems(b.items, b.name); this.toAll({ t: 'bags', b: this.bags }); }
     else this.sendTo(this.hostConn, { t: 'take', id });
   }
-  giveItems(items, name) {
+  giveItems(items, name, kind) {
     const g = this.game;
     let n = 0;
-    for (const [id, k] of Object.entries(items || {})) if (ITEMS[id] && k > 0) { g.give(id, k, true); n += k; }
+    for (const [id, k] of Object.entries(items || {})) if (ITEMS[id] && k > 0) { g.give(id, k, kind !== 'skin'); n += k; }
     g.hud.dirtyHotbar = true;
+    if (kind === 'skin') return;          // (skinning: the usual "you got..." notes)
     g.hud.toast(t('net.tookBag', { name, n })); sfx.done();
   }
   updateBags() {
