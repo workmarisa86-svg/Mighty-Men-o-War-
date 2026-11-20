@@ -171,11 +171,14 @@ export class Explosives {
 
   // --------------------------------------------------------- projectiles
   throw(kind, pos, vel, owner = 'player') {
-    const geo = kind === 'smoke' ? new THREE.CylinderGeometry(0.07, 0.07, 0.22, 8) : new THREE.SphereGeometry(0.1, 8, 6);
-    const mesh = new THREE.Mesh(geo, kind === 'smoke' ? this.sMat : this.gMat);
+    const stick = kind === 'dynamite';
+    const geo = kind === 'smoke' || stick ? new THREE.CylinderGeometry(0.07, 0.07, stick ? 0.32 : 0.22, 8) : new THREE.SphereGeometry(0.1, 8, 6);
+    const mesh = new THREE.Mesh(geo, stick ? (this.dMat || (this.dMat = new THREE.MeshLambertMaterial({ color: 0xb02a1a }))) : kind === 'smoke' ? this.sMat : this.gMat);
+    const g = this.game;
+    if (owner === 'player' && g.net) g.net.send({ t: 'proj', k: kind, p: [pos.x, pos.y, pos.z].map((x) => Math.round(x * 100) / 100), v: [vel.x, vel.y, vel.z].map((x) => Math.round(x * 100) / 100) });
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    const p = { kind, pos: pos.clone(), vel: vel.clone(), t: kind === 'smoke' ? 1.6 : GRENADE.fuse, owner, mesh, warned: false };
+    const p = { kind, pos: pos.clone(), vel: vel.clone(), t: kind === 'smoke' ? 1.6 : stick ? 2.4 : GRENADE.fuse, owner, mesh, warned: false, ghost: owner === 'remote' };
     this.projectiles.push(p);
     return p;
   }
@@ -224,7 +227,16 @@ export class Explosives {
       p.warned = true; g.hud.toast(t('hud.grenadeWarn'), 'warn');
     }
     p.t -= dt;
+    if (p.kind === 'dynamite' && Math.random() < 0.6) g.particles.burst(p.pos.x, p.pos.y + 0.18, p.pos.z, [1, 0.75, 0.3], 1, 0.6, 0.25, 0);      // (the lit fuse sparks)
     if (p.t > 0) return true;
+    if (p.ghost) return false;                           // (another player's throw: their blast comes over the network)
+    if (p.kind === 'dynamite') {
+      // thrown dynamite goes off like a stick set by hand: a small crater, and it hurts everyone close by
+      const c = { rock: true, place: null, hx: Math.floor(p.pos.x), hy: Math.floor(p.pos.y), hz: Math.floor(p.pos.z), x: p.pos.x, y: p.pos.y, z: p.pos.z };
+      if (g.town && g.town.hidden) g.town.hidden.blast(c);
+      else this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: GRENADE.radius, power: GRENADE.power, destroy: true, owner: p.owner });
+      return false;
+    }
     if (p.kind === 'smoke') this.makeSmoke(p.pos);
     else this.explode(p.pos.x, p.pos.y, p.pos.z, { radius: GRENADE.radius, power: GRENADE.power, destroy: false, owner: p.owner, door: 0.25 });
     g.enemies.grenadeAt(p.pos, p.owner);

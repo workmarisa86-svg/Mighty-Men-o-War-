@@ -290,6 +290,35 @@ export class Net {
         else this.addChat(m.n, m.s);
         return;
       case 'bags': this.bags = m.b || []; return;
+      // another player shoots, swings, throws: you see and hear it
+      case 'fx': {
+        if (this.host) this.toAll(m, c.pid);
+        const P = this.players.get(m.id);
+        if (!P || m.id === this.myId) return;
+        if (m.k === 'shot') {
+          P.firedT = 0.25;
+          const d = P.pos ? P.pos.distanceTo(g.player.pos) : 50, snd = { revolver: 'revolver', lever: 'rifle', sniper: 'sniper' }[m.w] || 'pistol';
+          sfx.shot(snd, Math.max(0, 1 - d / 110));
+          if (P.av && d < 90) { const mz = P.av.muzzle(new THREE.Vector3()); g.particles.burst(mz.x, mz.y, mz.z, [1, 0.8, 0.35], 6, 1.2, 0.12, 0); }
+        } else if (m.k === 'swing') { P.throwT = 0.3; P.throwLen = 0.3; sfx.swish && sfx.swish(); }
+        else { P.throwT = 0.6; P.throwLen = 0.6; if (m.k === 'knife' && m.p) g.combat.ghostKnife(m.p, m.v); }
+        return;
+      }
+      case 'proj': if (this.host) this.toAll(m, c.pid); g.explosives.throw(m.k, new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), 'remote'); return;
+      // another player's dynamite went off: the blast (and, in Free for all, its hurt) reaches you
+      case 'tblast': {
+        if (this.host) this.toAll(m, c.pid);
+        const T = g.town, by = this.host ? c.pid : m.from || null;
+        if (!T) return;
+        T.boom(m.x, m.y, m.z);
+        if (this.host) { T.blastBy = by; try { T.blastHurt(m.x, m.y, m.z, m.R || 4.5, true); } finally { T.blastBy = null; } }     // (the outlaws and animals here take it, and the kill is theirs)
+        const p = g.player.pos, pd = Math.hypot(p.x - m.x, p.y + 1 - m.y, p.z - m.z);
+        if (this.pvp && pd < 4.5) {
+          this.lastBy = { name: this.nameOf(by || 'H'), id: by || 'H', at: performance.now() };
+          g.damage(Math.min(25, Math.round(10 + 30 * (1 - pd / 4.5))), 'blast', new THREE.Vector3(m.x, m.y, m.z));
+        }
+        return;
+      }
       case 'credit': if (g.powers) g.powers.addKill(m.k, !!m.boss); return;
       case 'decoy':
         if (this.host) this.toAll(m, c.pid);
@@ -387,7 +416,10 @@ export class Net {
       const wpn = sel && hasGunModel(sel) ? sel : null;
       if (wpn !== P.wpn) { P.wpn = wpn; P.av.setWeapon(wpn); }
       if (fl & 4) { P.deadT = (P.deadT || 0) + dt; P.av.pose({ dead: Math.min(1, P.deadT * 1.5), fallDir: 1 }, dt); }
-      else { P.deadT = 0; P.av.pose({ speed: spd, run: !!(fl & 2), crouch: !!(fl & 1), aim: !!wpn && wpn !== 'knife', look: 0, pitch: pitch * 0.6 }, dt); }
+      else {
+        P.deadT = 0; P.firedT = Math.max(0, (P.firedT || 0) - dt); P.throwT = Math.max(0, (P.throwT || 0) - dt);
+        P.av.pose({ speed: spd, run: !!(fl & 2), crouch: !!(fl & 1), aim: (!!wpn && wpn !== 'knife') || P.firedT > 0, look: 0, pitch: pitch * 0.6, fired: P.firedT > 0.2, throwT: P.throwT > 0 ? P.throwT / (P.throwLen || 0.6) : null }, dt);
+      }
       P.av.place(P.pos, P.yaw, P.pos.y);
       P.tag.position.set(P.pos.x, P.pos.y + ((fl & 4) ? 0.7 : (fl & 1) ? 1.75 : 2.2), P.pos.z);
     }
@@ -458,6 +490,7 @@ export class Net {
     this.toAll(m); this.toast(t(m.k, m.p));
   }
   // an outlaw's knife on the host: who did it, for the bag message
+  fx(k, extra = {}) { this.send(Object.assign({ t: 'fx', id: this.myId, k }, extra)); }
   hurtBy(name) { this.lastBy = { name, id: null, at: performance.now() }; }
   // (host) a kill goes to whoever made it: the host's own abilities, or that player's
   credit(id, k, boss = false) {
