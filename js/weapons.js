@@ -31,6 +31,8 @@ export const WEAPONS = {
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
 };
 
+// Siege: the revolver holds eight and both period guns fire and reload much faster
+const SIEGE_TUNE = { revolver: { mag: 8, reloadEach: 0.22, rate: 0.3 }, lever: { reloadEach: 0.2, rate: 0.45 } };
 export class Combat {
   constructor(game) {
     this.game = game;
@@ -57,7 +59,12 @@ export class Combat {
     this.tracerI = 0;
   }
 
-  weapon() { return WEAPONS[this.game.selected()] || null; }
+  weapon() { return this.wpn(this.game.selected()) || null; }
+  wpn(id) {
+    const W = WEAPONS[id], T = SIEGE_TUNE[id];
+    if (!W || !T || !(this.game.town && this.game.town.siege)) return W;
+    return (this.tuned || (this.tuned = {}))[id] || (this.tuned[id] = Object.assign({}, W, T));
+  }
 
   update(dt, input, playing) {
     const g = this.game;
@@ -68,7 +75,7 @@ export class Combat {
     this.updatePeriod(dt, id);
     this.updateCharge(dt, input, playing, id);
     if (!playing) return;
-    const W = WEAPONS[id];
+    const W = this.wpn(id);
     if (!W) return;
     if (g.player.car && (W.melee || W.throw)) return;          // in a car only the gun in your hands
     // sniper scope on/off with right-click (or the ZOOM button on phones)
@@ -100,12 +107,12 @@ export class Combat {
   }
 
   // ---- Town Life's period guns: rounds, cocking, levering, reloading -------------
-  ammo(id) { const W = WEAPONS[id]; return W && W.mag ? (this.mag[id] ?? W.mag) : Infinity; }
+  ammo(id) { const W = this.wpn(id); return W && W.mag ? (this.mag[id] ?? W.mag) : Infinity; }
   // one round at a time: the revolver's gate opens and the ejector knocks out
   // each empty case before a fresh round goes in; the rifle takes rounds
   // through the side gate; the shotgun breaks open for two shells
   startReload(id, delay = 0) {
-    const W = WEAPONS[id];
+    const W = this.wpn(id);
     if (!W || !W.mag || this.ammo(id) >= W.mag) return;
     this.reload = { id, t: -delay, each: W.reloadEach, n: 0 };
     if (id === 'shotgun') sfx.breakOpen(); else if (id === 'revolver') sfx.gate();
@@ -116,7 +123,7 @@ export class Combat {
     if (R.id === 'shotgun') sfx.breakClose(); else if (R.id === 'revolver' && !interrupted) { sfx.gate(); this.cockT = 0.3; sfx.cock(); }
   }
   updatePeriod(dt, id) {
-    const g = this.game, W = WEAPONS[id];
+    const g = this.game, W = this.wpn(id);
     if (id !== this.lastId) {
       // drawing a revolver from the belt holster: a creak of leather
       if (id === 'revolver' && g.town) { sfx.leather(); g.vm.holsterT = 0.45; }
@@ -133,7 +140,7 @@ export class Combat {
         this.mag[R.id] = this.ammo(R.id) + 1;
         if (R.id === 'revolver') sfx.eject();
         sfx.shellIn();
-        if (this.ammo(R.id) >= WEAPONS[R.id].mag) this.endReload();
+        if (this.ammo(R.id) >= this.wpn(R.id).mag) this.endReload();
       }
     } else if (W && W.mag && this.ammo(id) < W.mag && this.idleT > 1.8) this.startReload(id);   // topping up when you stop shooting
     // the hand animation: cocking, levering, the reload pose, the round going in
@@ -166,8 +173,8 @@ export class Combat {
   // where a throw at this strength would go (the same physics as the knife)
   knifeLaunch(k) {
     const g = this.game, p = g.player, { eye, dir } = g.aim();
-    const pos = eye.clone().addScaledVector(dir, 0.6);
-    const vel = dir.clone().multiplyScalar(16 + 13 * k).add(new THREE.Vector3(p.vel.x * 0.5, 1.0 + 1.4 * k, p.vel.z * 0.5));
+    const pos = eye.clone().addScaledVector(dir, 0.6); pos.y += 0.12;            // (thrown overhand: it leaves from above the shoulder)
+    const vel = dir.clone().multiplyScalar(16 + 13 * k).add(new THREE.Vector3(p.vel.x * 0.5, 0.6 + 0.9 * k, p.vel.z * 0.5));
     return { pos, vel, dir };
   }
   drawArc(k) {
@@ -183,7 +190,7 @@ export class Combat {
     this.arc.visible = n > 0;
   }
   // the throw's pose for the hands and the third-person body: wind-up (charge 0..1), then the swing (0..1)
-  knifePose() { return { charge: this.charge ? Math.min(1, 0.3 + this.chargeK() * 0.7) : 0, swing: this.throwT < 0.45 ? this.throwT / 0.45 : 0 }; }
+  knifePose() { return { charge: this.charge ? Math.min(1, 0.3 + this.chargeK() * 0.7) : 0, swing: this.throwT < 0.45 ? this.throwT / 0.45 : 0, from: this.throwFrom || 0.7 }; }
 
   // nearest animal or soldier/tank along the ray, closer than maxD
   target(eye, dir, maxD) {
@@ -197,9 +204,9 @@ export class Combat {
     const r = g.net ? g.net.raycast(eye, dir, best ? best.dist : maxD) : null;     // online: another player
     return r || best;
   }
-  applyHit(hit, damage, { silent = false } = {}) {
+  applyHit(hit, damage, { silent = false, weapon = 'knife' } = {}) {
     const g = this.game;
-    if (hit.remote) { if (g.net.hitPlayer(hit.remote, damage, hit.head)) { g.hud.hitMarker(hit.head); sfx.hitMark(); } return; }
+    if (hit.remote) { if (g.net.hitPlayer(hit.remote, damage, hit.head, weapon)) { g.hud.hitMarker(hit.head); sfx.hitMark(); } return; }
     if (hit.villager && hit.villager.netId != null && g.net && g.net.guest) { g.net.hitMan(hit.villager.netId, damage, hit.head); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's outlaw takes it)
     if (hit.animal && hit.animal.netId != null && g.net && g.net.guest) { g.net.hitAnimal(hit.animal.netId, damage, silent); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's animal takes it)
     if (hit.car) g.vehicles.hurt(hit.car, damage * 0.5);
@@ -208,7 +215,8 @@ export class Combat {
     else if (hit.soldier) g.enemies.hurt(hit.soldier, damage, { silent, head: hit.head });
     else if (hit.tank) hit.tank.hurt(damage, false);
     else if (hit.villager) {
-      const v = hit.villager, killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
+      const v = hit.villager; v.hitBy = 'H';                  // (Siege: whose kill it is, for the abilities)
+      const killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
       if (g.town.duels && g.town.duels.playerHit(v, killed)) { /* a fair duel */ }
       else if (v.extra) { if (v.onHurt) v.onHurt(v, killed); }        // a wanted outlaw or your own gang: no crime
       else g.town.crime(killed ? 'murder' : 'assault', { victim: killed ? null : v, dead: killed ? v : null });
@@ -262,7 +270,7 @@ export class Combat {
     const kn = { mesh, pos, vel, spin: 0, yaw: Math.atan2(dir.x, dir.z) + Math.PI, flying: true, t: 0, dmg: 55 + 30 * k, bounces: 0 };
     mesh.position.copy(kn.pos);
     (this.knives || (this.knives = [])).push(kn);
-    this.throwT = 0; g.vm.doSwing(); sfx.swish(); if (k > 0.5) sfx.swish();
+    this.throwT = 0; this.throwFrom = Math.max(0.7, Math.min(1, 0.3 + k * 0.7)); g.vm.doSwing(); sfx.swish(); if (k > 0.5) sfx.swish();
   }
   updateKnives(dt) {
     const L = this.knives, g = this.game;
@@ -350,7 +358,7 @@ export class Combat {
     if (hit) {
       end = hit.point;
       const dmg = W.falloff ? W.damage * Math.max(0.15, 1 - (hit.dist || 0) / W.range) : W.damage;   // shotgun: strong close up
-      this.applyHit(hit, dmg, { silent: !!W.silent });
+      this.applyHit(hit, dmg, { silent: !!W.silent, weapon: id });
     } else {
       end = eye.clone().addScaledVector(dir, maxD);
       if (block) {

@@ -838,3 +838,17 @@ body.touchui #aimprompt { top: auto; bottom: 128px; }
   color: #f3e6c8; background: rgba(0, 0, 0, 0.55); border: 2px solid rgba(243, 230, 200, 0.5); border-radius: 10px; padding: 6px 16px; cursor: pointer; touch-action: manipulation; }
 .chatlog { max-height: 40vh; overflow-y: auto; margin-bottom: 8px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
 #cin { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+
+/* Siege abilities: the two on-screen buttons (under the radar) and the cards in the inventory */
+#powers { position: fixed; top: 210px; left: 12px; z-index: 7; display: flex; flex-direction: column; gap: 8px; }
+#powers .pw { font: 600 15px Oswald, sans-serif; color: #f3e6c8; background: rgba(40, 32, 70, 0.7); border: 2px solid rgba(190, 170, 255, 0.6);
+  border-radius: 10px; padding: 8px 14px; min-height: 42px; min-width: 120px; text-align: left; cursor: pointer; touch-action: manipulation; }
+#powers .pw.on { background: rgba(90, 70, 170, 0.85); border-color: #d8c8ff; }
+#powers .pw.rest { opacity: 0.55; }
+.pwgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.pwcard { border: 2px solid rgba(243, 230, 200, 0.25); border-radius: 10px; padding: 10px 12px; background: rgba(0, 0, 0, 0.25); }
+.pwcard.open { border-color: rgba(190, 170, 255, 0.6); }
+.pwcard.chosen { border-color: #d8c8ff; background: rgba(90, 70, 170, 0.25); }
+.pwcard.locked { opacity: 0.75; }
+.pwcard h3 { margin: 0 0 4px; font-family: var(--stencil); font-weight: normal; letter-spacing: 1px; }
+.pwcard p { margin: 0 0 6px; }

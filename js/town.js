@@ -129,7 +129,7 @@ export class TownLife {
     g.player.spurs = true;                         // a frontier town: spurs on your boots
     // nothing modern in Town Life: any modern gun becomes its period counterpart
     const inv = g.inv;
-    for (const [from, to] of [['pistol', 'revolver'], ['spistol', 'revolver'], ['rifle', 'lever'], ['sniper', 'lever'], ['smg', 'lever']]) {
+    for (const [from, to] of [['pistol', 'revolver'], ['spistol', 'revolver'], ['rifle', 'lever'], ['sniper', 'lever'], ['smg', 'lever']].filter(([f]) => !(g.cfg.siege && f === 'sniper'))) {     // (Siege keeps its sniper rifle)
       if (inv.counts[from] > 0) { inv.counts[to] = (inv.counts[to] || 0) + inv.counts[from]; inv.counts[from] = 0; }
       inv.hotbar = inv.hotbar.map((x) => (x === from ? to : x));
     }

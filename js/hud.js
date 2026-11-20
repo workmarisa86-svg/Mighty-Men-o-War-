@@ -256,6 +256,7 @@ export class HUD {
     const list = [];
     for (const pr of g.explosives.projectiles) if (pr.owner === 'enemy' && pr.kind === 'grenade' && pr.pos.distanceTo(p) < 14) list.push({ pos: pr.pos, label: '!' });
     for (const l of g.explosives.lit.values()) if (l.owner === 'enemy' && Math.hypot(l.x - p.x, l.z - p.z) < 45) list.push({ pos: new THREE.Vector3(l.x + 0.5, l.y + 1.3, l.z + 0.5), label: 'TNT ' + Math.max(0, l.t).toFixed(0) });
+    if (g.powers) list.push(...g.powers.eagleMarks());            // (Siege: Eagle eye)
     if (g.town) for (const w of g.town.marks()) list.push({ pos: new THREE.Vector3(w.pos.x, w.pos.y + 2.4, w.pos.z), label: '!' });
     while (this.markerEls.length < list.length) { const d = document.createElement('div'); d.className = 'marker danger'; this.markersEl.appendChild(d); this.markerEls.push(d); }
     this.markerEls.forEach((el, i) => {

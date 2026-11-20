@@ -326,6 +326,7 @@ export class Game {
     // on horseback the horse moves (and carries you); otherwise you walk
     // in a car the car moves (and carries you)
     const vw = this.vwar && this.vwar.active;
+    p.boost = this.powers ? this.powers.speedMul() : 1;      // (Siege: Second wind)
     const res = vw ? (playing && this.vwar.drive(dt, it, input), { fallDamage: 0 }) : p.car ? (this.vehicles.drive(dt, it), { fallDamage: 0 }) : p.riding ? (this.horses.ride(dt, it), { fallDamage: 0 }) : p.update(dt, this.world, this.obstacles(), it, env);
     if (p.swimming && it.toggleDive && wasDiving !== p.diving) this.hud.toast(t(p.diving ? 'hud.diving' : 'hud.surface'));
     if (res.fallDamage > 0) this.damage(res.fallDamage);
@@ -366,6 +367,7 @@ export class Game {
     if (!frozen) this.injury.update(dt);
     if (this.town && frozen) this.town.update(dt);
     if (this.net) this.net.update(this.realDt);
+    if (this.powers) this.powers.update(this.realDt, input, playing);
     this.bubbles.update(dt);
 
     // camera
@@ -1063,6 +1065,7 @@ export class Game {
       return;
     }
     n *= 1 - this.armor();
+    if (this.powers) n *= this.powers.damageMul();        // (Siege: Iron skin)
     this.player.health = Math.max(0, this.player.health - n);
     this.hud.flash();
     if (from) {
@@ -1204,6 +1207,7 @@ export class Game {
     this.animals.dispose(); this.injury.dispose(); this.fishing.dispose(); if (this.thirdPerson) this.thirdPerson.dispose(); this.pickups.dispose(); this.campfires.dispose(); this.combat.dispose();
     this.explosives.dispose(); this.enemies.dispose(); this.forts.dispose(); this.cabin.dispose(); document.body.classList.remove('scoped');
     this.world.onSet = null;
+    if (this.powers) { this.powers.dispose(); this.powers = null; }
     this.tex.dispose(); this.matSolid.dispose(); this.matWater.dispose();
     this.crackTex.forEach((x) => x.dispose());
     this.hud.dispose();

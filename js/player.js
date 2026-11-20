@@ -129,7 +129,7 @@ export class Player {
     else if (this.swimming) speed = env.rain > 0.3 ? BODY.swimRain : BODY.swim;
     else if (this.crouch) speed = BODY.crouch;
     else if (this.running) speed = env.rain > 0.3 ? BODY.runRain : BODY.run;
-    if (this.fast && !this.flying && !this.swimming && !this.crouch) speed = BODY.run * 1.25;      // (Siege: walking is running, and quicker)
+    if (this.fast && !this.flying && !this.swimming && !this.crouch) speed = BODY.run * 1.25 * (this.boost || 1);      // (Siege: walking is running, and quicker)
     if (!this.flying && !this.swimming && feet === B.WATER) speed *= 0.75;
     if (!this.flying && !this.swimming && world.get(Math.floor(p.x), Math.floor(p.y - 0.1), Math.floor(p.z)) === B.MUD) speed *= 0.9;
     speed *= env.speedMul || 1;
