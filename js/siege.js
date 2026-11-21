@@ -23,6 +23,7 @@ import { deleteSiege } from './storage.js';
 import { SiegeHouses } from './siegehouses.js';
 import { dropsOf } from './net.js';
 import { Powers } from './powers.js';
+import { Record } from './record.js';
 
 const WAVE_HOUR = 20;
 // truly endless (the count is infinite: using one never takes one away): blocks, dynamite, knives, guns
@@ -40,6 +41,7 @@ export class Siege {
     const g = this.game;
     this.houses = new SiegeHouses(this);           // houses for meat (siegehouses.js)
     g.player.fast = true;
+    if (!g.record) g.record = new Record(g);                  // your points, level and medals (record.js; Town Life doesn't count)
     if (!g.powers) g.powers = new Powers(g);                  // abilities earned by killing (powers.js)                          // (you walk as fast as you run, and faster)
     this.wave = saved ? saved.wave || 0 : 0;       // waves survived
     this.started = saved ? saved.started ?? this.wave : 0;   // waves that have come
@@ -325,8 +327,8 @@ export class Siege {
       // every 40 outlaws you kill: two medkits
       for (const m of this.men) if (!m.alive && !m.counted) {
         m.counted = true; this.kills++;
-        if (m.hitBy === 'H') { if (g.powers) g.powers.addKill('outlaw', !!m.leader); }             // (your kill: it counts for the abilities)
-        else if (m.hitBy && g.net) g.net.credit(m.hitBy, 'outlaw', !!m.leader);
+        if (m.hitBy === 'H') { if (g.powers) g.powers.addKill('outlaw', !!m.leader); if (g.record) g.record.kill('outlaw', m.hitHow || {}, !!m.leader); }      // (your kill: your abilities and your record)
+        else if (m.hitBy && g.net) g.net.credit(m.hitBy, 'outlaw', !!m.leader, m.hitHow || null);
         if (this.kills % KILL_PRIZE === 0) { g.give('medkit', 2, true); g.hud.dirtyHotbar = true; g.hud.toast(t('siege.killPrize', { n: this.kills })); sfx.done(); }
       }
       const left = this.men.filter((m) => m.alive && !m.away && !(m.surrendered > 0));
@@ -336,6 +338,8 @@ export class Siege {
         this.nextAt = Math.floor(g.time) + WAVE_HOUR / 24; if (this.nextAt <= g.time + 0.02) this.nextAt += 1;
         if (this.wave > siegeBest()) try { localStorage.setItem(BEST_KEY, String(this.wave)); } catch { /* private mode */ }
         g.give('medkit', 2, true); g.hud.dirtyHotbar = true;
+        if (g.record) g.record.wave();                            // (a wave beaten: points for everyone in it)
+        if (g.net) g.net.toAll({ t: 'credit', k: 'wave' });
         const n = this.wave + 1;
         g.hud.bigMessage(t('siege.survived', { n: this.wave }), t(this.boss(n) ? 'siege.survivedBoss' : 'siege.survivedSub', { n, k: this.size(n) + (this.boss(n) ? 3 : 0) }));
         sfx.done();
@@ -346,6 +350,7 @@ export class Siege {
   // your food and wake far from every outlaw, healed and not starving
   playerDied(cause) {
     const g = this.game, p = g.player, w = g.world;
+    if (g.record) { const L = g.net && g.net.lastBy && performance.now() - g.net.lastBy.at < 12000 ? g.net.lastBy : null; g.record.died(cause, L && L.id ? Object.assign({ player: true }, L.how || {}) : null); }    // (points off, by how you were killed)
     if (cause === 'starve' && !g.net) { this.gameOver(); return; }      // (online, starving is a death like any other)
     // every man who had a hand in killing you takes a gun off you
     let armed = 0;
@@ -410,9 +415,9 @@ export class Siege {
     return { t: 'men', m: men, s: this.started, w: this.wave, n: this.nextAt, time: this.game.time, k: this.kills, l: this.ladders };
   }
   // (host) a friend's shot or knife hit one of the outlaws
-  netHitMan(id, dmg, head, by) {
+  netHitMan(id, dmg, head, by, how) {
     const v = (this.men || []).find((m) => m.netId === id);
-    if (v && v.alive) { v.hitBy = by; this.T.folk.hurt(v, dmg, { head }); v.provoked = true; }
+    if (v && v.alive) { v.hitBy = by; v.hitHow = how || null; this.T.folk.hurt(v, dmg, { head }); v.provoked = true; }
   }
   // (guest) the host's outlaws as they are now: shown here, moved smoothly
   netMen(m) {

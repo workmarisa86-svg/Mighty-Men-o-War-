@@ -20,13 +20,14 @@ import { t } from './i18n.js';
 import { sfx } from './audio.js';
 import { ITEMS } from './items.js';
 import { saveSiege } from './storage.js';
+import { titleOf } from './record.js';
 
 const PREFIX = 'mmow-siege-';
 const WORDS = ['WOLF', 'BEAR', 'COLT', 'HAWK', 'MULE', 'DUST', 'GOLD', 'IRON', 'RUST', 'SAGE', 'MESA', 'FORT', 'DEER', 'LARK', 'CROW', 'PINE', 'BULL', 'FOX'];
 const SEND_HZ = 12, MEN_HZ = 8, AN_HZ = 5, AN_RANGE = 140, PIECE = 60000, MAX_PLAYERS = 8;
 const HIDES = ['hide', 'wolf_hide', 'bear_hide'];
 // player against player: how much each weapon takes (of 100; a bar is 10). Head shots count the same.
-const PVP = { revolver: 5, lever: 10, sniper: 15, knife: 10 };
+const PVP = { revolver: 5, lever: 10, sniper: 15, knife: 10, tknife: 10 };
 // what a fallen player leaves in their bag: food, skins and medkits
 export function dropsOf(counts) {
   const out = {};
@@ -228,13 +229,13 @@ export class Net {
         return;
       }
       case 'st': { const P = this.players.get(c.pid); if (P) { P.st = m.s; P.seen = performance.now(); } return; }
-      case 'hitMan': if (g.town && g.town.siege) g.town.siege.netHitMan(m.id, m.dmg, !!m.head, c.pid); return;
+      case 'hitMan': if (g.town && g.town.siege) g.town.siege.netHitMan(m.id, m.dmg, !!m.head, c.pid, m.how); return;
       case 'pvp':
         if (!this.pvp) return;
-        if (m.to === 'H') this.gotHurt({ dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from });
-        else this.sendTo(this.conns.get(m.to), { t: 'hurt', dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from });
+        if (m.to === 'H') this.gotHurt({ dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from, how: m.how });
+        else this.sendTo(this.conns.get(m.to), { t: 'hurt', dmg: m.dmg, by: this.nameOf(c.pid), byId: c.pid, from: m.from, how: m.how });
         return;
-      case 'died': this.feed(this.nameOf(c.pid), m.by); if (g.town && g.town.siege) g.town.siege.remoteDied(c.pid); if (m.byId) this.credit(m.byId, 'player'); return;
+      case 'died': this.feed(this.nameOf(c.pid), m.by); if (g.town && g.town.siege) g.town.siege.remoteDied(c.pid); if (m.byId) this.credit(m.byId, 'player', false, m.how); return;
       case 'bag': this.addBag(this.nameOf(c.pid), m.items, m.at); return;
       case 'hitAn': { const a = g.animals.byNetId(m.id); if (a) { g.animals.fp = g.animals.pickFocus(a.pos.x, a.pos.z); g.animals.hurt(a, m.dmg, !!m.silent); g.animals.fp = null; } return; }
       case 'skin': {
@@ -314,12 +315,12 @@ export class Net {
         if (this.host) { T.blastBy = by; try { T.blastHurt(m.x, m.y, m.z, m.R || 4.5, true); } finally { T.blastBy = null; } }     // (the outlaws and animals here take it, and the kill is theirs)
         const p = g.player.pos, pd = Math.hypot(p.x - m.x, p.y + 1 - m.y, p.z - m.z);
         if (this.pvp && pd < 4.5) {
-          this.lastBy = { name: this.nameOf(by || 'H'), id: by || 'H', at: performance.now() };
+          this.lastBy = { name: this.nameOf(by || 'H'), id: by || 'H', how: { w: 'dynamite' }, at: performance.now() };
           g.damage(Math.min(25, Math.round(10 + 30 * (1 - pd / 4.5))), 'blast', new THREE.Vector3(m.x, m.y, m.z));
         }
         return;
       }
-      case 'credit': if (g.powers) g.powers.addKill(m.k, !!m.boss); return;
+      case 'credit': this.gotCredit(m); return;
       case 'decoy':
         if (this.host) this.toAll(m, c.pid);
         if (m.id !== this.myId) this.addDecoy(m);
@@ -384,11 +385,12 @@ export class Net {
     const g = this.game, p = g.player;
     const W = g.powers;
     const fl = (p.crouch ? 1 : 0) | (p.running ? 2 : 0) | (g.dying || g.dead ? 4 : 0) | (W && W.on('shadow') ? 8 : 0) | (W && W.on('ghost') ? 16 : 0);
-    return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), r2(p.pitch), g.selected() || '', fl, r2(Math.hypot(p.vel.x, p.vel.z)), Math.round(p.health)];
+    return [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), r2(p.pitch), g.selected() || '', fl, r2(Math.hypot(p.vel.x, p.vel.z)), Math.round(p.health), g.record ? g.record.level : 1];
   }
   updateBar() {
     if (!this.bar) return;
-    const names = [this.name + ' (' + t('net.you') + ')', ...[...this.players.values()].map((P) => P.name)];
+    const lv = (n) => ' ' + t('rec.lv', { n: n || 1 });
+    const names = [this.name + lv(this.game.record && this.game.record.level) + ' (' + t('net.you') + ')', ...[...this.players.values()].map((P) => P.name + lv(P.st && P.st[9]))];
     this.bar.textContent = `${t('net.online')} · ${this.code} · ${t(this.pvp ? 'net.pvpOn' : 'net.pvpOff')} · ${names.join(', ')}`;
     this.bar.hidden = !document.body.classList.contains('ingame');
   }
@@ -403,8 +405,10 @@ export class Net {
         let h = 0; for (const ch of P.id) h = (h * 31 + ch.charCodeAt(0)) | 0;
         P.av = new Character('civ', 'player', Math.abs(h) % 5); g.scene.add(P.av.root);
         P.pos = new THREE.Vector3(x, y, z); P.yaw = yaw; P.wpn = undefined;
-        P.tag = nameTag(P.name); g.scene.add(P.tag);
+        P.tag = nameTag(P.name); g.scene.add(P.tag); P.tagLv = 0;
       }
+      const lv = P.st[9] || 1;
+      if (lv !== P.tagLv) { const T = titleOf(lv); P.tag.removeFromParent(); P.tag.material.map.dispose(); P.tag.material.dispose(); P.tag = nameTag(P.name + ' · ' + t('rec.lv', { n: lv }) + ' ' + t('rec.title.' + T.id), T.color); g.scene.add(P.tag); P.tagLv = lv; }
       const stale = now - (P.seen || now) > 6000, ghost = !!(fl & 16);
       P.stale = stale;
       P.av.root.visible = !stale && (!ghost || Math.sin(now / 70) > 0.93);       // (Ghost: only a flicker now and then)
@@ -455,15 +459,17 @@ export class Net {
 
   // ---- hurting -----------------------------------------------------------------------------
   // you hit another player (only in Free for all)
-  hitPlayer(id, dmg, head, weapon) {
+  hitPlayer(id, dmg, head, weapon, dist = 0) {
     dmg = PVP[weapon] ?? 10;
+    const how = { w: weapon, head: !!head };
     if (!this.pvp) {
       if (performance.now() - this.friendsT > 4000) { this.friendsT = performance.now(); this.toast(t('net.friendsOnly')); }
       return false;
     }
     const p = this.game.player.pos, from = [r2(p.x), r2(p.z)];
-    if (this.host) this.sendTo(this.conns.get(id), { t: 'hurt', dmg, by: this.name, byId: 'H', from });
-    else this.sendTo(this.hostConn, { t: 'pvp', to: id, dmg, from });
+    if (this.host) this.sendTo(this.conns.get(id), { t: 'hurt', dmg, by: this.name, byId: 'H', from, how });
+    else this.sendTo(this.hostConn, { t: 'pvp', to: id, dmg, from, how });
+    void dist;
     return true;
   }
   // (host) an outlaw hits another player
@@ -472,18 +478,18 @@ export class Net {
     const g = this.game, p = g.player;
     if (!g || g.dying || g.dead) return;
     const from = m.from ? { x: m.from[0], y: p.pos.y, z: m.from[1] } : null;
-    this.lastBy = { name: m.by || null, id: m.byId || null, at: performance.now() };
+    this.lastBy = { name: m.by || null, id: m.byId || null, how: m.how || null, at: performance.now() };
     g.damage(m.dmg * (m.head ? 2 : 1), m.cause || 'shot', from);
   }
   // (guest) your hit on an outlaw: the host's outlaw takes it
-  hitMan(id, dmg, head) { this.sendTo(this.hostConn, { t: 'hitMan', id, dmg, head }); }
+  hitMan(id, dmg, head, how) { this.sendTo(this.hostConn, { t: 'hitMan', id, dmg, head, how }); }
   // you died: who did it goes round, and your things stay in a bag where you fell
   died(items, at) {
-    const L = this.lastBy && performance.now() - this.lastBy.at < 12000 ? this.lastBy : null, by = L ? L.name : null, byId = L ? L.id : null;
+    const L = this.lastBy && performance.now() - this.lastBy.at < 12000 ? this.lastBy : null, by = L ? L.name : null, byId = L ? L.id : null, how = L ? L.how : null;
     this.lastBy = null;
     const pos = [r2(at.x), r2(at.y), r2(at.z)];
-    if (this.host) { this.feed(this.name, by); if (byId) this.credit(byId, 'player'); if (Object.keys(items).length) this.addBag(this.name, items, pos); }
-    else { this.sendTo(this.hostConn, { t: 'died', by, byId }); if (Object.keys(items).length) this.sendTo(this.hostConn, { t: 'bag', items, at: pos }); }
+    if (this.host) { this.feed(this.name, by); if (byId) this.credit(byId, 'player', false, how); if (Object.keys(items).length) this.addBag(this.name, items, pos); }
+    else { this.sendTo(this.hostConn, { t: 'died', by, byId, how }); if (Object.keys(items).length) this.sendTo(this.hostConn, { t: 'bag', items, at: pos }); }
   }
   feed(a, b) {
     const m = { t: 'msg', k: b ? 'net.killedBy' : 'net.died', p: { a, b } };
@@ -493,16 +499,23 @@ export class Net {
   fx(k, extra = {}) { this.send(Object.assign({ t: 'fx', id: this.myId, k }, extra)); }
   hurtBy(name) { this.lastBy = { name, id: null, at: performance.now() }; }
   // (host) a kill goes to whoever made it: the host's own abilities, or that player's
-  credit(id, k, boss = false) {
-    if (id === 'H') { if (this.game.powers) this.game.powers.addKill(k, boss); }
-    else this.sendTo(this.conns.get(id), { t: 'credit', k, boss });
+  credit(id, k, boss = false, how = null) {
+    if (id === 'H') this.gotCredit({ k, boss, how });
+    else this.sendTo(this.conns.get(id), { t: 'credit', k, boss, how });
+  }
+  // a kill (or a wave) of yours: your abilities and your record
+  gotCredit(m) {
+    const g = this.game;
+    if (m.k === 'wave') { if (g.record) g.record.wave(); return; }
+    if (g.powers) g.powers.addKill(m.k, !!m.boss);
+    if (g.record) g.record.kill(m.k, m.how || {}, !!m.boss);
   }
   // ---- decoys (an ability): a false you on everyone's screen, radar and map ----------------
-  sendDecoy(d, dur) { this.send({ t: 'decoy', id: this.myId, name: this.name, x: r2(d.x), y: r2(d.y), z: r2(d.z), yaw: r2(d.yaw), dur }); }
+  sendDecoy(d, dur) { this.send({ t: 'decoy', id: this.myId, name: this.name, lv: this.game.record ? this.game.record.level : 1, x: r2(d.x), y: r2(d.y), z: r2(d.z), yaw: r2(d.yaw), dur }); }
   addDecoy(m) {
     const old = (this.decoys || (this.decoys = new Map())).get(m.id);
     if (old) this.dropDecoy(old);
-    const g = this.game, R = new Character('civ', 'player', 2), tag = nameTag(m.name || this.nameOf(m.id));
+    const g = this.game, R = new Character('civ', 'player', 2), T = titleOf(m.lv || 1), tag = nameTag((m.name || this.nameOf(m.id)) + ' · ' + t('rec.lv', { n: m.lv || 1 }) + ' ' + t('rec.title.' + T.id), T.color);
     g.scene.add(R.root); g.scene.add(tag);
     this.decoys.set(m.id, { id: m.id, name: m.name, pos: new THREE.Vector3(m.x, m.y, m.z), yaw: m.yaw, until: performance.now() + m.dur * 1000, rig: R, tag });
   }
@@ -626,14 +639,14 @@ const BAG_GEO = new THREE.BoxGeometry(0.55, 0.38, 0.4);
 const BAG_MAT = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
 
 // a name over a player's head
-function nameTag(name) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+function nameTag(name, color = '#f3e6c8') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 64;
   const x = c.getContext('2d');
   x.font = 'bold 30px Oswald, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillStyle = 'rgba(0,0,0,0.5)'; const w = Math.min(250, x.measureText(name).width + 24); x.fillRect(128 - w / 2, 10, w, 44);
-  x.fillStyle = '#f3e6c8'; x.fillText(name, 128, 33);
+  x.fillStyle = 'rgba(0,0,0,0.5)'; const w = Math.min(506, x.measureText(name).width + 24); x.fillRect(256 - w / 2, 10, w, 44);
+  x.fillStyle = color; x.fillText(name, 256, 33);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
-  s.scale.set(1.3, 0.325, 1);
+  s.scale.set(2.6, 0.325, 1);
   return s;
 }

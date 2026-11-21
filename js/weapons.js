@@ -33,7 +33,7 @@ export const WEAPONS = {
   smoke:   { throw: true, rate: 0.9, reticle: 'arc' },
 };
 
-// Siege: the revolver holds eight and both period guns fire and reload much faster
+// Siege and Town Life: the revolver holds eight and both period guns fire and reload much faster
 const SIEGE_TUNE = { revolver: { mag: 8, reloadEach: 0.22, rate: 0.3 }, lever: { reloadEach: 0.2, rate: 0.45 } };
 export class Combat {
   constructor(game) {
@@ -64,7 +64,7 @@ export class Combat {
   weapon() { return this.wpn(this.game.selected()) || null; }
   wpn(id) {
     const W = WEAPONS[id], T = SIEGE_TUNE[id];
-    if (!W || !T || !(this.game.town && this.game.town.siege)) return W;
+    if (!W || !T || !this.game.town) return W;
     return (this.tuned || (this.tuned = {}))[id] || (this.tuned[id] = Object.assign({}, W, T));
   }
 
@@ -76,7 +76,9 @@ export class Combat {
     const id = g.selected();
     this.updatePeriod(dt, id);
     this.updateCharge(dt, input, playing, id);
+    this.updateDyn(dt, input, playing, id);
     if (!playing) return;
+    if (id === 'dynamite') return;                 // (dynamite: held to throw farther, see updateDyn)
     const W = this.wpn(id);
     if (!W) return;
     if (g.player.car && (W.melee || W.throw)) return;          // in a car only the gun in your hands
@@ -89,7 +91,7 @@ export class Combat {
         if (this.swimWarn <= 0) { g.hud.toast(t('hud.swimWeapon')); this.swimWarn = 2; }
         return;
       }
-      this.cool = W.rate * (g.town && g.town.siege ? 0.5 : 1);        // (Siege: twice the rate of fire)
+      this.cool = W.rate * (g.town ? 0.5 : 1);        // (Siege and Town Life: twice the rate of fire)
       if (W.mag && this.ammo(id) <= 0) {
         // out of rounds: the hammer falls on an empty chamber; reload
         sfx.dryFire(); this.cool = 0.35; this.cockT = 0.25;
@@ -170,6 +172,34 @@ export class Combat {
     if (k > 0.04) this.drawArc(k); else this.arc.visible = false;
     if (!held) { this.throwKnife(k); this.cancelCharge(); this.cool = g.town && g.town.siege ? 0.25 : 0.75; }
   }
+  // Dynamite: press and hold to throw farther (a tap: a short lob), let go to throw.
+  // The same bar and arc as the knife show where it will land.
+  updateDyn(dt, input, playing, id) {
+    const g = this.game, held = input.mouse.left || input.tdown('dig');
+    if (id !== 'dynamite' || !playing || g.player.car || !g.has('dynamite')) { if (this.dyn) this.cancelDyn(); return; }
+    if (!this.dyn) { if ((input.mouse.leftPressed || input.thit('dig')) && this.cool <= 0 && !g.player.swimming) this.dyn = { t: 0 }; return; }
+    this.dyn.t += dt;
+    const k = Math.min(1, Math.max(0, (this.dyn.t - 0.12) / 0.9));
+    if (this.dyn.t > 0.12) { this.chargeEl.hidden = false; this.chargeEl.firstChild.style.width = Math.round(k * 100) + '%'; this.chargeEl.classList.toggle('full', k >= 1); }
+    if (k > 0.03) this.drawArc(k, true); else this.arc.visible = false;
+    if (!held) { this.throwDyn(k); this.cancelDyn(); this.cool = 0.5; }
+  }
+  cancelDyn() { this.dyn = null; this.chargeEl.hidden = true; this.arc.visible = false; }
+  dynLaunch(k) {
+    const g = this.game, p = g.player, { eye, dir } = g.aim();
+    const pos = eye.clone().addScaledVector(dir, 0.5); pos.y += 0.1;
+    const vel = dir.clone().multiplyScalar(8 + 18 * k).add(new THREE.Vector3(p.vel.x * 0.5, 2.5 + 2.5 * k, p.vel.z * 0.5));
+    return { pos, vel, dir };
+  }
+  throwDyn(k) {
+    const g = this.game;
+    if (!g.has('dynamite')) return;
+    g.take('dynamite'); g.hud.dirtyHotbar = true;
+    const { pos, vel } = this.dynLaunch(k);
+    if (g.net) g.net.fx('throw');
+    g.explosives.throw('dynamite', pos, vel, 'player');
+    this.throwT = 0; this.throwFrom = Math.max(0.7, Math.min(1, 0.3 + k * 0.7)); g.vm.doSwing(); sfx.swish();
+  }
   chargeK() { return this.charge ? Math.min(1, Math.max(0, (this.charge.t - 0.14) / KNIFE_HOLD)) : 0; }
   cancelCharge() { this.charge = null; this.chargeEl.hidden = true; this.arc.visible = false; }
   // where a throw at this strength would go (the same physics as the knife)
@@ -179,12 +209,12 @@ export class Combat {
     const vel = dir.clone().multiplyScalar(16 + 13 * k).add(new THREE.Vector3(p.vel.x * 0.5, 0.6 + 0.9 * k, p.vel.z * 0.5));
     return { pos, vel, dir };
   }
-  drawArc(k) {
-    const w = this.game.world, { pos, vel } = this.knifeLaunch(k), a = this.arcPos;
+  drawArc(k, dyn = false) {
+    const w = this.game.world, { pos, vel } = dyn ? this.dynLaunch(k) : this.knifeLaunch(k), a = this.arcPos, grav = dyn ? 20 : 14;
     let n = 0;
     for (let i = 0; i < ARC_N; i++) {
       const dt = 0.055;
-      vel.y -= 14 * dt; pos.addScaledVector(vel, dt);
+      vel.y -= grav * dt; pos.addScaledVector(vel, dt);
       if (w.get(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))) break;
       if (i >= 2) { a[n * 3] = pos.x; a[n * 3 + 1] = pos.y; a[n * 3 + 2] = pos.z; n++; }
     }
@@ -206,18 +236,18 @@ export class Combat {
     const r = g.net ? g.net.raycast(eye, dir, best ? best.dist : maxD) : null;     // online: another player
     return r || best;
   }
-  applyHit(hit, damage, { silent = false, weapon = 'knife' } = {}) {
+  applyHit(hit, damage, { silent = false, weapon = 'knife', dist = 0 } = {}) {
     const g = this.game;
-    if (hit.remote) { if (g.net.hitPlayer(hit.remote, damage, hit.head, weapon)) { g.hud.hitMarker(hit.head); sfx.hitMark(); } return; }
-    if (hit.villager && hit.villager.netId != null && g.net && g.net.guest) { g.net.hitMan(hit.villager.netId, damage, hit.head); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's outlaw takes it)
+    if (hit.remote) { if (g.net.hitPlayer(hit.remote, damage, hit.head, weapon, dist)) { g.hud.hitMarker(hit.head); sfx.hitMark(); } return; }
+    if (hit.villager && hit.villager.netId != null && g.net && g.net.guest) { g.net.hitMan(hit.villager.netId, damage, hit.head, { w: weapon, head: !!hit.head, dist: Math.round(dist) }); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's outlaw takes it)
     if (hit.animal && hit.animal.netId != null && g.net && g.net.guest) { g.net.hitAnimal(hit.animal.netId, damage, silent); g.hud.hitMarker(hit.head); sfx.hitMark(); return; }   // (the host's animal takes it)
     if (hit.car) g.vehicles.hurt(hit.car, damage * 0.5);
     else if (hit.horse) g.horses.hurt(hit.horse, damage, 'player');
-    else if (hit.animal) g.animals.hurt(hit.animal, damage, silent);
+    else if (hit.animal) { if (g.animals.hurt(hit.animal, damage, silent) && g.record) g.record.animal(); }
     else if (hit.soldier) g.enemies.hurt(hit.soldier, damage, { silent, head: hit.head });
     else if (hit.tank) hit.tank.hurt(damage, false);
     else if (hit.villager) {
-      const v = hit.villager; v.hitBy = 'H';                  // (Siege: whose kill it is, for the abilities)
+      const v = hit.villager; v.hitBy = 'H'; v.hitHow = { w: weapon, head: !!hit.head, dist: Math.round(dist) };                  // (Siege: whose kill it is, for the abilities)
       const killed = g.town.folk.hurt(v, damage, { silent, head: hit.head });
       if (g.town.duels && g.town.duels.playerHit(v, killed)) { /* a fair duel */ }
       else if (v.extra) { if (v.onHurt) v.onHurt(v, killed); }        // a wanted outlaw or your own gang: no crime
@@ -291,7 +321,7 @@ export class Combat {
         const block = g.world.raycast(k.pos.x, k.pos.y, k.pos.z, d.x, d.y, d.z, step, false, 'bullet');
         const hit = k.bounces || k.ghost ? null : this.target(k.pos, d, block ? block.dist : step);      // (a friend's knife here only shows: their game does the hitting)
         if (hit) {
-          this.applyHit(hit, k.dmg, { silent: true }); sfx.stab();
+          this.applyHit(hit, k.dmg, { silent: true, weapon: 'tknife' }); sfx.stab();
           k.flying = false; k.pos.copy(hit.point || k.pos.clone().addScaledVector(d, hit.dist || 0));
           // stuck in the body: it rides along with an animal, and stays in a fallen person
           const body = hit.animal ? hit.animal.mesh : hit.horse ? hit.horse.mesh : null;
@@ -372,7 +402,7 @@ export class Combat {
     if (hit) {
       end = hit.point;
       const dmg = W.falloff ? W.damage * Math.max(0.15, 1 - (hit.dist || 0) / W.range) : W.damage;   // shotgun: strong close up
-      this.applyHit(hit, dmg, { silent: !!W.silent, weapon: id });
+      this.applyHit(hit, dmg, { silent: !!W.silent, weapon: id, dist: hit.dist || 0 });
     } else {
       end = eye.clone().addScaledVector(dir, maxD);
       if (block) {
