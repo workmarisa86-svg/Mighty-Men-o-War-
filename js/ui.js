@@ -11,6 +11,7 @@ import { sfx } from './audio.js';
 import { MANUAL, MANUAL_CATS, MANUAL_DEVICE } from './manual.js';
 import { getDevice } from './i18n.js';
 import { POWERS, POWER_IDS } from './powers.js';
+import { MEDALS, TIER, titleOf, needFor, TITLES } from './record.js';
 import { SIDE_NATIONS, flagURL } from './nations.js';
 import { loadStats, resetStats, bestMedal } from './stats.js';
 import { OWNER_COLORS } from './minimap.js';
@@ -426,6 +427,7 @@ export class UI {
   r_inventory() {
     const g = this.app.game;
     if (g.powers && this.invTab === 'powers') return this.r_powers();
+    if (g.record && this.invTab === 'record') return this.r_record();
     const sel = this.invPick;
     const owned = Object.keys(ITEMS).filter((id) => {
       const d = ITEMS[id];
@@ -446,7 +448,7 @@ export class UI {
       <p class="label">${t('inv.materials')}</p><div class="grid">${owned.map((id) => cell(id)).join('')}</div>
       ${gear.length ? `<p class="label">${t('inv.gear')}</p><div class="grid">${gear.map((id) => cell(id, 'gear')).join('')}</div>` : ''}
       <p class="label">1–9</p><div class="grid hb">${g.inv.hotbar.map((id, i) => `<div class="cell slot ${i === g.inv.sel ? 'sel' : ''}" data-slot="${i}"><i>${i + 1}</i>${id ? `<img src="${itemIcon(id)}" alt="">` : ''}</div>`).join('')}</div>`;
-    const tabs = g.powers ? `<div class="seg tabs"><button class="on" data-tab="items">${t('inv.title')}</button><button data-tab="powers">${t('pw.tab')} (${g.powers.count()}/6)</button></div>` : '';
+    const tabs = g.powers ? this.invTabs('items') : '';
     const panel = this.panel(t('inv.title'), tabs + body, { wide: true, onBack: () => this.app.closePanel() });
     panel.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { this.invTab = b.dataset.tab; this.rerender(); });
     panel.querySelectorAll('[data-item]').forEach((c) => c.onclick = () => {
@@ -464,6 +466,27 @@ export class UI {
     });
   }
 
+  invTabs(on) {
+    const g = this.app.game, tab = (id, label) => `<button data-tab="${id}" class="${on === id ? 'on' : ''}">${label}</button>`;
+    return `<div class="seg tabs">${tab('items', t('inv.title'))}${tab('powers', `${t('pw.tab')} (${g.powers.count()}/6)`)}${g.record ? tab('record', t('rec.tab')) : ''}</div>`;
+  }
+  // Siege: your record: level, title, the way to the next level, medals and counts
+  r_record() {
+    const g = this.app.game, R = g.record, S = R.s, L = R.level, T = titleOf(L);
+    const a = needFor(L), b = L < 50 ? needFor(L + 1) : a, k = L < 50 ? (S.pts - a) / (b - a) : 1;
+    const next = TITLES.find((x) => x[0] > L);
+    const medal = (id) => { const m = R.medal(id), M = MEDALS[id]; return `<div class="rmedal ${m >= 0 ? TIER[m] : 'none'}"><b>${m >= 0 ? t('rec.tier.' + TIER[m]) : '—'}</b><span>${t('rec.medal.' + id)}</span><em>${S[M.stat] || 0}${m < 4 ? ' / ' + M.at[m + 1] : ''}</em></div>`; };
+    const body = `${this.invTabs('record')}
+      <div class="rec-head"><h3 style="color:${T.color}">${t('rec.lv', { n: L })} · ${t('rec.title.' + T.id)}</h3>
+      <div class="rec-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, k)) * 100)}%"></i></div>
+      <p class="small">${t('rec.points', { n: S.pts })}${L < 50 ? ' · ' + t('rec.toNext', { n: b - S.pts }) : ''}${next ? ' · ' + t('rec.nextTitle', { name: t('rec.title.' + next[1]), n: next[0] }) : ''}</p></div>
+      <p class="label">${t('rec.medals')}</p><div class="rmedals">${Object.keys(MEDALS).map(medal).join('')}</div>
+      <p class="label">${t('rec.counts')}</p>
+      <p class="small">${t('rec.countLine', { o: S.outlaws, p: S.players, b: S.bosses, h: S.heads, k: S.knife, d: S.dyn, l: S.longs, m: S.longest, w: S.waves, a: S.animals, x: S.deaths })}</p>
+      <p class="muted small">${t('rec.hint')}</p>`;
+    const panel = this.panel(t('rec.tab'), body, { wide: true, onBack: () => this.app.closePanel() });
+    panel.querySelectorAll('[data-tab]').forEach((b2) => b2.onclick = () => { this.invTab = b2.dataset.tab; this.rerender(); });
+  }
   // Siege: the abilities, earned by killing; two of them on screen at a time
   r_powers() {
     const g = this.app.game, W = g.powers;
@@ -472,9 +495,9 @@ export class UI {
       return `<div class="pwcard ${open ? 'open' : 'locked'} ${on ? 'chosen' : ''}">
         <h3>${open ? '' : '🔒 '}${t('pw.' + id)}</h3><p>${t('pw.' + id + 'Desc', { n: P.dur })}</p>
         <p class="muted small">${open ? t('pw.rest', { n: P.cool }) + (P.pvp ? ' · ' + t('pw.pvpOnly') : '') : t('pw.earn') + ' ' + W.progress(id)}</p>
-        ${open ? `<button class="btn small ${on ? '' : 'primary'}" data-pw="${id}" ${!on && W.s.slots.length >= 2 ? 'disabled' : ''}>${t(on ? 'pw.remove' : 'pw.add')}</button>` : ''}</div>`;
+        ${open ? `<button class="btn small ${on ? '' : 'primary'}" data-pw="${id}" ${!on && W.s.slots.length >= W.maxSlots() ? 'disabled' : ''}>${t(on ? 'pw.remove' : 'pw.add')}</button>` : ''}</div>`;
     };
-    const body = `<div class="seg tabs"><button data-tab="items">${t('inv.title')}</button><button class="on" data-tab="powers">${t('pw.tab')} (${W.count()}/6)</button></div>
+    const body = `${this.invTabs('powers')}
       <p class="muted small">${t('pw.hint')}</p>
       <p class="small">${t('pw.stats', { o: W.s.outlaws, p: W.s.players, b: W.s.bosses })}</p>
       <div class="pwgrid">${POWER_IDS.map(card).join('')}</div>`;

@@ -542,7 +542,7 @@ export class Character {
     const aim = s.aim * (1 - reloadK * 0.7);
     const long = !this.oneHand;
     const carryX = long ? 0.05 : 0.07, carryY = shY - (long ? 0.3 : 0.27), carryZ = long ? -0.4 : -0.22;
-    const aimX = this.oneHand ? 0.14 : 0.09, aimY = shY + 0.02, aimZ = this.oneHand ? -0.42 : -0.12;
+    const aimX = this.oneHand ? 0.14 : 0.09, aimY = shY + 0.02, aimZ = this.oneHand ? -0.42 : -0.3;       // (a long gun's butt at the shoulder, never through the back)
     g.position.set(lerp(carryX, aimX, aim), lerp(carryY, aimY, aim) - reloadK * 0.08, lerp(carryZ, aimZ, aim) + s.kick * 0.05 * aim);
     g.rotation.set(lerp(long ? -0.32 : -0.55, 0, aim) + lean * aim + pitch + s.kick * 0.18 * aim + reloadK * 0.5, lerp(long ? 0.22 : 0.4, -0.02, aim), reloadK * 0.4);
     if (st.swim) g.visible = false;

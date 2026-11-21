@@ -247,7 +247,7 @@ export function wipeForSiege(world) {
   const W = world.W, D = world.D, H = world.H, tops = world.tops, data = world.data;
   for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
     const top = tops[x + z * W];
-    for (let y = top + 1; y < H; y++) { const i = world.idx(x, y, z); if (data[i] !== B.WATER) data[i] = B.AIR; }
+    for (let y = top + 1; y < H; y++) { const i = world.idx(x, y, z); if (data[i] !== B.WATER || y >= SEA) data[i] = B.AIR; }     // (water only in the lakes and rivers: the wells and troughs go with the town)
     const i = world.idx(x, top, z);
     if (!NATURAL.has(data[i])) data[i] = top < SEA ? B.SAND : B.GRASS;      // (floors, paths, farmland: back to grass)
     for (let y = 1; y < top; y++) { const j = world.idx(x, y, z); if (data[j] !== B.AIR && !NATURAL.has(data[j])) data[j] = B.STONE; }   // (old mine timbers, cellars, strongboxes)

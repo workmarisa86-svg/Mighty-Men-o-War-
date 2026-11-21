@@ -1033,11 +1033,11 @@ export class TownLife {
   blastHurt(x, y, z, R = 4.5, mine = true) {
     const g = this.game, F = this.folk;
     if (mine && g.net && !this.blastBy) g.net.send({ t: 'tblast', from: g.net.myId, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, z: Math.round(z * 100) / 100, R });     // (online: everyone feels it)
-    const net = g.net;
+    const net = g.net, bid = Math.random().toString(36).slice(2);       // (one blast: kills in it count together)
     for (const v of F.list.concat(F.extra)) {
       if (!v.alive || v.away || (!mine && v.robber)) continue;      // (robbers stand clear of their own fuse)
       if (net && net.guest && v.netId != null) continue;            // (online: the host's outlaws take a friend's blast in the host's game)
-      if (mine) v.hitBy = this.blastBy || 'H';
+      if (mine) { v.hitBy = this.blastBy || 'H'; v.hitHow = { w: 'dynamite', blast: bid }; }
       const d = Math.hypot(v.pos.x - x, v.pos.y + 1 - y, v.pos.z - z);
       if (d > R) continue;
       const killed = F.hurt(v, Math.round(10 + 90 * (1 - d / R)));

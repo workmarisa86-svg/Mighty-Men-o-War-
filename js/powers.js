@@ -1,8 +1,8 @@
 // Abilities (Siege): six powers earned by killing, and kept on this device
 // for good (every Siege, alone or online). They are hard to earn on purpose:
-// a player with all six has played a lot. Two are on screen at a time (the
-// Abilities tab of the inventory picks which), each with its own button (and
-// Z / X on a keyboard). A power lasts some seconds, then rests a while.
+// a player with all six has played a lot. Two are on screen at a time (three
+// from level 30; the Abilities tab of the inventory picks which), each with its
+// own button (and B / N / V on a keyboard). A power lasts some seconds, then rests a while.
 //   Shadow   - off the other players' radar and map        (online, Free for all)
 //   Ghost    - see-through, no name over your head          (online, Free for all)
 //   Eagle eye- every outlaw and player marked through walls
@@ -35,10 +35,10 @@ export class Powers {
     this.game = game; this.s = load();
     this.until = {}; this.ready = {};            // (seconds of game play: when each ends, when each can be used again)
     this.clock = 0;
-    this.s.slots = this.s.slots.filter((id) => POWERS[id] && this.unlocked(id)).slice(0, 2);
+    this.s.slots = this.s.slots.filter((id) => POWERS[id] && this.unlocked(id)).slice(0, 3);
     this.el = document.createElement('div'); this.el.id = 'powers';
     document.body.appendChild(this.el);
-    this.btns = [0, 1].map((i) => { const b = document.createElement('button'); b.className = 'pw'; b.onclick = () => this.useSlot(i); this.el.appendChild(b); return b; });
+    this.btns = [0, 1, 2].map((i) => { const b = document.createElement('button'); b.className = 'pw'; b.onclick = () => this.useSlot(i); this.el.appendChild(b); return b; });
     this.uiT = 0;
   }
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.s)); } catch { /* private mode */ } }
@@ -51,7 +51,7 @@ export class Powers {
     if (kind === 'player') this.s.players++; else { this.s.outlaws++; if (boss) this.s.bosses++; }
     const now = POWER_IDS.filter((id) => this.unlocked(id) && !before.includes(id));
     for (const id of now) {
-      if (this.s.slots.length < 2) this.s.slots.push(id);
+      if (this.s.slots.length < this.maxSlots()) this.s.slots.push(id);
       this.game.hud.bigMessage(t('pw.unlockedTitle'), t('pw.unlocked', { name: t('pw.' + id) }));
       sfx.done();
     }
@@ -59,11 +59,13 @@ export class Powers {
   }
   setSlot(id, on) {
     const S = this.s.slots;
-    if (on) { if (!this.unlocked(id) || S.includes(id)) return false; if (S.length >= 2) return false; S.push(id); }
+    if (on) { if (!this.unlocked(id) || S.includes(id)) return false; if (S.length >= this.maxSlots()) return false; S.push(id); }
     else this.s.slots = S.filter((x) => x !== id);
     this.save();
     return true;
   }
+  // two on screen; a third from level 30 (record.js)
+  maxSlots() { return this.game.record && this.game.record.level >= 30 ? 3 : 2; }
   on(id) { return (this.until[id] || 0) > this.clock; }
   left(id) { return Math.max(0, (this.until[id] || 0) - this.clock); }
   rest(id) { return Math.max(0, (this.ready[id] || 0) - this.clock); }
@@ -98,7 +100,7 @@ export class Powers {
   update(dt, input, playing) {
     const g = this.game;
     this.clock += dt;
-    if (playing) { if (input.hit('KeyZ')) this.useSlot(0); if (input.hit('KeyX')) this.useSlot(1); }
+    if (playing) { if (input.hit('KeyB')) this.useSlot(0); if (input.hit('KeyN')) this.useSlot(1); if (input.hit('KeyV')) this.useSlot(2); }      // (B, N and V: no other key uses them here)
     if (this.decoy && !this.on('decoy')) { this.decoy = null; this.showDecoy(false); }
     if (this.decoyRig) { this.decoyRig.pose({ speed: 0, look: 0, pitch: 0 }, dt); this.decoyRig.place(this.decoyPos, this.decoy.yaw, this.decoyPos.y); }
     this.uiT -= dt;
@@ -113,9 +115,9 @@ export class Powers {
     const ref = cb && !cb.hidden && cb.offsetParent ? cb : mm;
     const r = ref ? ref.getBoundingClientRect() : null;
     if (r && r.height) { this.el.style.top = Math.round(r.bottom + 10) + 'px'; this.el.style.left = Math.round(r.left) + 'px'; }
-    const keys = ['Z', 'X'], touch = this.game.app.input.touch;
+    const keys = ['B', 'N', 'V'], touch = this.game.app.input.touch;
     this.btns.forEach((b, i) => {
-      const id = this.s.slots[i];
+      const id = i < this.maxSlots() ? this.s.slots[i] : null;
       b.hidden = !id;
       if (!id) return;
       const st = this.on(id) ? Math.ceil(this.left(id)) + 's' : this.rest(id) > 0 ? '⏳ ' + Math.ceil(this.rest(id)) + 's' : (touch ? '' : keys[i]);

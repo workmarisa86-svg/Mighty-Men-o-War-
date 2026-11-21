@@ -49,7 +49,10 @@ export class AimUse {
     // army cars (War): drive one of your side's
     if (g.vehicles) { const vt = g.vehicles.aimTarget(eye, dir, hit ? hit.dist ?? 99 : 99); if (vt) return vt; }
     // Town Life's own targets (people, horses, bodies, doors) come first
-    if (g.town) { const tt = g.town.aimTarget(hit, eye, dir); if (tt) return tt; }
+    // a crater under the crosshair: Fill is always offered (even with dynamite in hand)
+    const crater0 = hit && g.explosives.craterAt(hit.x, hit.y, hit.z);
+    if (g.town) { const tt = g.town.aimTarget(hit, eye, dir); if (tt && !(crater0 && /blast|blow/i.test(tt.a))) return tt; }
+    if (crater0) return { a: 'fill', hit, crater: crater0 };
     if (!hit) return null;
     if (hit.id === B.CAMPFIRE) return { a: 'craft', hit };
     if (hit.id === B.SUPPLY) return { a: g.cabin.isChest(hit.x, hit.y, hit.z) ? 'chest' : 'rations', hit };
