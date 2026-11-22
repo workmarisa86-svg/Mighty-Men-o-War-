@@ -505,7 +505,7 @@ export class Townsfolk {
       if (relod) rig.setLod(d < 30 ? 0 : 1);
       if (d < 50 || this.visible(v) || ((v.animN = (v.animN || 0) + 1) % 4 === 0)) {
         const aim = (v.posse && v.hostile) || (v.fight && v.fight.armed) || v.duelAim;
-        rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
+        rig.pose({ speed: v.horse ? 0 : v.speed, crouch: v.crouch && !v.horse, run: v.speed > 3.5, aim, fired: v.fired, look: 0, pitch: 0, stab: v.stabAnim > 0 ? 1 - v.stabAnim / 0.5 : null, ride: !!v.horse, surrender: v.surrendered > 0, lie: v.sleeping && !aim, sit: v.sitting && !v.sleeping }, d < 50 ? dt : dt * 4);
         if (v.brawl) this.brawlPose(v, rig);
         if (v.flinchT > 0) { v.flinchT -= dt; rig.body.rotation.x -= Math.sin(Math.max(0, v.flinchT) / 0.35 * Math.PI) * 0.4; }   // hit: they jerk back
       }

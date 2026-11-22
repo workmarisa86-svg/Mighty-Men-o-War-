@@ -545,6 +545,14 @@ export class Character {
     const aimX = this.oneHand ? 0.14 : 0.09, aimY = shY + 0.02, aimZ = this.oneHand ? -0.42 : -0.3;       // (a long gun's butt at the shoulder, never through the back)
     g.position.set(lerp(carryX, aimX, aim), lerp(carryY, aimY, aim) - reloadK * 0.08, lerp(carryZ, aimZ, aim) + s.kick * 0.05 * aim);
     g.rotation.set(lerp(long ? -0.32 : -0.55, 0, aim) + lean * aim + pitch + s.kick * 0.18 * aim + reloadK * 0.5, lerp(long ? 0.22 : 0.4, -0.02, aim), reloadK * 0.4);
+    // a reverse-grip stab (the Siege outlaws): the knife held blade-down in the fist,
+    // raised high over the shoulder, then driven down in front (st.stab: 0 -> 1)
+    if (st.stab != null && st.stab >= 0 && this.oneHand) {
+      const k = st.stab, up = k < 0.55 ? Math.sin((k / 0.55) * Math.PI / 2) : 1 - Math.pow((k - 0.55) / 0.45, 1.4);
+      g.position.set(0.12, shY - 0.25 + 0.75 * up, -0.45 + 0.25 * up);
+      g.rotation.set(-Math.PI / 2 + 0.35 * (1 - up), 0, 0);
+      g.visible = true;
+    }
     if (st.swim) g.visible = false;
     g.updateMatrix();
     // hand targets on the weapon

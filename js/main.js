@@ -35,6 +35,15 @@ class App {
     this.game = null;
     this.applySettings();
     this.ui.show('start');
+    // an invite link (?join=CODE&from=Name): straight to "Ana invites you", no code to type
+    try {
+      const q = new URLSearchParams(location.search), code = q.get('join'), from = (q.get('from') || '').slice(0, 16);
+      if (code && /^[A-Za-z]+-?\d+$/.test(code)) {
+        q.delete('join'); q.delete('from');
+        history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));         // (a reload doesn't ask again)
+        this.ui.show('netinvited', { code: code.toUpperCase(), from });
+      }
+    } catch { /* an odd link: the start screen */ }
 
     addEventListener('resize', () => this.resize());
     // the menu music downloads after the page (and the splash art) have loaded

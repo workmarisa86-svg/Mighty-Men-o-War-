@@ -147,11 +147,16 @@ export class Siege {
     const tg = v.tgt, P = tg.pos, d = Math.hypot(P.x - v.pos.x, P.z - v.pos.z);
     const close = d < 1.8 && Math.abs(P.y - v.pos.y) < 1.6 && this.clearShot(v, P);
     // the knife: at arm's length; a gun (taken off you): from range
+    // the stab: the knife raised in a reverse grip and driven down (0.5 s); it lands on the way
+    // down if you're still in reach. Then a pause of 1 to 4 s, never the same twice.
     v.stabT = (v.stabT || 0) - dt;
-    if (close && v.stabT <= 0) {
-      v.stabT = 1.1; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); sfx.stab && sfx.stab();
+    if (close && v.stabT <= 0 && !(v.stabAnim > 0)) { v.stabT = 1 + Math.random() * 3; v.stabAnim = 0.5; v.stabPend = true; v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z)); }
+    if (v.stabAnim > 0) v.stabAnim -= dt;
+    if (v.stabPend && v.stabAnim <= 0.2) {
+      v.stabPend = false;
+      if (close) { sfx.stab && sfx.stab();
       if (tg.id == null) { if (g.net) g.net.hurtBy(v.name); g.damage(16, 'knife', v.pos); this.hitters.set(v, g.time); }
-      else if (tg.id !== 'decoy') { g.net.hurtPlayer(tg.id, 16, 'knife', v.pos, v.name); this.hitOn(tg.id, v); }
+      else if (tg.id !== 'decoy') { g.net.hurtPlayer(tg.id, 16, 'knife', v.pos, v.name); this.hitOn(tg.id, v); } }
     }
     if (v.hasGun && v.sees && d < 40 && this.clearShot(v, P)) {
       v.yaw = Math.atan2(-(P.x - v.pos.x), -(P.z - v.pos.z));
@@ -411,7 +416,7 @@ export class Siege {
   // (host) the outlaws, the wave and the time, for everyone else
   netSnapshot() {
     const r = (x) => Math.round(x * 100) / 100;
-    const men = (this.men || []).filter((m) => !m.away).map((m) => [m.netId || (m.netId = this.netSeq = (this.netSeq || 0) + 1), r(m.pos.x), r(m.pos.y), r(m.pos.z), r(m.yaw), m.alive ? 1 : 0, m.leader ? 1 : 0, m.hasGun ? 1 : 0, r(m.speed || 0)]);
+    const men = (this.men || []).filter((m) => !m.away).map((m) => [m.netId || (m.netId = this.netSeq = (this.netSeq || 0) + 1), r(m.pos.x), r(m.pos.y), r(m.pos.z), r(m.yaw), m.alive ? 1 : 0, m.leader ? 1 : 0, m.hasGun ? 1 : 0, r(m.speed || 0), m.stabAnim > 0 ? 1 : 0]);
     return { t: 'men', m: men, s: this.started, w: this.wave, n: this.nextAt, time: this.game.time, k: this.kills, l: this.ladders };
   }
   // (host) a friend's shot or knife hit one of the outlaws
@@ -424,7 +429,7 @@ export class Siege {
     const g = this.game, F = this.T.folk, by = this.proxies, seen = new Set();
     this.started = m.s; this.wave = m.w; this.nextAt = m.n; this.ladders = m.l || []; this.kills = m.k || 0;
     if (Math.abs(g.time - m.time) > 0.0015) g.time = m.time;
-    for (const [id, x, y, z, yaw, alive, lead, gun, spd] of m.m) {
+    for (const [id, x, y, z, yaw, alive, lead, gun, spd, stab] of m.m) {
       seen.add(id);
       let v = by.get(id);
       if (!v) {
@@ -437,6 +442,7 @@ export class Siege {
         by.set(id, v);
       }
       v.net = { x, y, z, yaw, spd };
+      if (stab && !(v.stabAnim > 0) && !v.stabSeen) { v.stabAnim = 0.5; v.stabSeen = true; } else if (!stab) v.stabSeen = false;      // (the host's outlaw stabs: shown here too)
       if (gun && !v.hasGun) { v.hasGun = true; F.armed(v, 'revolver'); }
       if (!alive && v.alive) { v.netDead = true; F.kill(v); }
     }
@@ -453,6 +459,7 @@ export class Siege {
       else { v.pos.x += (N.x - v.pos.x) * k; v.pos.y += (N.y - v.pos.y) * k; v.pos.z += (N.z - v.pos.z) * k; }
       let dy = N.yaw - v.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); v.yaw += dy * k;
       v.speed = N.spd;
+      if (v.stabAnim > 0) v.stabAnim -= dt;
     }
   }
   gameOver() {
@@ -485,6 +492,9 @@ export class Siege {
     else out.push({ a: 'shtrade', label: t('sh.trade'), run: () => this.game.app.openPanel('siegehouses', {}) });
     if (!this.men && !this.over && !this.guest) out.push({ a: 'siegego', label: t('siege.ready'), run: () => this.startWave() });
     if (this.game.net) out.unshift(...this.game.net.bagOptions(this.game.player.pos));
+    // aiming at a crater with dynamite in hand: Fill is on E, and blasting is still here (R)
+    const A = this.game.aimUse && this.game.aimUse.target;
+    if (A && A.a === 'fill' && A.hit && this.game.selected() === 'dynamite' && this.game.has('dynamite')) out.unshift({ a: 'blastHere', label: t('hid.blastAny'), run: () => this.T.hidden.lightRock(A.hit, null) });
     return out;
   }
 }
