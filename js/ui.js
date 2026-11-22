@@ -134,6 +134,46 @@ export class UI {
     };
     $('#nback').onclick = () => this.show('start');
   }
+  // Online: invite a friend: a link to send (share it, or copy it into a message)
+  r_netinvite() {
+    const net = this.app.game && this.app.game.net;
+    if (!net) { this.show('pause'); return; }
+    const link = net.inviteLink(), text = t('net.inviteText', { name: net.name, code: net.code });
+    this.root.innerHTML = `<div class="panel narrow"><h2>${t('net.invite')}</h2>
+      <p>${t('net.inviteHow')}</p>
+      <input id="ilink" readonly value="${esc(link)}">
+      <div class="menu">${navigator.share ? `<button class="btn primary" id="ishare">${t('net.share')}</button>` : ''}<button class="btn ${navigator.share ? '' : 'primary'}" id="icopy">${t('net.copyLink')}</button>
+      <button class="btn ghost" id="iback">${t('menu.back')}</button></div><p class="netmsg" id="imsg"></p></div>`;
+    const $ = (q) => this.root.querySelector(q);
+    if ($('#ishare')) $('#ishare').onclick = () => navigator.share({ title: "Mighty Men o' War", text, url: link }).catch(() => {});
+    $('#icopy').onclick = async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(text + ' ' + link); ok = true; } catch { const i = $('#ilink'); i.select(); try { ok = document.execCommand('copy'); } catch { ok = false; } }
+      $('#imsg').textContent = t(ok ? 'net.copied2' : 'net.copyFail');
+    };
+    $('#ilink').onclick = (e) => e.target.select();
+    $('#iback').onclick = () => this.show('pause');
+  }
+  // you opened a friend's invite: accept (no code to type) or say no
+  r_netinvited({ code, from }) {
+    const s = this.app.settings;
+    this.root.innerHTML = `<div class="panel narrow center"><h2>${t('net.invitedTitle')}</h2>
+      <p class="big">${t('net.invitedBy', { name: esc(from || t('net.player')), code: esc(code) })}</p>
+      <p class="label">${t('net.name')}</p><input id="vname" maxlength="16" value="${esc(s.netName || '')}" placeholder="${t('net.namePh')}">
+      <div class="menu"><button class="btn primary" id="vyes">${t('net.accept')}</button><button class="btn ghost" id="vno">${t('net.decline')}</button></div>
+      <p class="netmsg" id="vmsg"></p></div>`;
+    const $ = (q) => this.root.querySelector(q);
+    $('#vyes').onclick = () => {
+      const name = $('#vname').value.trim().slice(0, 16) || t('net.player'); s.netName = name; this.app.applySettings();
+      $('#vmsg').textContent = t('net.joining'); $('#vyes').disabled = true;
+      this.app.joinOnline({ name, code: code.includes('-') ? code : code.replace(/(\d+)$/, '-$1') }).catch((e) => {
+        const m = String((e && e.message) || 'error'), [kind, why] = m.split(':');
+        const key = ['nocode', 'version', 'full', 'timeout', 'load', 'server', 'link'].includes(kind) ? kind : 'error';
+        this.show('online', { msg: t('net.err.' + key) + (why ? ` (${why})` : '') });
+      });
+    };
+    $('#vno').onclick = () => this.show('start');
+  }
   // Online: a line to the other players (Enter or T opens it)
   r_chat() {
     const net = this.app.game && this.app.game.net;
@@ -400,7 +440,7 @@ export class UI {
   // ----------------------------------------------------------------- pause
   r_pause() {
     const net = this.app.game && this.app.game.net;
-    this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2>${net ? `<p class="big" id="online-code">${t('net.code', { code: esc(net.code) })}</p><p class="muted small">${t(net.pvp ? 'net.pvpOn' : 'net.pvpOff')}</p>` : ''}<div class="menu">
+    this.root.innerHTML = `<div class="panel narrow"><h2>${t('menu.paused')}</h2>${net ? `<p class="big" id="online-code">${t('net.code', { code: esc(net.code) })}</p><p class="muted small">${t(net.pvp ? 'net.pvpOn' : 'net.pvpOff')}</p><div class="menu"><button class="btn primary" id="pinvite">${t('net.invite')}</button></div>` : ''}<div class="menu">
       <button class="btn primary" id="presume">${t('menu.resume')}</button>
       <button class="btn" id="psave">${t('menu.save')}</button>
       <button class="btn" id="pmap">${t(this.app.game && this.app.game.town && !this.app.game.town.siege ? 'menu.townMap' : 'menu.map')}</button>
@@ -413,6 +453,7 @@ export class UI {
       <p class="muted small keys">${t(this.app.game && this.app.game.town ? 'help.townKeys' : 'help.keys')}</p></div>`;
     const $ = (s) => this.root.querySelector(s);
     $('#presume').onclick = () => this.app.resume();
+    if ($('#pinvite')) $('#pinvite').onclick = () => this.show('netinvite', {});
     $('#psave').onclick = () => this.app.saveGame(false);
     $('#pmap').onclick = () => this.show('map', { from: 'pause' });
     if ($('#ptrade')) $('#ptrade').onclick = () => this.show('trades', { mode: 'info' });

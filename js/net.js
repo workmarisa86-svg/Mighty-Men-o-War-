@@ -496,6 +496,8 @@ export class Net {
     this.toAll(m); this.toast(t(m.k, m.p));
   }
   // an outlaw's knife on the host: who did it, for the bag message
+  // an invite: a link that opens the game on "<name> invites you", ready to join
+  inviteLink() { return location.origin + location.pathname + '?join=' + encodeURIComponent(this.code) + '&from=' + encodeURIComponent(this.name); }
   fx(k, extra = {}) { this.send(Object.assign({ t: 'fx', id: this.myId, k }, extra)); }
   hurtBy(name) { this.lastBy = { name, id: null, at: performance.now() }; }
   // (host) a kill goes to whoever made it: the host's own abilities, or that player's
